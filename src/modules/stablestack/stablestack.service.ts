@@ -3,11 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
-import {
-  InitialiseRampDto,
-  offRampDto,
-  onRampDto,
-} from './dto/index.dto';
+import { InitialiseRampDto, offRampDto, onRampDto } from './dto/index.dto';
 
 @Injectable()
 export class StablestackService {
@@ -124,8 +120,8 @@ export class StablestackService {
   private handleError(message: string, error: AxiosError | unknown): never {
     let status = HttpStatus.BAD_GATEWAY;
     let errorMessage = 'Unknown error';
-
     if (error instanceof AxiosError) {
+
       status = error.response?.status || status;
       const dataMessage = (error.response?.data as any)?.message;
       errorMessage = dataMessage || error.message || errorMessage;

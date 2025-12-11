@@ -8,6 +8,7 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
+import { generateTrxReference } from 'src/utils/reference.util';
 
 class DestinationDto {
   @ApiProperty({ example: 'string' })
@@ -20,7 +21,7 @@ class DestinationDto {
   @IsOptional()
   bankCode?: string;
 
-  @ApiProperty({ example: 'stringstring' })
+  @ApiProperty({ example: 'string' })
   @IsString()
   @IsOptional()
   accountNumber?: string;
@@ -31,7 +32,7 @@ class offRampDestinationDto {
   @IsString()
   bankCode: string;
 
-  @ApiProperty({ example: 'stringstring' })
+  @ApiProperty({ example: 'string' })
   @IsString()
   accountNumber: string;
 }
@@ -80,7 +81,9 @@ export class onRampDto {
   @IsOptional()
   type: string = 'on';
 
-  @ApiProperty({ example: '1234567890' })
+  @ApiProperty({
+    example: generateTrxReference(20),
+  })
   @IsString()
   reference: string;
 
@@ -88,7 +91,7 @@ export class onRampDto {
   @IsEnum(['base', 'bsc'])
   network: string;
 
-  @ApiProperty({ example: 1206913.6950619982 })
+  @ApiProperty({ example: 1 })
   @IsNumber()
   amount: number;
 
@@ -99,8 +102,7 @@ export class onRampDto {
   destination: OnRampDestinationDto;
 
   @ApiPropertyOptional({
-    example:
-      'http://AZRHGfpffxmK.jbkfVkzn9GLZwzWBAQa98GKt-rs9MBxo7pKCzWuXhaxz8ah1F6O',
+    example: '',
   })
   @IsString()
   @IsOptional()
@@ -113,7 +115,9 @@ export class offRampDto {
   @IsOptional()
   type: string = 'off';
 
-  @ApiProperty({ example: '1234567890' })
+  @ApiProperty({
+    example: generateTrxReference(20),
+  })
   @IsString()
   reference: string;
 
@@ -121,7 +125,7 @@ export class offRampDto {
   @IsEnum(['base', 'bsc'])
   network: string;
 
-  @ApiProperty({ example: 1206913.6950619982 })
+  @ApiProperty({ example: 1 })
   @IsNumber()
   amount: number;
 
@@ -132,8 +136,7 @@ export class offRampDto {
   destination: offRampDestinationDto;
 
   @ApiPropertyOptional({
-    example:
-      'http://AZRHGfpffxmK.jbkfVkzn9GLZwzWBAQa98GKt-rs9MBxo7pKCzWuXhaxz8ah1F6O',
+    example: '',
   })
   @IsString()
   @IsOptional()

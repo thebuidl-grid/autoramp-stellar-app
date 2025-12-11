@@ -33,17 +33,17 @@ export class StablestackController {
   }
 
   @Post('onramp')
-  @ApiOperation({ summary: 'Initialise ramp transaction' })
+  @ApiOperation({ summary: 'Initialise onramp transaction' })
   @ApiBody({ type: onRampDto })
-  @ApiResponse({ status: 201, description: 'Initialisation response' })
+  @ApiResponse({ status: 201, description: 'Onramp Initialisation response' })
   async onRamp(@Body() dto: onRampDto) {
     return this.stablestackService.onRamp(dto);
   }
 
   @Post('offramp')
-  @ApiOperation({ summary: 'Initialise ramp transaction' })
+  @ApiOperation({ summary: 'Initialise offramp transaction' })
   @ApiBody({ type: offRampDto })
-  @ApiResponse({ status: 201, description: 'Initialisation response' })
+  @ApiResponse({ status: 201, description: 'Offramp Initialisation response' })
   async offRamp(@Body() dto: offRampDto) {
     return this.stablestackService.offRamp(dto);
   }
