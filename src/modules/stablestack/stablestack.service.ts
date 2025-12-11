@@ -3,7 +3,11 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
-import { InitialiseRampDto } from './dto/initialise-ramp.dto';
+import {
+  InitialiseRampDto,
+  offRampDto,
+  onRampDto,
+} from './dto/initialise-ramp.dto';
 
 @Injectable()
 export class StablestackService {
@@ -56,6 +60,46 @@ export class StablestackService {
       return response.data;
     } catch (error) {
       this.handleError('Failed to initialise ramp', error);
+    }
+  }
+
+  async onRamp(dto: onRampDto): Promise<any> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(
+          `${this.apiUrl}/v1/ramp/initialise`,
+          { ...dto, type: dto.type ?? 'on' },
+          {
+            headers: {
+              ...this.commonHeaders,
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+      return response.data;
+    } catch (error) {
+      this.handleError('Failed to initialise onramp', error);
+    }
+  }
+
+  async offRamp(dto: offRampDto): Promise<any> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(
+          `${this.apiUrl}/v1/ramp/initialise`,
+          { ...dto, type: dto.type ?? 'off' },
+          {
+            headers: {
+              ...this.commonHeaders,
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+      return response.data;
+    } catch (error) {
+      this.handleError('Failed to initialise offramp', error);
     }
   }
 

@@ -17,7 +17,11 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { StablestackService } from './stablestack.service';
-import { InitialiseRampDto } from './dto/initialise-ramp.dto';
+import {
+  InitialiseRampDto,
+  offRampDto,
+  onRampDto,
+} from './dto/initialise-ramp.dto';
 
 @ApiTags('Stablestack')
 @Controller('stablestack')
@@ -31,6 +35,21 @@ export class StablestackController {
     return this.stablestackService.getBanks();
   }
 
+  @Post('onramp')
+  @ApiOperation({ summary: 'Initialise ramp transaction' })
+  @ApiBody({ type: onRampDto })
+  @ApiResponse({ status: 201, description: 'Initialisation response' })
+  async onRamp(@Body() dto: onRampDto) {
+    return this.stablestackService.onRamp(dto);
+  }
+
+  @Post('offramp')
+  @ApiOperation({ summary: 'Initialise ramp transaction' })
+  @ApiBody({ type: offRampDto })
+  @ApiResponse({ status: 201, description: 'Initialisation response' })
+  async offRamp(@Body() dto: offRampDto) {
+    return this.stablestackService.offRamp(dto);
+  }
   @Post('initialise')
   @ApiOperation({ summary: 'Initialise ramp transaction' })
   @ApiBody({ type: InitialiseRampDto })
