@@ -7,7 +7,7 @@ import {
   InitialiseRampDto,
   offRampDto,
   onRampDto,
-} from './dto/initialise-ramp.dto';
+} from './dto/index.dto';
 
 @Injectable()
 export class StablestackService {

@@ -4,9 +4,6 @@ import {
   Post,
   Body,
   Query,
-  Param,
-  ParseBoolPipe,
-  ParseIntPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,7 +18,7 @@ import {
   InitialiseRampDto,
   offRampDto,
   onRampDto,
-} from './dto/initialise-ramp.dto';
+} from './dto/index.dto';
 
 @ApiTags('Stablestack')
 @Controller('stablestack')
