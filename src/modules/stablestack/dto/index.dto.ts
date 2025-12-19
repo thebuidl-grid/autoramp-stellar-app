@@ -9,7 +9,6 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { generateTrxReference } from 'src/utils/reference.util';
-
 class DestinationDto {
   @ApiProperty({ example: 'string' })
   @IsString()
@@ -81,12 +80,6 @@ export class onRampDto {
   @IsOptional()
   type: string = 'on';
 
-  @ApiProperty({
-    example: generateTrxReference(20),
-  })
-  @IsString()
-  reference: string;
-
   @ApiProperty({ example: 'base' })
   @IsEnum(['base', 'bsc'])
   network: string;
@@ -114,12 +107,6 @@ export class offRampDto {
   @IsString()
   @IsOptional()
   type: string = 'off';
-
-  @ApiProperty({
-    example: generateTrxReference(20),
-  })
-  @IsString()
-  reference: string;
 
   @ApiProperty({ example: 'base' })
   @IsEnum(['base', 'bsc'])
