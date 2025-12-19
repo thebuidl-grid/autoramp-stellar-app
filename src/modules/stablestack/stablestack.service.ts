@@ -69,11 +69,19 @@ export class StablestackService {
       // Generate unique reference
       const reference = generateTrxReference();
 
+      // Get webhook URL from environment
+      const webhookUrl = this.configService.get<string>('WEBHOOK_URL');
+
       // Call Flint API
       const response = await firstValueFrom(
         this.httpService.post(
           `${this.apiUrl}/v1/ramp/initialise`,
-          { ...dto, type: dto.type ?? 'on', reference },
+          { 
+            ...dto, 
+            type: dto.type ?? 'on', 
+            reference,
+            notifyUrl: webhookUrl || undefined,
+          },
           {
             headers: {
               ...this.commonHeaders,
@@ -97,7 +105,7 @@ export class StablestackService {
           flintTransactionId: flintData?.data?.transactionId || null,
           destinationAddress: dto.destination.address,
           network: dto.network,
-          notifyUrl: dto.notifyUrl || null,
+          notifyUrl: webhookUrl || null,
           depositAccount: flintData?.data?.depositAccount || null,
           ipAddress: ipAddress || null,
           userAgent: userAgent || null,
@@ -151,11 +159,19 @@ export class StablestackService {
       // Generate unique reference
       const reference = generateTrxReference();
 
+      // Get webhook URL from environment
+      const webhookUrl = this.configService.get<string>('WEBHOOK_URL');
+
       // Call Flint API
       const response = await firstValueFrom(
         this.httpService.post(
           `${this.apiUrl}/v1/ramp/initialise`,
-          { ...dto, type: dto.type ?? 'off', reference },
+          { 
+            ...dto, 
+            type: dto.type ?? 'off', 
+            reference,
+            notifyUrl: webhookUrl || undefined,
+          },
           {
             headers: {
               ...this.commonHeaders,
@@ -187,7 +203,7 @@ export class StablestackService {
           accountName: depositAccount?.accountName || null,
           bankName: depositAccount?.bankName || null,
           network: dto.network,
-          notifyUrl: dto.notifyUrl || null,
+          notifyUrl: webhookUrl || null,
           ipAddress: ipAddress || null,
           userAgent: userAgent || null,
         },
