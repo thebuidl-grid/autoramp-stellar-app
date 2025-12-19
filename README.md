@@ -96,3 +96,14 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+## Add admin to DB
+INSERT INTO admins (id, email, password, "is_active", "created_at", "updated_at")
+VALUES (
+  gen_random_uuid(),
+  'admin@example.com',
+  '$2b$10$YourHashedPasswordHere', -- Use bcrypt to hash your password
+  true,
+  NOW(),
+  NOW()
+);

@@ -4,6 +4,8 @@ import {
   Post,
   Body,
   Query,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -12,13 +14,22 @@ import {
   ApiQuery,
   ApiBody,
   ApiParam,
+  ApiBearerAuth,
+  ApiSecurity,
 } from '@nestjs/swagger';
+import type { Request } from 'express';
 import { StablestackService } from './stablestack.service';
+import { WebhookService } from './webhook.service';
 import {
-  InitialiseRampDto,
   offRampDto,
   onRampDto,
 } from './dto/index.dto';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
+import { AuthOrApiKeyGuard } from '../api-keys/guards/auth-or-api-key.guard';
+import { UseInterceptors } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { ApiLoggingInterceptor } from '../api-keys/interceptors/api-logging.interceptor';
 
 @ApiTags('Stablestack')
 @Controller('stablestack')
@@ -33,37 +44,91 @@ export class StablestackController {
   }
 
   @Post('onramp')
-  @ApiOperation({ summary: 'Initialise onramp transaction' })
+  @UseGuards(AuthOrApiKeyGuard)
+  @UseInterceptors(ApiLoggingInterceptor)
+  @Throttle({ medium: { limit: 20, ttl: 600000 } }) // 20 requests per 10 minutes
+  @ApiBearerAuth('JWT-auth')
+  @ApiSecurity('API-Key')
+  @ApiOperation({ 
+    summary: 'Initialise onramp transaction',
+    description: 'Requires authentication (JWT token in Authorization header or API key in x-api-key header)'
+  })
   @ApiBody({ type: onRampDto })
   @ApiResponse({ status: 201, description: 'Onramp Initialisation response' })
-  async onRamp(@Body() dto: onRampDto) {
-    return this.stablestackService.onRamp(dto);
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async onRamp(
+    @CurrentUser() user: any,
+    @Body() dto: onRampDto,
+    @Req() req: Request,
+  ) {
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    const userAgent = req.get('user-agent');
+    return this.stablestackService.onRamp(user.id, dto, ipAddress, userAgent);
   }
 
   @Post('offramp')
-  @ApiOperation({ summary: 'Initialise offramp transaction' })
+  @UseGuards(AuthOrApiKeyGuard)
+  @UseInterceptors(ApiLoggingInterceptor)
+  @Throttle({ medium: { limit: 20, ttl: 600000 } }) // 20 requests per 10 minutes
+  @ApiBearerAuth('JWT-auth')
+  @ApiSecurity('API-Key')
+  @ApiOperation({ 
+    summary: 'Initialise offramp transaction',
+    description: 'Requires authentication (JWT token in Authorization header or API key in x-api-key header)'
+  })
   @ApiBody({ type: offRampDto })
   @ApiResponse({ status: 201, description: 'Offramp Initialisation response' })
-  async offRamp(@Body() dto: offRampDto) {
-    return this.stablestackService.offRamp(dto);
-  }
-  @Post('initialise')
-  @ApiOperation({ summary: 'Initialise ramp transaction' })
-  @ApiBody({ type: InitialiseRampDto })
-  @ApiResponse({ status: 201, description: 'Initialisation response' })
-  async initialiseRamp(@Body() dto: InitialiseRampDto) {
-    return this.stablestackService.initialiseRamp(dto);
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async offRamp(
+    @CurrentUser() user: any,
+    @Body() dto: offRampDto,
+    @Req() req: Request,
+  ) {
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    const userAgent = req.get('user-agent');
+    return this.stablestackService.offRamp(user.id, dto, ipAddress, userAgent);
   }
 
   @Get('transactions')
-  @ApiOperation({ summary: 'Get ramp transactions' })
+  @UseGuards(AuthOrApiKeyGuard)
+  @UseInterceptors(ApiLoggingInterceptor)
+  @ApiBearerAuth('JWT-auth')
+  @ApiSecurity('API-Key')
+  @ApiOperation({ 
+    summary: 'Get ramp transactions',
+    description: 'Requires authentication (JWT token in Authorization header or API key in x-api-key header) and verified KYC status. Returns transactions for the authenticated user.'
+  })
   @ApiQuery({ name: 'id', required: false, type: String })
   @ApiQuery({ name: 'reference', required: false, type: String })
   @ApiResponse({ status: 200, description: 'List of transactions' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getTransactions(
+    @CurrentUser() user: any,
     @Query('id') id?: string,
     @Query('reference') reference?: string,
   ) {
-    return this.stablestackService.getTransactions(id, reference);
+    return this.stablestackService.getTransactions(user.id, id, reference);
+  }
+}
+
+/**
+ * Webhook Controller
+ * 
+ * Handles webhook events from Flint API for transaction status updates.
+ * This endpoint should be publicly accessible (no auth) as it's called by Flint API.
+ */
+@ApiTags('Stablestack')
+@Controller('stablestack/webhook')
+export class WebhookController {
+  constructor(private readonly webhookService: WebhookService) {}
+
+  @Post()
+  @Public()
+  @ApiOperation({ summary: 'Receive webhook from Flint API' })
+  @ApiBody({ type: Object })
+  @ApiResponse({ status: 200, description: 'Webhook processed successfully' })
+  @ApiResponse({ status: 404, description: 'Transaction not found' })
+  async handleWebhook(@Body() webhookData: any) {
+    return this.webhookService.processWebhook(webhookData);
   }
 }
