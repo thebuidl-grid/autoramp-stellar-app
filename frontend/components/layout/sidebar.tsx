@@ -67,10 +67,10 @@ export function Sidebar() {
           {/* Logo */}
           <div className="flex items-center gap-3 px-6 py-6 border-b border-border">
             <div className="w-10 h-10 rounded-lg bg-foreground flex items-center justify-center">
-              <span className="text-background font-black text-lg">C</span>
+              <span className="text-background font-black text-lg">A</span>
             </div>
             <div>
-              <h1 className="font-bold text-lg tracking-tight">CNGN Ramp</h1>
+              <h1 className="font-bold text-lg tracking-tight">AutoRamp</h1>
               <p className="text-xs text-muted-foreground">
                 {isAdmin ? "Admin Panel" : "Dashboard"}
               </p>

@@ -43,6 +43,9 @@ export const validationSchema = Joi.object({
   // RESEND
   RESEND_API_KEY: Joi.string().required(),
   RESEND_FROM_EMAIL: Joi.string().email().optional().allow('', null),
+
+  // WEBHOOK
+  WEBHOOK_URL: Joi.string().uri().optional().allow('', null),
 });
 
 enum NodeEnv {
@@ -115,6 +118,10 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   RESEND_FROM_EMAIL: string;
+
+  @IsString()
+  @IsOptional()
+  WEBHOOK_URL: string;
 }
 
 export const validate = (config: Record<string, any>) => {
