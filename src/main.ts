@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -7,6 +8,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const configService = app.get(ConfigService);
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -21,8 +23,36 @@ async function bootstrap() {
   app.useGlobalInterceptors(new LoggingInterceptor());
 
   // CORS Configuration
+  const frontendUrl = configService.get<string>('FRONTEND_URL');
+  const allowedOrigins = [
+    frontendUrl,
+    'http://localhost:3001',
+    'http://localhost:3000',
+  ].filter(Boolean); // Remove undefined/null values
+
+  console.log('CORS allowed origins:', allowedOrigins);
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      // Check if origin is in allowed list
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // For development, allow localhost with any port
+      if (process.env.NODE_ENV === 'development' && origin.startsWith('http://localhost:')) {
+        return callback(null, true);
+      }
+
+      // Reject other origins
+      console.warn(`CORS blocked origin: ${origin}`);
+      callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],

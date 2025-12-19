@@ -46,6 +46,9 @@ export const validationSchema = Joi.object({
 
   // WEBHOOK
   WEBHOOK_URL: Joi.string().uri().optional().allow('', null),
+
+  // FRONTEND
+  FRONTEND_URL: Joi.string().uri().optional().allow('', null),
 });
 
 enum NodeEnv {
@@ -122,6 +125,10 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   WEBHOOK_URL: string;
+
+  @IsString()
+  @IsOptional()
+  FRONTEND_URL: string;
 }
 
 export const validate = (config: Record<string, any>) => {
