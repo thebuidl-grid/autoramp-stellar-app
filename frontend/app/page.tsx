@@ -68,9 +68,9 @@ export default function HomePage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center">
-                  <span className="text-black font-black text-lg">C</span>
+                  <span className="text-black font-black text-lg">A</span>
                 </div>
-                <span className="font-bold text-xl tracking-tight">CNGN</span>
+                <span className="font-bold text-xl tracking-tight">AutoRamp</span>
               </div>
               <nav className="hidden md:flex items-center gap-8">
                 <a href="#features" className="text-sm text-white/60 hover:text-white transition-colors">Features</a>
@@ -105,7 +105,7 @@ export default function HomePage() {
               
               <h1 className="text-6xl md:text-8xl font-bold leading-[0.9] tracking-tighter">
                 <span className="block">Naira to Crypto</span>
-              </h1>
+          </h1>
               
               <p className="text-lg text-white/50 max-w-md leading-relaxed">
                 The fastest on/off ramp for Nigerian Naira. 
@@ -362,7 +362,7 @@ export default function HomePage() {
                 <span className="text-white/30">Simple integration.</span>
               </h2>
               <p className="text-white/50 text-lg leading-relaxed mb-8">
-                Integrate CNGN Ramp into your application with just a few lines of code. 
+                Integrate AutoRamp into your application with just a few lines of code. 
                 Perfect for exchanges, wallets, and fintech platforms.
               </p>
               <Link href="/auth/signup">
@@ -422,12 +422,12 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center">
-              <span className="text-black font-black text-sm">C</span>
+              <span className="text-black font-black text-sm">A</span>
             </div>
-            <span className="font-bold tracking-tight">CNGN Ramp</span>
+            <span className="font-bold tracking-tight">AutoRamp</span>
           </div>
           <p className="text-sm text-white/40">
-            © 2025 CNGN Ramp. All rights reserved.
+            © 2025 AutoRamp. All rights reserved.
           </p>
         </div>
       </footer>

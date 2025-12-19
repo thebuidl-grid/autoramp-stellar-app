@@ -170,9 +170,9 @@ export default function SignUpPage() {
       <div className="fixed top-6 left-6 z-50">
         <Link href="/" className="flex items-center gap-3 group">
           <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center group-hover:scale-105 transition-transform">
-            <span className="text-black font-black text-lg">C</span>
+            <span className="text-black font-black text-lg">A</span>
           </div>
-          <span className="font-bold text-xl tracking-tight">CNGN</span>
+          <span className="font-bold text-xl tracking-tight">AutoRamp</span>
         </Link>
       </div>
 
