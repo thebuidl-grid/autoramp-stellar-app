@@ -51,7 +51,7 @@ export function useSignUp() {
       setAuth(user, accessToken);
       toast({
         title: "Account created!",
-        description: "Welcome to CNGN Ramp. You can now start trading.",
+        description: "Welcome to AutoRamp. You can now start trading.",
         variant: "success",
       });
       router.push("/dashboard");

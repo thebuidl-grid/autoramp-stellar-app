@@ -18,8 +18,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CNGN Ramp | Onramp & Offramp",
-  description: "Convert fiat to crypto and crypto to fiat seamlessly with CNGN Ramp",
+  title: "AutoRamp | Onramp & Offramp",
+  description: "Convert fiat to crypto and crypto to fiat seamlessly with AutoRamp",
 };
 
 export default function RootLayout({
