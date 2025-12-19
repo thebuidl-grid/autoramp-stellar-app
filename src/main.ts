@@ -20,16 +20,45 @@ async function bootstrap() {
 
   app.useGlobalInterceptors(new LoggingInterceptor());
 
-  app.enableCors();
+  // CORS Configuration
+  app.enableCors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+    exposedHeaders: ['Content-Type', 'Authorization'],
+  });
 
   // Swagger setup
   const config = new DocumentBuilder()
-    .setTitle('Swapper API Service')
-    .setDescription('API for token swaps and balances on Aerodrome')
+    .setTitle('CNGN Ramp API Service')
+    .setDescription('API for onramp/offramp transactions, token swaps, and user management')
     .setVersion('1.0')
-    .addTag('Swap')
-    .addTag('Stablestack')
-    // .addBearerAuth()
+    .addTag('Authentication', 'User and admin authentication endpoints')
+    .addTag('User', 'User profile management')
+    .addTag('Admin', 'Admin-only endpoints for user and transaction management')
+    .addTag('Swap', 'Token swap operations')
+    .addTag('Stablestack', 'Onramp and offramp transaction endpoints')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'JWT',
+        description: 'Enter JWT token',
+        in: 'header',
+      },
+      'JWT-auth', // This name here is important for matching up with @ApiBearerAuth() in your controller!
+    )
+    .addApiKey(
+      {
+        type: 'apiKey',
+        name: 'x-api-key',
+        in: 'header',
+        description: 'Enter your API key (format: sk_live_...)',
+      },
+      'API-Key', // Name for API key auth
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

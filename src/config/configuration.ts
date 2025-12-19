@@ -13,6 +13,7 @@ export const configFactory: ConfigFactory = () => {
     dbName: process.env.DB_DATABASE,
     jwtSecret: process.env.JWT_SECRET,
     jwtExpiresIn: process.env.JWT_EXPIRES_IN,
+    databaseUrl: process.env.DATABASE_URL,
     walletPrivateKey: process.env.WALLET_PRIVATE_KEY,
     rpcUrl: process.env.RPC_URL,
     stablestackApiUrl: process.env.STABLESTACK_API_URL,
