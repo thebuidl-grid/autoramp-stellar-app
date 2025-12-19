@@ -32,11 +32,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message = exception.message;
     }
 
-    // Standardized error response
+    // Standardized error response (path removed as per requirements)
     const errorResponse = {
       statusCode: status,
       timestamp: new Date().toISOString(),
-      path: request.url,
       method: request.method,
       message,
     };

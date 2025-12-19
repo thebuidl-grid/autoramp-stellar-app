@@ -26,8 +26,11 @@ export const validationSchema = Joi.object({
   DB_DATABASE: Joi.string().optional().allow('', null),
 
   // JWT
-  JWT_SECRET: Joi.string().optional().allow('', null),
+  JWT_SECRET: Joi.string().required(),
   JWT_EXPIRES_IN: Joi.string().default('24h').optional().allow('', null),
+  
+  // Database
+  DATABASE_URL: Joi.string().required(),
 
   // CRYPTO
   WALLET_PRIVATE_KEY: Joi.string().optional().allow('', null),
@@ -36,6 +39,10 @@ export const validationSchema = Joi.object({
   // STABLESTACK
   STABLESTACK_API_URL: Joi.string().uri().optional().allow('', null),
   STABLESTACK_API_KEY: Joi.string().optional().allow('', null),
+
+  // RESEND
+  RESEND_API_KEY: Joi.string().required(),
+  RESEND_FROM_EMAIL: Joi.string().email().optional().allow('', null),
 });
 
 enum NodeEnv {
@@ -77,12 +84,14 @@ export class EnvironmentVariables {
   DB_DATABASE: string;
 
   @IsString()
-  @IsOptional()
   JWT_SECRET: string;
 
   @IsString()
   @IsOptional()
   JWT_EXPIRES_IN: string = '24h';
+  
+  @IsString()
+  DATABASE_URL: string;
 
   @IsString()
   @IsOptional()
@@ -99,6 +108,13 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   STABLESTACK_API_KEY: string;
+
+  @IsString()
+  RESEND_API_KEY: string;
+
+  @IsString()
+  @IsOptional()
+  RESEND_FROM_EMAIL: string;
 }
 
 export const validate = (config: Record<string, any>) => {
