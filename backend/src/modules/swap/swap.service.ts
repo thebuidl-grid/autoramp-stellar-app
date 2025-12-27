@@ -15,6 +15,10 @@ export class SwapService {
   private readonly logger = new Logger(SwapService.name);
   private readonly rpcUrl?: string;
   private readonly swapper: any;
+  
+  // Cache for USD/NGN rate (respects 1 request/minute limit)
+  private usdNgnRateCache: { rate: number; timestamp: number } | null = null;
+  private readonly CACHE_TTL_MS = 60 * 1000; // 1 minute in milliseconds
 
   constructor(
     private configService: ConfigService,
@@ -54,16 +58,30 @@ export class SwapService {
   }
 
   /**
-   * Get USD/NGN rate from MonieRate API
+   * Get USD/NGN rate from MonieRate API with caching
+   * Caches the rate for 1 minute to respect API rate limit (1 request/minute)
    * @returns USD/NGN rate (e.g., 1619.01 means 1 USD = 1619.01 NGN)
    */
   async getUsdNgnRate(): Promise<number> {
     try {
+      const now = Date.now();
+      
+      // Check if we have a valid cached rate (within 1 minute)
+      if (
+        this.usdNgnRateCache &&
+        (now - this.usdNgnRateCache.timestamp) < this.CACHE_TTL_MS
+      ) {
+        this.logger.debug(`Using cached USD/NGN rate: ${this.usdNgnRateCache.rate}`);
+        return this.usdNgnRateCache.rate;
+      }
+
+      // Cache expired or doesn't exist - fetch new rate
       const apiKey = this.configService.get<string>('MONIE_RATE_API_KEY');
       if (!apiKey) {
         throw new Error('MONIE_RATE_API_KEY is not configured');
       }
 
+      this.logger.debug('Fetching USD/NGN rate from MonieRate API');
       const response = await firstValueFrom(
         this.httpService.get<{
           status: string;
@@ -91,6 +109,13 @@ export class SwapService {
         throw new Error('Invalid rate from MonieRate API');
       }
 
+      // Cache the rate with current timestamp
+      this.usdNgnRateCache = {
+        rate,
+        timestamp: now,
+      };
+
+      this.logger.debug(`Cached USD/NGN rate: ${rate}`);
       return rate;
     } catch (error: any) {
       this.logger.error('Error fetching USD/NGN rate from MonieRate:', error.message);
