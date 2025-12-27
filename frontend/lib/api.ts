@@ -276,6 +276,70 @@ export const adminApi = {
   
   getUserApiKeys: (userId: string) => 
     api.get<ApiKey[]>(`/admin/users/${userId}/api-keys`),
+};
+
+// ============== Swap API ==============
+
+export interface InitializeSwapDto {
+  amount: number; // NGN amount for offramp
+  usdcAmount: number; // USDC amount for swap
+  slippage: number;
+  offrampDestination: {
+    bankCode: string;
+    accountNumber: string;
+  };
+  network?: string;
+}
+
+export interface SwapResponse {
+  swap: {
+    id: string;
+    reference: string;
+    fromAmount: number;
+    toAmount: number;
+    exchangeRate: number;
+    status: string;
+    createdAt: string;
+  };
+  offramp: {
+    id: string;
+    reference: string;
+    status: string;
+  };
+  recipientAddress: string;
+  swapParams: {
+    tokenIn: string;
+    tokenOut: string;
+    amountIn: string;
+    amountOutMinimum?: string; // Optional since we removed getQuote
+    recipient: string;
+    slippage: number;
+  };
+}
+
+export interface UpdateSwapDto {
+  transactionHash: string;
+  sourceAddress: string;
+}
+
+export const swapApi = {
+  initializeSwap: (data: InitializeSwapDto) => 
+    api.post<SwapResponse>("/swap/initialize", data),
+  
+  updateSwapAfterExecution: (reference: string, data: UpdateSwapDto) => 
+    api.post(`/swap/${reference}/complete`, data),
+  
+  getTokenBalance: (token: string, address: string) => 
+    api.get<string>(`/swap/balance/${token}/${address}`),
+  
+  getTokenBalances: (address?: string) => 
+    api.get<Record<string, string>>(`/swap/balances${address ? `?address=${address}` : ''}`),
+  
+  getUsdNgnRate: () => 
+    api.get<{ rate: number }>("/swap/usd-ngn-rate"),
+  
+  estimateNgn: (cngnAmount: number) => 
+    api.get<{ estimatedNgn: number; usdNgnRate: number; usdValue: number }>(`/swap/estimate-ngn?cngnAmount=${cngnAmount}`),
   
   createApiKeyForUser: (userId: string, data: CreateApiKeyDto) => 
     api.post<CreateApiKeyResponse>(`/admin/users/${userId}/api-keys`, data),

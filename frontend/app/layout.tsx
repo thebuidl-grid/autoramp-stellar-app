@@ -4,6 +4,7 @@ import "./globals.css";
 import { QueryProvider } from "@/lib/query-provider";
 import { Toaster } from "@/components/ui/toast";
 import { AuthProvider } from "@/components/auth/auth-provider";
+import { WagmiProviderWrapper } from "@/components/providers/wagmi-provider";
 
 const syne = Syne({
   variable: "--font-syne",
@@ -32,12 +33,14 @@ export default function RootLayout({
       <body
         className={`${syne.variable} ${jetbrainsMono.variable} antialiased`}
       >
-        <QueryProvider>
-          <AuthProvider>
-            {children}
-            <Toaster />
-          </AuthProvider>
-        </QueryProvider>
+        <WagmiProviderWrapper>
+          <QueryProvider>
+            <AuthProvider>
+              {children}
+              <Toaster />
+            </AuthProvider>
+          </QueryProvider>
+        </WagmiProviderWrapper>
       </body>
     </html>
   );
