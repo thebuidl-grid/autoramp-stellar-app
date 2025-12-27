@@ -4,15 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { useOnRamp } from "@/lib/hooks";
 import { ArrowDownLeft, AlertCircle, Copy, CheckCircle, TrendingUp, Wallet, Zap, Sparkles } from "lucide-react";
 import { copyToClipboard } from "@/lib/utils";
-
-const NETWORKS = [
-  { value: "base", label: "Base" }
-];
 
 export default function OnRampPage() {
   const router = useRouter();
@@ -25,7 +20,7 @@ export default function OnRampPage() {
   
   const [formData, setFormData] = useState({
     amount: "",
-    network: "base",
+    network: "base", // Always 'base', not shown to user
     walletAddress: "",
   });
 
@@ -112,26 +107,6 @@ export default function OnRampPage() {
                       className="w-full h-14 pl-10 pr-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent transition-all text-lg font-medium"
                     />
                   </div>
-                </div>
-
-                {/* Network Select */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-white/70">Network</label>
-                  <Select
-                    value={formData.network}
-                    onValueChange={(value) => setFormData({ ...formData, network: value })}
-                  >
-                    <SelectTrigger className="h-14 rounded-xl bg-white/5 border-white/10 text-white focus:ring-2 focus:ring-white/20">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {NETWORKS.map((network) => (
-                        <SelectItem key={network.value} value={network.value}>
-                          {network.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
 
                 {/* Wallet Address Input */}

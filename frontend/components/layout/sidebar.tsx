@@ -22,6 +22,7 @@ const userNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/onramp", label: "Buy Crypto", icon: ArrowDownLeft },
   { href: "/dashboard/offramp", label: "Sell Crypto", icon: ArrowUpRight },
+  { href: "/dashboard/swap", label: "Swap", icon: ArrowDownLeft },
 ];
 
 const adminNavItems = [
