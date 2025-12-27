@@ -1,0 +1,382 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique 
+  password  String    // Hashed password
+  phoneNumber String? @map("phone_number") 
+  walletAddress String? @map("wallet_address") 
+  role      UserRole @default(USER)
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+  
+  // Relations
+  onrampTransactions  OnrampTransaction[]
+  offrampTransactions OfframpTransaction[]
+  swapTransactions    SwapTransaction[]
+  transactionLogs     TransactionLog[]
+  apiKeys             ApiKey[]
+  apiRequestLogs      ApiRequestLog[]
+  
+  @@index([email])
+  @@map("users")
+}
+
+// Admin model for admin authentication
+model Admin {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique 
+  password  String    // Hashed password
+  firstName String?  @map("first_name") 
+  lastName  String?  @map("last_name") 
+  isActive  Boolean  @default(true) @map("is_active")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+  
+  @@index([email])
+  @@map("admins")
+}
+
+// OTP model for email verification
+model Otp {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String
+  code      String   // 6-digit OTP code
+  purpose   String   @default("SIGNUP") // SIGNUP, RESET_PASSWORD, etc.
+  isUsed    Boolean  @default(false) @map("is_used")
+  expiresAt DateTime @map("expires_at") @db.Timestamp
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  
+  @@index([email])
+  @@index([code])
+  @@index([expiresAt])
+  @@index([isUsed])
+  @@map("otps")
+}
+
+// Onramp Transactions Table (NGN to CNGN)
+model OnrampTransaction {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  
+  // Transaction Details
+  reference   String   @unique 
+  amount      Decimal  @db.Decimal(20, 2)
+  currency    String   @default("NGN") 
+  tokenAmount Decimal? @map("token_amount") @db.Decimal(20, 8) // CNGN amount to receive
+  tokenType   String   @default("CNGN") @map("token_type")  // CNGN, USDC, USDT, etc.
+  
+  // Status Tracking
+  status            TransactionStatus @default(PENDING)
+  flintTransactionId String?          @map("flint_transaction_id") 
+  
+  // Destination (User's wallet)
+  destinationAddress String @map("destination_address") 
+  
+  // Flint API Response Data
+  network       String?  // base, bsc, ethereum, polygon, etc.
+  notifyUrl     String? @map("notify_url") @db.Text
+  depositAccount Json?  @map("deposit_account") @db.JsonB // stores bank details from Flint response
+  
+  // Metadata
+  ipAddress String? @map("ip_address") 
+  userAgent String? @map("user_agent") @db.Text
+  metadata  Json?   @db.JsonB
+  
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamp
+  completedAt DateTime? @map("completed_at") @db.Timestamp
+  
+  // Relations
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([reference])
+  @@index([status])
+  @@index([tokenType])
+  @@index([createdAt])
+  @@map("onramp_transactions")
+}
+
+// Offramp Transactions Table (CNGN to NGN)
+model OfframpTransaction {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  
+  // Transaction Details
+  reference   String  @unique 
+  amount      Decimal @db.Decimal(20, 2) // Token amount
+  fiatAmount  Decimal? @map("fiat_amount") @db.Decimal(20, 2) // NGN amount to receive
+  currency    String  @default("NGN") 
+  tokenType   String  @default("CNGN") @map("token_type")  // CNGN, USDC, USDT, etc.
+  
+  // Status Tracking
+  status            TransactionStatus @default(PENDING)
+  flintTransactionId String?          @map("flint_transaction_id") 
+  swapId            String?           @unique @map("swap_id") @db.Uuid // Reference to swap transaction (one-to-one relation)
+  
+  // Destination (Bank Account)
+  bankCode      String  @map("bank_code") 
+  accountNumber String  @map("account_number") 
+  accountName   String? @map("account_name") 
+  bankName      String? @map("bank_name") 
+  
+  // Flint API Response Data
+  network   String?  // base, bsc, ethereum, polygon, etc.
+  notifyUrl String? @map("notify_url") @db.Text
+  
+  // Metadata
+  ipAddress String? @map("ip_address") 
+  userAgent String? @map("user_agent") @db.Text
+  metadata  Json?   @db.JsonB
+  
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamp
+  completedAt DateTime? @map("completed_at") @db.Timestamp
+  
+  // Relations
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  swapTransaction SwapTransaction? @relation("SwapToOfframp", fields: [swapId], references: [id], onDelete: SetNull)
+  
+  @@index([userId])
+  @@index([reference])
+  @@index([status])
+  @@index([tokenType])
+  @@index([accountNumber])
+  @@index([createdAt])
+  @@map("offramp_transactions")
+}
+
+// Swap Transactions Table (Token to Token swaps)
+model SwapTransaction {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  
+  // Transaction Details
+  reference String @unique 
+  
+  // From Token
+  fromTokenType String  @map("from_token_type")  // CNGN, USDC, USDT, etc.
+  fromAmount    Decimal @map("from_amount") @db.Decimal(20, 8)
+  fromNetwork  String? @map("from_network")  // base, bsc, ethereum, polygon, etc.
+  
+  // To Token
+  toTokenType String  @map("to_token_type")  // CNGN, USDC, USDT, etc.
+  toAmount    Decimal @map("to_amount") @db.Decimal(20, 8)
+  toNetwork   String? @map("to_network")  // base, bsc, ethereum, polygon, etc.
+  
+  // Exchange Rate
+  exchangeRate Decimal @map("exchange_rate") @db.Decimal(20, 8)
+  
+  // Wallet Addresses
+  sourceAddress      String @map("source_address") 
+  destinationAddress String @map("destination_address") 
+  
+  // Status Tracking
+  status         TransactionStatus @default(PENDING)
+  transactionHash String?          @map("transaction_hash") // blockchain transaction hash
+  
+  // Fees
+  feeAmount   Decimal? @map("fee_amount") @db.Decimal(20, 8)
+  feeCurrency String?  @map("fee_currency") 
+  
+  // Metadata
+  ipAddress String? @map("ip_address") 
+  userAgent String? @map("user_agent") @db.Text
+  metadata  Json?   @db.JsonB
+  
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamp
+  completedAt DateTime? @map("completed_at") @db.Timestamp
+  
+  // Relations
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offrampTransaction OfframpTransaction? @relation("SwapToOfframp")
+  
+  @@index([userId])
+  @@index([reference])
+  @@index([status])
+  @@index([fromTokenType])
+  @@index([toTokenType])
+  @@index([createdAt])
+  @@map("swap_transactions")
+}
+
+// Webhook Events Table (for onramp, offramp, and swap)
+model WebhookEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  transactionType TransactionType @map("transaction_type") // 'onramp', 'offramp', 'swap'
+  transactionId String   @map("transaction_id") @db.Uuid // references onramp, offramp, or swap transaction
+  reference     String   
+  
+  // Event Details
+  eventType String? @map("event_type")  // status_update, completion, failure, etc.
+  status    String? 
+  
+  // Raw Payload
+  payload Json @db.JsonB
+  
+  // Processing
+  processed    Boolean   @default(false)
+  processedAt  DateTime? @map("processed_at") @db.Timestamp
+  errorMessage String?   @map("error_message") @db.Text
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  
+  // Note: Relations to specific transaction types are handled via transactionId and transactionType
+  // No direct foreign key constraints due to polymorphic relationship
+  
+  @@index([transactionId])
+  @@index([reference])
+  @@index([transactionType])
+  @@index([processed])
+  @@index([createdAt])
+  @@map("webhook_events")
+}
+
+// Transaction Logs Table (for audit trail)
+model TransactionLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  transactionType TransactionType @map("transaction_type") // 'onramp', 'offramp', 'swap'
+  transactionId String   @map("transaction_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid // Optional user reference for easier querying
+  
+  // Log Details
+  action      String   // created, status_changed, completed, failed, etc.
+  oldStatus   String? @map("old_status") 
+  newStatus   String? @map("new_status") 
+  description String? @db.Text
+  
+  // Additional Data
+  metadata Json? @db.JsonB
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([transactionId])
+  @@index([transactionType])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("transaction_logs")
+}
+
+// Supported Tokens Table (for tracking available tokens)
+model SupportedToken {
+  id          String   @id @default(uuid()) @db.Uuid
+  tokenSymbol String   @unique @map("token_symbol")  // CNGN, USDC, USDT, etc.
+  tokenName   String   @map("token_name")  // Canza Finance NGN, USD Coin, etc.
+  tokenAddress String? @map("token_address")  // smart contract address
+  network     String    // base, bsc, ethereum, polygon, etc.
+  decimals    Int      @default(18)
+  isActive    Boolean  @default(true) @map("is_active")
+  logoUrl     String?  @map("logo_url") @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamp
+  
+  @@index([tokenSymbol])
+  @@index([network])
+  @@index([isActive])
+  @@map("supported_tokens")
+}
+
+// API Keys Table (for public API access)
+model ApiKey {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  key       String   @unique // The actual API key (hashed)
+  keyPrefix String   @map("key_prefix") // First 8 chars for display (e.g., "sk_live_")
+  name      String?  // Optional name for the API key
+  isActive  Boolean  @default(true) @map("is_active")
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamp
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+  expiresAt DateTime? @map("expires_at") @db.Timestamp
+  
+  // Relations
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiRequestLogs ApiRequestLog[]
+  
+  @@index([userId])
+  @@index([key])
+  @@index([isActive])
+  @@map("api_keys")
+}
+
+// API Request Logs Table (for tracking public API usage)
+model ApiRequestLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  apiKeyId  String?  @map("api_key_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  
+  // Request Details
+  method    String   // GET, POST, etc.
+  path      String   // Request path
+  statusCode Int     @map("status_code") // HTTP status code
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent") @db.Text
+  
+  // Request/Response
+  requestBody  Json? @map("request_body") @db.JsonB
+  responseBody Json? @map("response_body") @db.JsonB
+  errorMessage String? @map("error_message") @db.Text
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  
+  // Relations
+  apiKey ApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([apiKeyId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([statusCode])
+  @@map("api_request_logs")
+}
+
+// Enums
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum TransactionType {
+  onramp
+  offramp
+  swap
+}

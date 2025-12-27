@@ -4,15 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
-import { useBanks, useOffRamp } from "@/lib/hooks";
-import { ArrowUpRight, AlertCircle, CheckCircle, Copy, TrendingDown, Wallet, Zap, Sparkles, Building2 } from "lucide-react";
+import { useBanks, useOffRamp, useEstimateNgn } from "@/lib/hooks";
+import { ArrowUpRight, AlertCircle, CheckCircle, Copy, TrendingDown, Wallet, Zap, Sparkles } from "lucide-react";
 import { copyToClipboard } from "@/lib/utils";
-
-const NETWORKS = [
-  { value: "base", label: "Base" }
-];
+import { SearchableBankSelect } from "@/components/ui/searchable-bank-select";
 
 export default function OffRampPage() {
   const router = useRouter();
@@ -27,10 +23,14 @@ export default function OffRampPage() {
   
   const [formData, setFormData] = useState({
     amount: "",
-    network: "base",
+    network: "base", // Always 'base', not shown to user
     bankCode: "",
     accountNumber: "",
   });
+  
+  // Calculate estimated NGN from CNGN amount
+  const cngnAmount = formData.amount ? parseFloat(formData.amount) : null;
+  const { data: ngnEstimate } = useEstimateNgn(cngnAmount);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,9 +44,22 @@ export default function OffRampPage() {
       return;
     }
 
+    // Validate that we have estimated NGN value
+    if (!ngnEstimate?.estimatedNgn) {
+      toast({
+        title: "Rate calculation in progress",
+        description: "Please wait for the estimated NGN value to be calculated",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Use estimated NGN value (rounded to whole number)
+    const amountToSend = Math.round(ngnEstimate.estimatedNgn);
+    
     offRamp.mutate({
       network: formData.network,
-      amount: parseFloat(formData.amount),
+      amount: amountToSend,
       destination: {
         bankCode: formData.bankCode,
         accountNumber: formData.accountNumber,
@@ -107,47 +120,16 @@ export default function OffRampPage() {
                   </div>
                 </div>
 
-                {/* Network Select */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-white/70">Network</label>
-                  <Select
-                    value={formData.network}
-                    onValueChange={(value) => setFormData({ ...formData, network: value })}
-                  >
-                    <SelectTrigger className="h-14 rounded-xl bg-white/5 border-white/10 text-white focus:ring-2 focus:ring-white/20">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {NETWORKS.map((network) => (
-                        <SelectItem key={network.value} value={network.value}>
-                          {network.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 {/* Bank Select */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-white/70 flex items-center gap-2">
-                    <Building2 size={16} />
-                    Bank
-                  </label>
-                  <Select
+                  <label className="text-sm font-medium text-white/70">Bank</label>
+                  <SearchableBankSelect
+                    banks={banks}
                     value={formData.bankCode}
                     onValueChange={(value) => setFormData({ ...formData, bankCode: value })}
-                  >
-                    <SelectTrigger className="h-14 rounded-xl bg-white/5 border-white/10 text-white focus:ring-2 focus:ring-white/20">
-                      <SelectValue placeholder="Select a bank" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[300px]">
-                      {banks.map((bank) => (
-                        <SelectItem key={bank.institutionCode} value={bank.institutionCode}>
-                          {bank.institutionName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Select a bank"
+                    required
+                  />
                 </div>
 
                 {/* Account Number Input */}
@@ -171,17 +153,27 @@ export default function OffRampPage() {
                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl" />
                   <div className="relative">
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-sm text-white/50">You will receive</p>
+                      <p className="text-sm text-white/50">Estimated NGN</p>
                       <Zap size={16} className="text-white/50" />
                     </div>
                     <div className="flex items-baseline gap-2 mb-2">
                       <p className="text-3xl font-bold text-white">
-                        {formData.amount ? `₦${parseFloat(formData.amount).toLocaleString()}` : "₦0.00"}
+                        {ngnEstimate?.estimatedNgn 
+                          ? `₦${Math.round(ngnEstimate.estimatedNgn).toLocaleString('en-NG')}`
+                          : formData.amount 
+                            ? `₦${Math.round(parseFloat(formData.amount)).toLocaleString('en-NG')}`
+                            : "₦0"}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-white/40">
                       <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                      <span>Rate: 1 CNGN ≈ 1 NGN</span>
+                      <span>
+                        {ngnEstimate 
+                          ? `Based on current USD/NGN rate: ${ngnEstimate.usdNgnRate.toFixed(2)}`
+                          : formData.amount
+                            ? 'Calculating...'
+                            : 'Enter amount to see estimate'}
+                      </span>
                     </div>
                   </div>
                 </div>
