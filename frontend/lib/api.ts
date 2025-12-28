@@ -276,6 +276,12 @@ export const adminApi = {
   
   getUserApiKeys: (userId: string) => 
     api.get<ApiKey[]>(`/admin/users/${userId}/api-keys`),
+  
+  createApiKeyForUser: (userId: string, data: CreateApiKeyDto) => 
+    api.post<CreateApiKeyResponse>(`/admin/users/${userId}/api-keys`, data),
+  
+  revokeApiKey: (id: string) => 
+    api.delete<{ message: string }>(`/admin/api-keys/${id}`),
 };
 
 // ============== Swap API ==============
@@ -340,11 +346,5 @@ export const swapApi = {
   
   estimateNgn: (cngnAmount: number) => 
     api.get<{ estimatedNgn: number; usdNgnRate: number; usdValue: number }>(`/swap/estimate-ngn?cngnAmount=${cngnAmount}`),
-  
-  createApiKeyForUser: (userId: string, data: CreateApiKeyDto) => 
-    api.post<CreateApiKeyResponse>(`/admin/users/${userId}/api-keys`, data),
-  
-  revokeApiKey: (id: string) => 
-    api.delete<{ message: string }>(`/admin/api-keys/${id}`),
 };
 

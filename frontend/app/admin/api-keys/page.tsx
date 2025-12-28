@@ -11,7 +11,8 @@ import { useAllApiKeys, useAllUsers, useCreateApiKeyForUser, useRevokeApiKey } f
 import { formatDate } from "@/lib/utils";
 import { Key, Plus, Trash2, Copy, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage, CreateApiKeyResponse } from "@/lib/api";
+import { AxiosResponse } from "axios";
 
 export default function AdminApiKeysPage() {
   const [page, setPage] = useState(1);
@@ -43,8 +44,10 @@ export default function AdminApiKeysPage() {
     createApiKey.mutate(
       { userId: selectedUserId, data: { name: apiKeyName || undefined } },
       {
-        onSuccess: (response) => {
-          setNewKey(response.data.key);
+        onSuccess: (response: any) => {
+          // React Query with Axios returns the full AxiosResponse
+          const data = response?.data || response;
+          setNewKey(data.key);
           setShowNewKey(true);
           setSelectedUserId("");
           setApiKeyName("");
