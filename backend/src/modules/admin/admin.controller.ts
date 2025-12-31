@@ -34,7 +34,7 @@ import { AdminGuard } from '../auth/guards/admin.guard';
  * All endpoints require admin authentication.
  */
 @ApiTags('Admin')
-@Controller('admin')
+@Controller()
 @UseGuards(JwtAuthGuard, AdminGuard)
 @ApiBearerAuth('JWT-auth')
 export class AdminController {
