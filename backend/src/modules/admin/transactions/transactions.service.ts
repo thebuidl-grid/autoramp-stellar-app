@@ -1,7 +1,6 @@
-
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/database/prisma.service';
-import { TransactionStatus } from '@prisma/client'; // Import TransactionStatus enum
+import { TransactionSummaryDto } from './dto/transaction-summary.dto';
 
 @Injectable()
 export class TransactionsService {
@@ -67,85 +66,37 @@ export class TransactionsService {
     };
   }
 
-  async getSummary(): Promise<any> {
+  async getSummary(): Promise<TransactionSummaryDto> {
     const [
       totalOnRamps,
       totalOnRampAmountResult,
-      onRampStatusCounts,
       totalOffRamps,
       totalOffRampAmountResult,
-      offRampStatusCounts,
       totalSwaps,
       totalSwapAmountResult,
-      swapStatusCounts,
     ] = await this.prisma.$transaction([
       this.prisma.onrampTransaction.count(),
       this.prisma.onrampTransaction.aggregate({ _sum: { amount: true } }),
-      this.prisma.onrampTransaction.groupBy({
-        by: ['status'],
-        _count: { _all: true },
-        orderBy: {
-          status: 'asc',
-        },
-      }),
       this.prisma.offrampTransaction.count(),
       this.prisma.offrampTransaction.aggregate({ _sum: { fiatAmount: true } }),
-      this.prisma.offrampTransaction.groupBy({
-        by: ['status'],
-        _count: { _all: true },
-        orderBy: {
-          status: 'asc',
-        },
-      }),
       this.prisma.swapTransaction.count(),
       this.prisma.swapTransaction.aggregate({ _sum: { toAmount: true } }),
-      this.prisma.swapTransaction.groupBy({
-        by: ['status'],
-        _count: { _all: true },
-        orderBy: {
-          status: 'asc',
-        },
-      }),
     ]);
 
-    const onRampStatusSummary = onRampStatusCounts.reduce((acc, curr) => {
-      if (typeof curr._count === 'object' && curr._count !== null && '_all' in curr._count) {
-        acc[curr.status] = curr._count._all;
-      } else {
-        acc[curr.status] = 0; // Default to 0 if count is not available or is 'true'
-      }
-      return acc;
-    }, {} as Record<TransactionStatus, number>);
-
-    const offRampStatusSummary = offRampStatusCounts.reduce((acc, curr) => {
-      if (typeof curr._count === 'object' && curr._count !== null && '_all' in curr._count) {
-        acc[curr.status] = curr._count._all;
-      } else {
-        acc[curr.status] = 0; // Default to 0 if count is not available or is 'true'
-      }
-      return acc;
-    }, {} as Record<TransactionStatus, number>);
-
-    const swapStatusSummary = swapStatusCounts.reduce((acc, curr) => {
-      if (typeof curr._count === 'object' && curr._count !== null && '_all' in curr._count) {
-        acc[curr.status] = curr._count._all;
-      } else {
-        acc[curr.status] = 0; // Default to 0 if count is not available or is 'true'
-      }
-      return acc;
-    }, {} as Record<TransactionStatus, number>);
-
     return {
-      totalOnRamps,
-      totalOnRampAmount: totalOnRampAmountResult._sum.amount?.toNumber() || 0,
-      onRampStatusSummary,
-      totalOffRamps,
-      totalOffRampAmount:
-        totalOffRampAmountResult._sum.fiatAmount?.toNumber() || 0,
-      offRampStatusSummary,
-      totalSwaps,
-      totalSwapAmount: totalSwapAmountResult._sum.toAmount?.toNumber() || 0,
-      swapStatusSummary,
+      onRamps: {
+        count: totalOnRamps,
+        totalAmount: totalOnRampAmountResult._sum.amount?.toNumber() || 0,
+      },
+      offRamps: {
+        count: totalOffRamps,
+        totalAmount:
+          totalOffRampAmountResult._sum.fiatAmount?.toNumber() || 0,
+      },
+      swaps: {
+        count: totalSwaps,
+        totalAmount: totalSwapAmountResult._sum.toAmount?.toNumber() || 0,
+      },
     };
   }
 }
