@@ -11,7 +11,7 @@ import { TransactionsService } from './transactions.service';
 import { AdminGuard } from 'src/modules/auth/guards/admin.guard';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { TransactionDto } from '../dto/transaction.dto';
-import { TransactionSummaryDto } from '../dto/transaction-summary.dto'; // Import the new DTO
+import { TransactionSummaryDto } from './dto/transaction-summary.dto';
 
 @ApiTags('Admin')
 @Controller('transactions')
