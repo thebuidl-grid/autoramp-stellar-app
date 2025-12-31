@@ -69,8 +69,8 @@ export class StablestackService {
 
       const reference = generateTrxReference();
 
-      //const webhookUrl = this.configService.get<string>('WEBHOOK_URL');
-      const webhookUrl = 'https://7f8f532c7de0.ngrok-free.app/stablestack/webhook';
+      const webhookUrl = this.configService.get<string>('WEBHOOK_URL');
+      //const webhookUrl = 'https://7f8f532c7de0.ngrok-free.app/stablestack/webhook';
 
       const response = await firstValueFrom(
         this.httpService.post(
