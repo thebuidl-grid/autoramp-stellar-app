@@ -11,6 +11,7 @@ import { TransactionsService } from './transactions.service';
 import { AdminGuard } from 'src/modules/auth/guards/admin.guard';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { TransactionDto } from '../dto/transaction.dto';
+import { TransactionSummaryDto } from '../dto/transaction-summary.dto'; // Import the new DTO
 
 @ApiTags('Admin')
 @Controller('transactions')
@@ -107,5 +108,13 @@ export class TransactionsController {
     const pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
     return this.transactionsService.getSwaps(pageNumber, limitNumber);
+  }
+
+  @Get('summary')
+  @ApiOperation({ summary: 'Get summary statistics for all transactions (for admins)' })
+  @ApiResponse({ status: 200, description: 'Summary statistics for on-ramp, off-ramp, and swap transactions.', type: TransactionSummaryDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getSummary() {
+    return this.transactionsService.getSummary();
   }
 }
