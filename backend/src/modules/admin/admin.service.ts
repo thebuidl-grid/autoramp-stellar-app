@@ -1,14 +1,11 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { ApiKeysService } from '../api-keys/api-keys.service';
 import { CreateApiKeyDto } from '../api-keys/dto/create-api-key.dto';
 
 /**
  * Admin Service
- * 
+ *
  * Handles admin-related operations including:
  * - User management
  * - API key management
@@ -23,9 +20,9 @@ export class AdminService {
 
   /**
    * Get all users
-   * 
+   *
    * Retrieves a list of all users.
-   * 
+   *
    * @param page - Page number (default: 1)
    * @param limit - Items per page (default: 10)
    * @returns Paginated list of users
@@ -65,7 +62,7 @@ export class AdminService {
 
   /**
    * Get user details by ID
-   * 
+   *
    * @param userId - User ID
    * @returns User object with all details
    */
@@ -92,7 +89,7 @@ export class AdminService {
 
   /**
    * Create API key for a user (admin only)
-   * 
+   *
    * @param userId - User ID to create API key for
    * @param dto - API key creation data
    * @returns API key object (key is only shown once)
@@ -103,7 +100,7 @@ export class AdminService {
 
   /**
    * Get all API keys for a user (admin only)
-   * 
+   *
    * @param userId - User ID
    * @returns List of API keys
    */
@@ -113,7 +110,7 @@ export class AdminService {
 
   /**
    * Revoke an API key (admin only)
-   * 
+   *
    * @param apiKeyId - API key ID
    */
   async revokeApiKey(apiKeyId: string) {
@@ -130,7 +127,7 @@ export class AdminService {
 
   /**
    * Get all API keys (admin only)
-   * 
+   *
    * @param page - Page number (default: 1)
    * @param limit - Items per page (default: 10)
    * @returns Paginated list of all API keys
@@ -168,4 +165,3 @@ export class AdminService {
     };
   }
 }
-
