@@ -26,11 +26,11 @@ import { AdminGuard } from '../auth/guards/admin.guard';
 
 /**
  * Admin Controller
- * 
+ *
  * Handles admin-only endpoints including:
  * - User management
  * - API key management
- * 
+ *
  * All endpoints require admin authentication.
  */
 @ApiTags('Admin')
