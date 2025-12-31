@@ -16,6 +16,7 @@ import {
   Users,
   Menu,
   X,
+  List,
 } from "lucide-react";
 
 const userNavItems = [
@@ -28,6 +29,7 @@ const userNavItems = [
 const adminNavItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/transactions", label: "Transactions", icon: List },
   { href: "/admin/api-keys", label: "API Keys", icon: Key },
 ];
 
