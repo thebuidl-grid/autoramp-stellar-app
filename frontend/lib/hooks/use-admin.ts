@@ -126,3 +126,19 @@ export function useRevokeApiKey() {
   });
 }
 
+/**
+ * Fetch Admin Transaction Summary Hook
+ */
+export function useAdminTransactionSummary() {
+  const { isAdmin } = useAuthStore();
+
+  return useQuery({
+    queryKey: ["adminTransactionSummary"],
+    queryFn: async () => {
+      const response = await adminApi.getAdminTransactionSummary();
+      return response.data;
+    },
+    enabled: isAdmin,
+  });
+}
+
