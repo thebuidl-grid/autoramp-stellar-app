@@ -1,4 +1,3 @@
-
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
@@ -14,7 +13,7 @@ import { TransactionDto } from '../dto/transaction.dto';
 import { TransactionSummaryDto } from './dto/transaction-summary.dto';
 
 @ApiTags('Admin')
-@Controller('transactions')
+@Controller()
 @UseGuards(JwtAuthGuard, AdminGuard)
 @ApiBearerAuth('JWT-auth')
 export class TransactionsController {
@@ -111,8 +110,15 @@ export class TransactionsController {
   }
 
   @Get('summary')
-  @ApiOperation({ summary: 'Get summary statistics for all transactions (for admins)' })
-  @ApiResponse({ status: 200, description: 'Summary statistics for on-ramp, off-ramp, and swap transactions.', type: TransactionSummaryDto })
+  @ApiOperation({
+    summary: 'Get summary statistics for all transactions (for admins)',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Summary statistics for on-ramp, off-ramp, and swap transactions.',
+    type: TransactionSummaryDto,
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getSummary() {
     return this.transactionsService.getSummary();
