@@ -11,10 +11,11 @@ const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000';
 
 interface TransactionUpdate {
   reference: string;
-  type: 'swap' | 'offramp';
+  type: 'swap' | 'offramp' | 'onramp';
   status: string;
   swapId?: string;
   offrampId?: string;
+  onrampId?: string;
   timestamp: string;
 }
 

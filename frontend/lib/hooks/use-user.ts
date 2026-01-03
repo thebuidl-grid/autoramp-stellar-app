@@ -8,7 +8,7 @@ import { useAuthStore } from "@/lib/store";
  * Fetch User Profile Hook
  */
 export function useProfile() {
-  const { isAuthenticated } = useAuthStore();
+  const { user } = useAuthStore();
 
   return useQuery({
     queryKey: ["profile"],
@@ -16,7 +16,7 @@ export function useProfile() {
       const response = await userApi.getProfile();
       return response.data;
     },
-    enabled: isAuthenticated,
+    enabled: !!user,
   });
 }
 

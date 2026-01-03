@@ -39,7 +39,7 @@ api.interceptors.response.use(
         localStorage.removeItem("auth-storage");
         // Only redirect if not already on auth page
         if (!window.location.pathname.startsWith("/auth") && window.location.pathname !== "/") {
-          window.location.href = "/auth/signin";
+          window.location.href = "/";
         }
       }
     }
@@ -71,9 +71,8 @@ export function getErrorMessage(error: unknown): string {
 
 export interface SignUpDto {
   email: string;
-  password: string;
-  phoneNumber: string;
   otpCode: string;
+  walletAddress?: string;
 }
 
 export interface SendOtpDto {
@@ -220,15 +219,55 @@ export interface Transaction {
   metadata?: any;
 }
 
+export interface SwapTransaction {
+  id: string;
+  reference: string;
+  fromTokenType: string;
+  fromAmount: number;
+  toTokenType: string;
+  toAmount: number;
+  exchangeRate: number;
+  sourceAddress: string;
+  destinationAddress: string;
+  status: string;
+  transactionHash?: string;
+  fromNetwork?: string;
+  toNetwork?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
 export interface TransactionsResponse {
   onramp: Transaction[];
   offramp: Transaction[];
+  swap: SwapTransaction[];
   total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ResolveAccountResponse {
+  status?: string;
+  message?: string;
+  data?: {
+    accountName?: string;
+    accountNumber?: string;
+    bankCode?: string;
+  };
 }
 
 export const stablestackApi = {
   getBanks: () => 
     api.get<{ status: string; message: string; data: Bank[] }>("/stablestack/banks"),
+  
+  resolveAccount: (bankCode: string, accountNumber: string) => {
+    const params = new URLSearchParams();
+    params.append("bankCode", bankCode);
+    params.append("accountNumber", accountNumber);
+    return api.get<ResolveAccountResponse>(`/stablestack/resolve-account?${params.toString()}`);
+  },
   
   onRamp: (data: OnRampDto) => 
     api.post("/stablestack/onramp", data),
@@ -236,10 +275,12 @@ export const stablestackApi = {
   offRamp: (data: OffRampDto) => 
     api.post("/stablestack/offramp", data),
   
-  getTransactions: (id?: string, reference?: string) => {
+  getTransactions: (id?: string, reference?: string, page?: number, limit?: number) => {
     const params = new URLSearchParams();
     if (id) params.append("id", id);
     if (reference) params.append("reference", reference);
+    if (page) params.append("page", page.toString());
+    if (limit) params.append("limit", limit.toString());
     return api.get<TransactionsResponse>(`/stablestack/transactions?${params.toString()}`);
   },
 };
@@ -328,9 +369,39 @@ export interface UpdateSwapDto {
   sourceAddress: string;
 }
 
+export interface CreateSimpleSwapDto {
+  fromTokenType: string;
+  toTokenType: string;
+  fromAmount: number;
+  toAmount: number;
+  exchangeRate: number;
+  sourceAddress: string;
+  destinationAddress: string;
+  network?: string;
+  slippage?: number;
+}
+
+export interface CreateSimpleSwapResponse {
+  id: string;
+  reference: string;
+  fromTokenType: string;
+  fromAmount: number;
+  toTokenType: string;
+  toAmount: number;
+  exchangeRate: number;
+  sourceAddress: string;
+  destinationAddress: string;
+  status: string;
+  network: string;
+  createdAt: string;
+}
+
 export const swapApi = {
   initializeSwap: (data: InitializeSwapDto) => 
     api.post<SwapResponse>("/swap/initialize", data),
+  
+  createSimpleSwap: (data: CreateSimpleSwapDto) => 
+    api.post<CreateSimpleSwapResponse>("/swap/create", data),
   
   updateSwapAfterExecution: (reference: string, data: UpdateSwapDto) => 
     api.post(`/swap/${reference}/complete`, data),
