@@ -117,6 +117,7 @@ export default function HomePage() {
   // Account resolution state (not in transaction store - handled by hook)
   const [accountName, setAccountName] = useState<string | null>(null);
   const [accountResolved, setAccountResolved] = useState(false);
+  const [accountResolutionError, setAccountResolutionError] = useState<"auth" | "invalid" | null>(null);
   const resolveAccount = useResolveAccount();
 
   // Local UI state
@@ -145,10 +146,17 @@ export default function HomePage() {
     }
   }
 
-  const { data: ngnEstimate, isLoading: isLoadingEstimate } = useEstimateNgn(
+  const { data: ngnEstimate, isLoading: isLoadingEstimate, error: ngnEstimateError } = useEstimateNgn(
     needsConversion ? amountToConvert : null
   );
   const { data: usdNgnRate } = useUsdNgnRate();
+
+  // Handle 401 errors for NGN estimate endpoint
+  useEffect(() => {
+    if (ngnEstimateError && (ngnEstimateError as any)?.response?.status === 401) {
+      setIsAuthModalOpen(true);
+    }
+  }, [ngnEstimateError, setIsAuthModalOpen]);
 
   // WebSocket for transaction updates
   const handleWebSocketUpdate = useCallback(
@@ -373,6 +381,7 @@ export default function HomePage() {
       if (accountNumber.length !== 10) {
         setAccountName(null);
         setAccountResolved(false);
+        setAccountResolutionError(null);
         lastResolvedRef.current = null;
       }
       return;
@@ -419,15 +428,24 @@ export default function HomePage() {
                 if (resolvedName) {
                   setAccountName(resolvedName);
                   setAccountResolved(true);
-                } else {
+                  setAccountResolutionError(null);
+      } else {
                   setAccountName(null);
                   setAccountResolved(false);
+                  setAccountResolutionError("invalid");
                   lastResolvedRef.current = null;
                 }
               },
-              onError: () => {
+              onError: (error: any) => {
                 setAccountName(null);
                 setAccountResolved(false);
+                // Check if error is 401 (authentication required)
+                if (error?.response?.status === 401) {
+                  setAccountResolutionError("auth");
+                  setIsAuthModalOpen(true);
+                } else {
+                  setAccountResolutionError("invalid");
+                }
                 // Reset ref on error so we can retry if user changes and types again
                 lastResolvedRef.current = null;
               },
@@ -893,7 +911,7 @@ export default function HomePage() {
   // Render based on step
   const renderContent = () => {
     if (step === "form") {
-      return (
+  return (
         <form
           onSubmit={handleSubmit}
           className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl p-4 lg:p-6 space-y-4"
@@ -910,7 +928,7 @@ export default function HomePage() {
                 }}
               />
             ))}
-          </div>
+              </div>
 
           <SwapSection
             label="You'll send"
@@ -958,7 +976,7 @@ export default function HomePage() {
             >
               <ArrowUpDown size={18} className="text-black" />
             </button>
-          </div>
+              </div>
 
           <SwapSection
             label="You'll receive"
@@ -1055,7 +1073,7 @@ export default function HomePage() {
                     onValueChange={setBankCode}
                     placeholder="Choose bank"
                   />
-                </div>
+          </div>
                 <div className="col-span-6 md:col-span-3">
                   <Input
                     type="number"
@@ -1070,7 +1088,7 @@ export default function HomePage() {
                     maxLength={10}
                     className="w-full h-14 rounded-lg bg-white/5 text-white placeholder:text-white/30 border-0 outline-0 focus:ring-0 focus:outline-0 focus:border-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                </div>
+        </div>
               </div>
 
               {/* Account Resolution Status */}
@@ -1080,17 +1098,22 @@ export default function HomePage() {
                     <div className="flex items-center gap-2 text-sm text-white/60">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       <span>Resolving account...</span>
-                    </div>
+              </div>
                   ) : accountResolved && accountName ? (
                     <div className="flex items-center gap-2 text-sm text-green-400">
                       <CheckCircle className="w-4 h-4" />
                       <span>Account Name: {accountName}</span>
                     </div>
                   ) : accountNumber.length === 10 &&
-                    !resolveAccount.isPending ? (
-                    <div className="flex items-center gap-2 text-sm text-red-400">
+                    !resolveAccount.isPending &&
+                    accountResolutionError ? (
+                    <div className="flex items-center gap-2 text-sm text-yellow-400">
                       <AlertCircle className="w-4 h-4" />
-                      <span>Invalid account number</span>
+                      <span>
+                        {accountResolutionError === "auth"
+                          ? "Please login to resolve account"
+                          : "Invalid account number"}
+                      </span>
                     </div>
                   ) : null}
                 </div>
@@ -1127,9 +1150,9 @@ export default function HomePage() {
             </div>
           )}
 
-          <Button
+                  <Button
             type="submit"
-            className="w-full h-14 text-base text-sm md:font-medium rounded-xl bg-secondary hover:bg-secondary/90 text-black"
+            className="w-full h-14 text-sm md:font-medium rounded-xl bg-secondary hover:bg-secondary/90 text-black"
             disabled={
               activeTab === "sell" &&
               (!accountResolved || !accountName || resolveAccount.isPending)
@@ -1148,7 +1171,7 @@ export default function HomePage() {
               : activeTab === "sell"
               ? "SELL CRYPTO"
               : "SWAP"}
-          </Button>
+                  </Button>
         </form>
       );
     }
@@ -1204,7 +1227,7 @@ export default function HomePage() {
                 })}{" "}
                 NGN
               </span>
-            </div>
+              </div>
           );
         }
       } else {
@@ -1245,7 +1268,7 @@ export default function HomePage() {
                 })}{" "}
                 CNGN
               </span>
-            </div>
+          </div>
           );
         } else {
           // Fallback to toAmount if rates not available
@@ -1265,7 +1288,7 @@ export default function HomePage() {
                   })}{" "}
                   {toToken}
                 </span>
-              </div>
+        </div>
             );
           }
         }
@@ -1289,8 +1312,8 @@ export default function HomePage() {
               <span className="text-white/70">From</span>
               <span className="text-white font-bold">
                 {fromAmount} {fromToken}
-              </span>
-            </div>
+                </span>
+              </div>
             <div className="flex justify-between">
               <span className="text-white/70">To (estimated)</span>
               <span className="text-white font-bold">
@@ -1304,15 +1327,15 @@ export default function HomePage() {
                       maximumFractionDigits: 6,
                     })}{" "}
                 {displayCurrency}
-              </span>
-            </div>
+                </span>
+              </div>
             {exchangeRateDisplay}
             <div className="flex justify-between">
               <span className="text-white/70">Recipient</span>
               <span className="text-white font-mono text-sm">
                 {swapData.recipientAddress}
-              </span>
-            </div>
+                </span>
+              </div>
           </div>
 
           {needsApproval && !isApproved && (
@@ -1393,7 +1416,7 @@ export default function HomePage() {
                   Connected for real-time updates
                 </p>
               )}
-            </div>
+        </div>
           )}
 
           {activeTab === "buy" && transactionData?.data?.depositAccount && (
