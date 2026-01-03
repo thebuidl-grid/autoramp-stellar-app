@@ -3,6 +3,12 @@
 import * as React from "react";
 import { Building2, Check, ChevronsUpDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Bank {
   institutionCode: string;
@@ -45,29 +51,20 @@ export function SearchableBankSelect({
   // Get selected bank name
   const selectedBank = banks.find((bank) => bank.institutionCode === value);
 
-  // Close dropdown on Escape key
-  React.useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && open) {
-        setOpen(false);
-        setSearchQuery("");
-      }
-    };
-
-    if (open) {
-      document.addEventListener("keydown", handleEscape);
-      return () => document.removeEventListener("keydown", handleEscape);
-    }
-  }, [open]);
+  const handleSelect = (bankCode: string) => {
+    onValueChange(bankCode);
+    setOpen(false);
+    setSearchQuery("");
+  };
 
   return (
-    <div className="relative">
+    <>
       <button
         type="button"
-        onClick={() => !disabled && setOpen(!open)}
+        onClick={() => !disabled && setOpen(true)}
         disabled={disabled}
         className={cn(
-          "w-full h-14 rounded-xl bg-white/5 border border-white/10 text-white",
+          "w-full h-14 rounded-lg bg-white/5 border border-white/10 text-white",
           "focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent",
           "transition-all flex items-center justify-between px-4",
           disabled && "opacity-50 cursor-not-allowed",
@@ -75,82 +72,76 @@ export function SearchableBankSelect({
         )}
       >
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <Building2 size={16} className="text-white/70 flex-shrink-0" />
-          <span className="truncate">
+          <Building2 size={16} className="text-white/70 shrink-0" />
+          <span className="truncate text-sm">
             {selectedBank ? selectedBank.institutionName : placeholder}
           </span>
         </div>
-        <ChevronsUpDown size={16} className="text-white/50 flex-shrink-0 ml-2" />
+        <ChevronsUpDown size={16} className="text-white/50 shrink-0 ml-2" />
       </button>
 
-      {open && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => {
-              setOpen(false);
-              setSearchQuery("");
-            }}
-          />
+      <Dialog open={open} onOpenChange={(newOpen) => {
+        setOpen(newOpen);
+        if (!newOpen) {
+          setSearchQuery("");
+        }
+      }}>
+        <DialogContent className="bg-black/30 backdrop-blur-xl border-white/10 text-white max-w-md data-[state=open]:animate-modal-open data-[state=closed]:animate-modal-close">
+          <DialogHeader>
+            <DialogTitle className="text-white">Select Bank</DialogTitle>
+          </DialogHeader>
           
-          {/* Dropdown */}
-          <div className="absolute z-50 w-full mt-2 rounded-xl bg-[#1a1a1a] border border-white/10 shadow-lg max-h-[300px] flex flex-col overflow-hidden">
-            {/* Search Input */}
-            <div className="p-2 border-b border-white/10 sticky top-0 bg-[#1a1a1a]">
-              <div className="relative">
-                <Search
-                  size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50"
-                />
-                <input
-                  type="text"
-                  placeholder="Search banks..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-10 pl-9 pr-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20 text-sm"
-                  autoFocus
-                />
-              </div>
+          {/* Search Input */}
+          <div className="pt-4">
+            <div className="relative">
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50"
+              />
+              <input
+                type="text"
+                placeholder="Search banks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-10 pl-9 pr-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20 text-sm"
+                autoFocus
+              />
             </div>
+          </div>
 
-            {/* Bank List */}
-            <div className="overflow-y-auto max-h-[240px]">
-              {filteredBanks.length === 0 ? (
-                <div className="px-4 py-8 text-center text-white/50 text-sm">
-                  No banks found
-                </div>
-              ) : (
-                filteredBanks.map((bank) => {
+          {/* Bank List */}
+          <div className="mt-4 max-h-[400px] overflow-y-auto">
+            {filteredBanks.length === 0 ? (
+              <div className="px-4 py-8 text-center text-white/50 text-sm">
+                No banks found
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {filteredBanks.map((bank) => {
                   const isSelected = bank.institutionCode === value;
                   return (
                     <button
                       key={bank.institutionCode}
                       type="button"
-                      onClick={() => {
-                        onValueChange(bank.institutionCode);
-                        setOpen(false);
-                        setSearchQuery("");
-                      }}
+                      onClick={() => handleSelect(bank.institutionCode)}
                       className={cn(
-                        "w-full px-4 py-3 text-left flex items-center justify-between",
+                        "w-full px-4 py-3 text-sm text-left flex items-center justify-between rounded-xl",
                         "hover:bg-white/10 transition-colors",
                         isSelected && "bg-white/10"
                       )}
                     >
                       <span className="text-white">{bank.institutionName}</span>
                       {isSelected && (
-                        <Check size={16} className="text-white flex-shrink-0" />
+                        <Check size={16} className="text-white shrink-0" />
                       )}
                     </button>
                   );
-                })
-              )}
-            </div>
+                })}
+              </div>
+            )}
           </div>
-        </>
-      )}
-    </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
-
