@@ -152,6 +152,15 @@ export class WebhookService {
           where: { id: transaction.id },
           data: updateData,
         });
+
+        // Emit WebSocket event for onramp update
+        if (this.swapGateway) {
+          this.swapGateway.emitTransactionUpdate(updatedTransaction.reference, {
+            type: 'onramp',
+            status: mappedStatus,
+            onrampId: updatedTransaction.id,
+          });
+        }
       } else {
         updatedTransaction = await this.prisma.offrampTransaction.update({
           where: { id: transaction.id },

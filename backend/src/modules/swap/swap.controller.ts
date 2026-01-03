@@ -22,6 +22,7 @@ import {
 import { SwapService } from './swap.service';
 import { CreateSwapDto } from './dto/create-swap.dto';
 import { InitializeSwapDto } from './dto/initialize-swap.dto';
+import { CreateSimpleSwapDto } from './dto/create-simple-swap.dto';
 import { AuthOrApiKeyGuard } from '../api-keys/guards/auth-or-api-key.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
@@ -159,6 +160,29 @@ export class SwapController {
     }
 
     return this.swapService.updateSwapAfterExecution(reference, transactionHash, sourceAddress);
+  }
+
+  @Post('/create')
+  @UseGuards(AuthOrApiKeyGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiSecurity('API-Key')
+  @ApiOperation({ 
+    summary: 'Create a simple swap transaction (store in database)',
+    description: 'Creates a swap transaction record in the database. The actual swap execution happens on-chain via the frontend. Requires authentication.',
+  })
+  @ApiBody({ type: CreateSimpleSwapDto })
+  @ApiResponse({ status: 200, description: 'Swap transaction created successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async createSimpleSwap(
+    @CurrentUser() user: any,
+    @Body() dto: CreateSimpleSwapDto,
+    @Req() req: any,
+  ): Promise<any> {
+    // Extract IP address and user agent
+    const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+
+    return this.swapService.createSimpleSwap(user.id, dto, ipAddress, userAgent);
   }
 
   @Post('/')

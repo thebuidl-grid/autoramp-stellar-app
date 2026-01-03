@@ -3,7 +3,6 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../database/prisma.service';
 import { offRampDto, onRampDto } from './dto/index.dto';
 import { generateTrxReference } from '../../utils/reference.util';
@@ -47,6 +46,32 @@ export class StablestackService {
     }
   }
 
+  /**
+   * Resolve account name
+   * 
+   * Resolves the account name from bank code and account number using the Flint API.
+   * 
+   * @param bankCode - Bank code
+   * @param accountNumber - Account number
+   * @returns Account name resolution data
+   */
+  async resolveAccount(bankCode: string, accountNumber: string): Promise<any> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(`${this.apiUrl}/v1/ramp/banks/nameQuery`, {
+          headers: this.commonHeaders,
+          params: {
+            bankCode,
+            accountNumber,
+          },
+        }),
+      );
+      return response.data;
+    } catch (error) {
+      this.handleError('Failed to resolve account', error);
+    }
+  }
+
 
   /**
    * Initialize onramp transaction
@@ -69,8 +94,7 @@ export class StablestackService {
 
       const reference = generateTrxReference();
 
-      //const webhookUrl = this.configService.get<string>('WEBHOOK_URL');
-      const webhookUrl = 'https://7f8f532c7de0.ngrok-free.app/stablestack/webhook';
+      const webhookUrl = this.configService.get<string>('WEBHOOK_URL');
 
       const response = await firstValueFrom(
         this.httpService.post(
@@ -155,8 +179,7 @@ export class StablestackService {
     try {
       const reference = generateTrxReference();
 
-      //const webhookUrl = this.configService.get<string>('WEBHOOK_URL');
-      const webhookUrl = 'https://7f8f532c7de0.ngrok-free.app/stablestack/webhook';
+      const webhookUrl = this.configService.get<string>('WEBHOOK_URL');
 
       console.log(          { 
         ...dto, 
@@ -182,8 +205,6 @@ export class StablestackService {
           },
         ),
       );
-
-      console.log('response offramp', response.data);
 
       const flintData = response.data;
 
@@ -230,6 +251,7 @@ export class StablestackService {
         },
       };
     } catch (error) {
+      console.log('error offramp', error);
       this.handleError('Failed to initialise offramp', error);
     }
   }
@@ -249,6 +271,8 @@ export class StablestackService {
     userId: string,
     id?: string,
     reference?: string,
+    page: number = 1,
+    limit: number = 10,
   ): Promise<any> {
     try {
       const where: any = { userId };
@@ -261,7 +285,17 @@ export class StablestackService {
         where.reference = reference;
       }
 
-      const onrampTransactions = await this.prisma.onrampTransaction.findMany({
+      // Calculate pagination
+      const skip = (page - 1) * limit;
+
+      // Get total counts for pagination
+      const onrampTotal = await this.prisma.onrampTransaction.count({ where });
+      const offrampTotal = await this.prisma.offrampTransaction.count({ where });
+      const swapTotal = await this.prisma.swapTransaction.count({ where });
+      const total = onrampTotal + offrampTotal + swapTotal;
+
+      // Fetch all transactions (we'll combine and paginate them)
+      const allOnramp = await this.prisma.onrampTransaction.findMany({
         where,
         select: {
           id: true,
@@ -283,8 +317,7 @@ export class StablestackService {
         },
       });
 
-
-      const offrampTransactions = await this.prisma.offrampTransaction.findMany({
+      const allOfframp = await this.prisma.offrampTransaction.findMany({
         where,
         select: {
           id: true,
@@ -309,10 +342,62 @@ export class StablestackService {
         },
       });
 
+      const allSwap = await this.prisma.swapTransaction.findMany({
+        where,
+        select: {
+          id: true,
+          reference: true,
+          fromTokenType: true,
+          fromAmount: true,
+          toTokenType: true,
+          toAmount: true,
+          exchangeRate: true,
+          sourceAddress: true,
+          destinationAddress: true,
+          status: true,
+          transactionHash: true,
+          fromNetwork: true,
+          toNetwork: true,
+          createdAt: true,
+          updatedAt: true,
+          completedAt: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      // Combine and sort all transactions
+      const allTransactions = [
+        ...allOnramp.map((tx) => ({ ...tx, _type: 'onramp' as const })),
+        ...allOfframp.map((tx) => ({ ...tx, _type: 'offramp' as const })),
+        ...allSwap.map((tx) => ({ ...tx, _type: 'swap' as const })),
+      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      // Apply pagination
+      const paginatedTransactions = allTransactions.slice(skip, skip + limit);
+
+      // Separate back into onramp, offramp, and swap
+      const onrampTransactions = paginatedTransactions
+        .filter((tx) => tx._type === 'onramp')
+        .map(({ _type, ...tx }) => tx);
+      const offrampTransactions = paginatedTransactions
+        .filter((tx) => tx._type === 'offramp')
+        .map(({ _type, ...tx }) => tx);
+      const swapTransactions = paginatedTransactions
+        .filter((tx) => tx._type === 'swap')
+        .map(({ _type, ...tx }) => tx);
+
+      const totalPages = Math.ceil(total / limit);
+
       return {
         onramp: onrampTransactions,
         offramp: offrampTransactions,
-        total: onrampTransactions.length + offrampTransactions.length,
+        swap: swapTransactions,
+        total,
+        page,
+        limit,
+        totalPages,
       };
     } catch (error) {
       this.handleError('Failed to fetch transactions', error);
