@@ -5,7 +5,7 @@
  */
 
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { swapApi, InitializeSwapDto, UpdateSwapDto } from '@/lib/api';
+import { swapApi, InitializeSwapDto, UpdateSwapDto, CreateSimpleSwapDto } from '@/lib/api';
 import { getErrorMessage } from '@/lib/api';
 
 /**
@@ -29,6 +29,18 @@ export function useUpdateSwapAfterExecution() {
       swapApi.updateSwapAfterExecution(reference, data),
     onError: (error) => {
       console.error('Failed to update swap:', getErrorMessage(error));
+    },
+  });
+}
+
+/**
+ * Hook to create a simple swap transaction (just store in database)
+ */
+export function useCreateSimpleSwap() {
+  return useMutation({
+    mutationFn: (data: CreateSimpleSwapDto) => swapApi.createSimpleSwap(data),
+    onError: (error) => {
+      console.error('Failed to create swap:', getErrorMessage(error));
     },
   });
 }

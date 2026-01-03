@@ -30,7 +30,8 @@ export function useEstimateNgn(cngnAmount: number | null) {
       return response.data;
     },
     enabled: !!cngnAmount && cngnAmount > 0,
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 10 * 60 * 1000, // 10 minutes - cache the price
+    gcTime: 15 * 60 * 1000, // Keep in cache for 15 minutes
   });
 }
 

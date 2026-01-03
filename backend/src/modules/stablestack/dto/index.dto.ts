@@ -6,24 +6,9 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Min,
   ValidateNested,
 } from 'class-validator';
-class DestinationDto {
-  @ApiProperty({ example: 'string' })
-  @IsString()
-  @IsOptional()
-  address?: string;
-
-  @ApiProperty({ example: 'string' })
-  @IsString()
-  @IsOptional()
-  bankCode?: string;
-
-  @ApiProperty({ example: 'string' })
-  @IsString()
-  @IsOptional()
-  accountNumber?: string;
-}
 
 class offRampDestinationDto {
   @ApiProperty({ example: 'string' })
@@ -41,38 +26,6 @@ class OnRampDestinationDto {
   address: string;
 }
 
-export class InitialiseRampDto {
-  @ApiProperty({ example: 'off' })
-  @IsEnum(['off', 'on'])
-  type: string;
-
-  @ApiProperty({ example: '1234567890' })
-  @IsString()
-  reference: string;
-
-  @ApiProperty({ example: 'base' })
-  @IsEnum(['base', 'bsc'])
-  network: string;
-
-  @ApiProperty({ example: 1206913.6950619982 })
-  @IsNumber()
-  amount: number;
-
-  @ApiProperty({ type: DestinationDto })
-  @ValidateNested()
-  @Type(() => DestinationDto)
-  @IsObject()
-  destination: DestinationDto;
-
-  @ApiPropertyOptional({
-    example:
-      'http://AZRHGfpffxmK.jbkfVkzn9GLZwzWBAQa98GKt-rs9MBxo7pKCzWuXhaxz8ah1F6O',
-  })
-  @IsString()
-  @IsOptional()
-  notifyUrl?: string;
-}
-
 export class onRampDto {
   @ApiProperty({ example: 'on', default: 'on' })
   @IsString()
@@ -85,6 +38,7 @@ export class onRampDto {
 
   @ApiProperty({ example: 1 })
   @IsNumber()
+  @Min(100, { message: 'Amount must be at least 100 NGN' })
   amount: number;
 
   @ApiProperty({ type: OnRampDestinationDto })
@@ -113,6 +67,7 @@ export class offRampDto {
 
   @ApiProperty({ example: 1 })
   @IsNumber()
+  @Min(100, { message: 'Amount must be at least 100 NGN' })
   amount: number;
 
   @ApiProperty({ type: offRampDestinationDto })
