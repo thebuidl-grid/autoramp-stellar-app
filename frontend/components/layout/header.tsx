@@ -104,7 +104,7 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                     size="sm"
                     className="py-6 px-6 text-base font-light rounded-full"
                   >
-                    Get started
+                    Login/Sign up
                   </Button>
                 </Link>
               )}
