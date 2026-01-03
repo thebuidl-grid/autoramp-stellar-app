@@ -359,49 +359,92 @@ export default function HomePage() {
     bankCode: string;
     accountNumber: string;
   } | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    // Clear any pending timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    // Reset state if account number is not 10 digits or not in sell tab
+    if (activeTab !== "sell" || !bankCode || accountNumber.length !== 10) {
+      if (accountNumber.length !== 10) {
+        setAccountName(null);
+        setAccountResolved(false);
+        lastResolvedRef.current = null;
+      }
+      return;
+    }
+
+    // Check if this combination was already resolved
     const combination = `${bankCode}-${accountNumber}`;
     const lastCombination = lastResolvedRef.current
       ? `${lastResolvedRef.current.bankCode}-${lastResolvedRef.current.accountNumber}`
       : null;
 
-    if (
-      activeTab === "sell" &&
-      bankCode &&
-      accountNumber.length === 10 &&
-      !resolveAccount.isPending &&
-      combination !== lastCombination
-    ) {
-      lastResolvedRef.current = { bankCode, accountNumber };
-      resolveAccount.mutate(
-        { bankCode, accountNumber },
-        {
-          onSuccess: (response) => {
-            const resolvedName = response.data?.data?.accountName;
-            if (resolvedName) {
-              setAccountName(resolvedName);
-              setAccountResolved(true);
-      } else {
-              setAccountName(null);
-              setAccountResolved(false);
-            }
-          },
-          onError: () => {
-            setAccountName(null);
-            setAccountResolved(false);
-            // Reset ref on error so we can retry if user changes and types again
-            lastResolvedRef.current = null;
-          },
-        }
-      );
-    } else if (accountNumber.length !== 10) {
-      // Reset when account number changes (not 10 digits)
-      setAccountName(null);
-      setAccountResolved(false);
-      lastResolvedRef.current = null;
+    // If already resolved this combination, don't resolve again
+    if (combination === lastCombination) {
+      return;
     }
-  }, [accountNumber, bankCode, activeTab, resolveAccount.isPending]);
+
+    // Don't trigger if a request is already pending
+    if (resolveAccount.isPending) {
+      return;
+    }
+
+    // Debounce the resolution request by 500ms to prevent rapid-fire requests
+    timeoutRef.current = setTimeout(() => {
+      // Double-check conditions after debounce delay
+      if (
+        activeTab === "sell" &&
+        bankCode &&
+        accountNumber.length === 10 &&
+        !resolveAccount.isPending
+      ) {
+        const currentCombination = `${bankCode}-${accountNumber}`;
+        const currentLastCombination = lastResolvedRef.current
+          ? `${lastResolvedRef.current.bankCode}-${lastResolvedRef.current.accountNumber}`
+          : null;
+
+        // Only resolve if this combination hasn't been resolved yet
+        if (currentCombination !== currentLastCombination) {
+          lastResolvedRef.current = { bankCode, accountNumber };
+          resolveAccount.mutate(
+            { bankCode, accountNumber },
+            {
+              onSuccess: (response) => {
+                const resolvedName = response.data?.data?.accountName;
+                if (resolvedName) {
+                  setAccountName(resolvedName);
+                  setAccountResolved(true);
+                } else {
+                  setAccountName(null);
+                  setAccountResolved(false);
+                  lastResolvedRef.current = null;
+                }
+              },
+              onError: () => {
+                setAccountName(null);
+                setAccountResolved(false);
+                // Reset ref on error so we can retry if user changes and types again
+                lastResolvedRef.current = null;
+              },
+            }
+          );
+        }
+      }
+    }, 500); // 500ms debounce delay
+
+    // Cleanup function to clear timeout on unmount or dependency change
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, [accountNumber, bankCode, activeTab, resolveAccount.mutate]);
 
   // Handle sell: CNGN to NGN (offramp) or USDC to NGN (swap)
   const handleSell = async () => {
@@ -737,7 +780,7 @@ export default function HomePage() {
     // Calculate exchange rate and toAmount based on swap direction
     let exchangeRate: number;
     let toAmount: number;
-    
+
     if (fromCryptoType === "USDC" && toCryptoType === "CNGN") {
       // USDC to CNGN: Multiply by USD/NGN rate
       if (usdNgnRate) {
@@ -850,7 +893,7 @@ export default function HomePage() {
   // Render based on step
   const renderContent = () => {
     if (step === "form") {
-  return (
+      return (
         <form
           onSubmit={handleSubmit}
           className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl p-4 lg:p-6 space-y-4"
@@ -867,7 +910,7 @@ export default function HomePage() {
                 }}
               />
             ))}
-              </div>
+          </div>
 
           <SwapSection
             label="You'll send"
@@ -915,7 +958,7 @@ export default function HomePage() {
             >
               <ArrowUpDown size={18} className="text-black" />
             </button>
-              </div>
+          </div>
 
           <SwapSection
             label="You'll receive"
@@ -1005,15 +1048,15 @@ export default function HomePage() {
           {activeTab === "sell" && (
             <div className="space-y-2">
               <div className="grid grid-cols-6 gap-2 p-2 bg-black/50 rounded-xl border border-white/10">
-                <div className="col-span-3">
+                <div className="col-span-6 md:col-span-3">
                   <SearchableBankSelect
                     banks={banks}
                     value={bankCode}
                     onValueChange={setBankCode}
                     placeholder="Choose bank"
                   />
-          </div>
-                <div className="col-span-3">
+                </div>
+                <div className="col-span-6 md:col-span-3">
                   <Input
                     type="number"
                     placeholder="Enter account number"
@@ -1027,7 +1070,7 @@ export default function HomePage() {
                     maxLength={10}
                     className="w-full h-14 rounded-lg bg-white/5 text-white placeholder:text-white/30 border-0 outline-0 focus:ring-0 focus:outline-0 focus:border-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-        </div>
+                </div>
               </div>
 
               {/* Account Resolution Status */}
@@ -1037,7 +1080,7 @@ export default function HomePage() {
                     <div className="flex items-center gap-2 text-sm text-white/60">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       <span>Resolving account...</span>
-              </div>
+                    </div>
                   ) : accountResolved && accountName ? (
                     <div className="flex items-center gap-2 text-sm text-green-400">
                       <CheckCircle className="w-4 h-4" />
@@ -1084,7 +1127,7 @@ export default function HomePage() {
             </div>
           )}
 
-                  <Button
+          <Button
             type="submit"
             className="w-full h-14 text-base text-sm md:font-medium rounded-xl bg-secondary hover:bg-secondary/90 text-black"
             disabled={
@@ -1105,7 +1148,7 @@ export default function HomePage() {
               : activeTab === "sell"
               ? "SELL CRYPTO"
               : "SWAP"}
-                  </Button>
+          </Button>
         </form>
       );
     }
@@ -1161,7 +1204,7 @@ export default function HomePage() {
                 })}{" "}
                 NGN
               </span>
-              </div>
+            </div>
           );
         }
       } else {
@@ -1202,7 +1245,7 @@ export default function HomePage() {
                 })}{" "}
                 CNGN
               </span>
-          </div>
+            </div>
           );
         } else {
           // Fallback to toAmount if rates not available
@@ -1222,7 +1265,7 @@ export default function HomePage() {
                   })}{" "}
                   {toToken}
                 </span>
-        </div>
+              </div>
             );
           }
         }
@@ -1246,8 +1289,8 @@ export default function HomePage() {
               <span className="text-white/70">From</span>
               <span className="text-white font-bold">
                 {fromAmount} {fromToken}
-                </span>
-              </div>
+              </span>
+            </div>
             <div className="flex justify-between">
               <span className="text-white/70">To (estimated)</span>
               <span className="text-white font-bold">
@@ -1261,15 +1304,15 @@ export default function HomePage() {
                       maximumFractionDigits: 6,
                     })}{" "}
                 {displayCurrency}
-                </span>
-              </div>
+              </span>
+            </div>
             {exchangeRateDisplay}
             <div className="flex justify-between">
               <span className="text-white/70">Recipient</span>
               <span className="text-white font-mono text-sm">
                 {swapData.recipientAddress}
-                </span>
-              </div>
+              </span>
+            </div>
           </div>
 
           {needsApproval && !isApproved && (
@@ -1350,7 +1393,7 @@ export default function HomePage() {
                   Connected for real-time updates
                 </p>
               )}
-        </div>
+            </div>
           )}
 
           {activeTab === "buy" && transactionData?.data?.depositAccount && (
