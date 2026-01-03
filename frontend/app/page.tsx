@@ -1152,7 +1152,7 @@ export default function HomePage() {
 
                   <Button
             type="submit"
-            className="w-full h-14 text-base text-sm md:font-medium rounded-xl bg-secondary hover:bg-secondary/90 text-black"
+            className="w-full h-14 text-sm md:font-medium rounded-xl bg-secondary hover:bg-secondary/90 text-black"
             disabled={
               activeTab === "sell" &&
               (!accountResolved || !accountName || resolveAccount.isPending)
