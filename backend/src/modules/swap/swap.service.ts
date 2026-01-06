@@ -7,6 +7,7 @@ import { StablestackService } from '../stablestack/stablestack.service';
 import { ADDRESSES, TOKENS } from './config/constant';
 import { CreateSwapDto } from './dto/create-swap.dto';
 import { InitializeSwapDto } from './dto/initialize-swap.dto';
+import { CreateSimpleSwapDto } from './dto/create-simple-swap.dto';
 import { generateTrxReference } from '../../utils/reference.util';
 import { ethers } from 'ethers';
 
@@ -15,7 +16,7 @@ export class SwapService {
   private readonly logger = new Logger(SwapService.name);
   private readonly rpcUrl?: string;
   private readonly swapper: any;
-  
+
   // Cache for USD/NGN rate (respects 1 request/minute limit)
   private usdNgnRateCache: { rate: number; timestamp: number } | null = null;
   private readonly CACHE_TTL_MS = 60 * 1000; // 1 minute in milliseconds
@@ -317,12 +318,23 @@ export class SwapService {
         );
       }
 
+      // Check if this swap is linked to an offramp transaction
+      // If linked to offramp, set to PROCESSING (offramp will complete it)
+      // Otherwise, set to COMPLETED (simple swap, no offramp)
+      const hasOfframp = await this.prisma.offrampTransaction.findFirst({
+        where: { swapId: swapTransaction.id },
+      });
+
+      const newStatus = hasOfframp ? 'PROCESSING' : 'COMPLETED';
+      const completedAt = hasOfframp ? null : new Date();
+
       const updatedSwap = await this.prisma.swapTransaction.update({
         where: { reference },
         data: {
           transactionHash,
           sourceAddress, // User's wallet address
-          status: 'PROCESSING', // Changed to PROCESSING, will be COMPLETED when offramp completes
+          status: newStatus,
+          completedAt,
         },
       });
 
@@ -334,7 +346,7 @@ export class SwapService {
           userId: swapTransaction.userId,
           action: 'status_changed',
           oldStatus: 'PENDING',
-          newStatus: 'PROCESSING',
+          newStatus: newStatus,
           description: `Swap transaction executed on blockchain: ${transactionHash}`,
         },
       });
@@ -557,6 +569,96 @@ export class SwapService {
     } catch (error: any) {
       this.logger.error('Error executing swap:', error.message);
       throw new BadRequestException(`Swap failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Create a simple swap transaction (just store in database)
+   * Used for frontend-initiated swaps where execution happens on-chain
+   */
+  async createSimpleSwap(
+    userId: string,
+    dto: CreateSimpleSwapDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<any> {
+    try {
+      if (!['USDC', 'CNGN'].includes(dto.fromTokenType.toUpperCase())) {
+        throw new BadRequestException('fromTokenType must be USDC or CNGN');
+      }
+      if (!['USDC', 'CNGN'].includes(dto.toTokenType.toUpperCase())) {
+        throw new BadRequestException('toTokenType must be USDC or CNGN');
+      }
+      if (dto.fromTokenType.toUpperCase() === dto.toTokenType.toUpperCase()) {
+        throw new BadRequestException('fromTokenType and toTokenType must be different');
+      }
+
+      // Validate minimum amounts based on swap direction
+      if (dto.fromTokenType.toUpperCase() === 'CNGN' && dto.toTokenType.toUpperCase() === 'USDC') {
+        // CNGN to USDC: minimum 100
+        if (dto.fromAmount < 100) {
+          throw new BadRequestException('Minimum amount for CNGN to USDC swap is 100 CNGN');
+        }
+      } else if (dto.fromTokenType.toUpperCase() === 'USDC' && dto.toTokenType.toUpperCase() === 'CNGN') {
+        // USDC to CNGN: minimum 1
+        if (dto.fromAmount < 1) {
+          throw new BadRequestException('Minimum amount for USDC to CNGN swap is 1 USDC');
+        }
+      }
+
+      const reference = generateTrxReference();
+      const fromAmountDecimal = dto.fromAmount.toString();
+      const toAmountDecimal = dto.toAmount.toString();
+
+      const swapTransaction = await this.prisma.swapTransaction.create({
+        data: {
+          userId,
+          reference,
+          fromTokenType: dto.fromTokenType.toUpperCase(),
+          fromAmount: fromAmountDecimal,
+          fromNetwork: dto.network || 'base',
+          toTokenType: dto.toTokenType.toUpperCase(),
+          toAmount: toAmountDecimal,
+          toNetwork: dto.network || 'base',
+          exchangeRate: dto.exchangeRate.toString(),
+          sourceAddress: dto.sourceAddress,
+          destinationAddress: dto.destinationAddress,
+          status: 'PENDING',
+          ipAddress: ipAddress || null,
+          userAgent: userAgent || null,
+        },
+      });
+
+      await this.prisma.transactionLog.create({
+        data: {
+          transactionType: 'swap',
+          transactionId: swapTransaction.id,
+          userId,
+          action: 'created',
+          newStatus: 'PENDING',
+          description: 'Simple swap transaction created (pending on-chain execution)',
+        },
+      });
+
+      this.logger.log(`Simple swap transaction ${reference} created for user ${userId}`);
+
+      return {
+        id: swapTransaction.id,
+        reference: swapTransaction.reference,
+        fromTokenType: swapTransaction.fromTokenType,
+        fromAmount: dto.fromAmount,
+        toTokenType: swapTransaction.toTokenType,
+        toAmount: dto.toAmount,
+        exchangeRate: dto.exchangeRate,
+        sourceAddress: swapTransaction.sourceAddress,
+        destinationAddress: swapTransaction.destinationAddress,
+        status: swapTransaction.status,
+        network: swapTransaction.fromNetwork,
+        createdAt: swapTransaction.createdAt,
+      };
+    } catch (error: any) {
+      this.logger.error('Error creating simple swap:', error.message);
+      throw new BadRequestException(`Failed to create swap: ${error.message}`);
     }
   }
 }

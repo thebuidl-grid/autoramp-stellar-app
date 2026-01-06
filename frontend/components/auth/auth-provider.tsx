@@ -49,12 +49,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Token is invalid, clear auth
           logout();
           if (!pathname?.startsWith("/auth")) {
-            router.push("/auth/signin");
+            router.push("/");
           }
         });
     } else if (!token && !pathname?.startsWith("/auth") && pathname !== "/") {
-      // No token and not on auth page, redirect to login
-      router.push("/auth/signin");
+      // No token and not on auth page, redirect to home
+      router.push("/");
     }
   }, [token, user, _hasHydrated, setAuth, logout, router, pathname]);
 

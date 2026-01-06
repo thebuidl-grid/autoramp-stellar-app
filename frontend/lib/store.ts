@@ -20,8 +20,6 @@ export interface User {
 interface AuthState {
   user: User | null;
   token: string | null;
-  isAuthenticated: boolean;
-  isAdmin: boolean;
   _hasHydrated: boolean;
   
   // Actions
@@ -36,16 +34,12 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       token: null,
-      isAuthenticated: false,
-      isAdmin: false,
       _hasHydrated: false,
       
       setAuth: (user, token) => {
         set({
           user,
           token,
-          isAuthenticated: true,
-          isAdmin: user.role === "ADMIN",
         });
         // Also store in localStorage for API interceptor
         if (typeof window !== "undefined") {
@@ -67,8 +61,6 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           token: null,
-          isAuthenticated: false,
-          isAdmin: false,
         });
         if (typeof window !== "undefined") {
           localStorage.removeItem("token");
@@ -87,8 +79,6 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         user: state.user,
         token: state.token,
-        isAuthenticated: state.isAuthenticated,
-        isAdmin: state.isAdmin,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
@@ -100,6 +90,18 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+/**
+ * Selector functions for computed values
+ * These should be used instead of directly accessing isAuthenticated/isAdmin
+ */
+export const useIsAuthenticated = () => {
+  return useAuthStore((state) => !!(state.user && state.token));
+};
+
+export const useIsAdmin = () => {
+  return useAuthStore((state) => state.user?.role === "ADMIN");
+};
 
 /**
  * UI State Management
@@ -151,3 +153,105 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
 }));
 
+/**
+ * Transaction Form State Management
+ * 
+ * Global state for transaction form (buy, sell, swap)
+ */
+
+export type TabType = "buy" | "sell" | "swap";
+export type CryptoType = "CNGN" | "USDC";
+export type StepType = "form" | "pending" | "completed" | "execute";
+
+interface TransactionFormState {
+  // Tab and crypto selection
+  activeTab: TabType;
+  cryptoType: CryptoType;
+  fromCryptoType: CryptoType;
+  toCryptoType: CryptoType;
+  
+  // Form fields
+  sellAmount: string;
+  buyAmount: string;
+  bankCode: string;
+  accountNumber: string;
+  walletAddress: string;
+  
+  // Transaction state
+  step: StepType;
+  transactionData: any;
+  swapData: any;
+  
+  // Modal states
+  isCryptoModalOpen: boolean;
+  isFromCryptoModalOpen: boolean;
+  isToCryptoModalOpen: boolean;
+  isAuthModalOpen: boolean;
+  
+  // Actions
+  setActiveTab: (tab: TabType) => void;
+  setCryptoType: (type: CryptoType) => void;
+  setFromCryptoType: (type: CryptoType) => void;
+  setToCryptoType: (type: CryptoType) => void;
+  setSellAmount: (amount: string) => void;
+  setBuyAmount: (amount: string) => void;
+  setBankCode: (code: string) => void;
+  setAccountNumber: (number: string) => void;
+  setWalletAddress: (address: string) => void;
+  setStep: (step: StepType) => void;
+  setTransactionData: (data: any) => void;
+  setSwapData: (data: any) => void;
+  setIsCryptoModalOpen: (open: boolean) => void;
+  setIsFromCryptoModalOpen: (open: boolean) => void;
+  setIsToCryptoModalOpen: (open: boolean) => void;
+  setIsAuthModalOpen: (open: boolean) => void;
+  resetForm: () => void;
+}
+
+export const useTransactionStore = create<TransactionFormState>((set) => ({
+  // Initial state
+  activeTab: "buy",
+  cryptoType: "CNGN",
+  fromCryptoType: "USDC",
+  toCryptoType: "CNGN",
+  sellAmount: "",
+  buyAmount: "",
+  bankCode: "",
+  accountNumber: "",
+  walletAddress: "",
+  step: "form",
+  transactionData: null,
+  swapData: null,
+  isCryptoModalOpen: false,
+  isFromCryptoModalOpen: false,
+  isToCryptoModalOpen: false,
+  isAuthModalOpen: false,
+  
+  // Actions
+  setActiveTab: (tab) => set({ activeTab: tab }),
+  setCryptoType: (type) => set({ cryptoType: type }),
+  setFromCryptoType: (type) => set({ fromCryptoType: type }),
+  setToCryptoType: (type) => set({ toCryptoType: type }),
+  setSellAmount: (amount) => set({ sellAmount: amount }),
+  setBuyAmount: (amount) => set({ buyAmount: amount }),
+  setBankCode: (code) => set({ bankCode: code }),
+  setAccountNumber: (number) => set({ accountNumber: number }),
+  setWalletAddress: (address) => set({ walletAddress: address }),
+  setStep: (step) => set({ step }),
+  setTransactionData: (data) => set({ transactionData: data }),
+  setSwapData: (data) => set({ swapData: data }),
+  setIsCryptoModalOpen: (open) => set({ isCryptoModalOpen: open }),
+  setIsFromCryptoModalOpen: (open) => set({ isFromCryptoModalOpen: open }),
+  setIsToCryptoModalOpen: (open) => set({ isToCryptoModalOpen: open }),
+  setIsAuthModalOpen: (open) => set({ isAuthModalOpen: open }),
+  resetForm: () => set({
+    step: "form",
+    transactionData: null,
+    swapData: null,
+    sellAmount: "",
+    buyAmount: "",
+    bankCode: "",
+    accountNumber: "",
+    walletAddress: "",
+  }),
+}));
