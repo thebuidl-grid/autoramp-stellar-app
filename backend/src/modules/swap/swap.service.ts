@@ -20,6 +20,10 @@ export class SwapService {
   // Cache for USD/NGN rate (respects 1 request/minute limit)
   private usdNgnRateCache: { rate: number; timestamp: number } | null = null;
   private readonly CACHE_TTL_MS = 60 * 1000; // 1 minute in milliseconds
+  // constant for Quoter ABI
+  private readonly QUOTER_ABI = [
+    'function quoteExactInputSingle(address,address,uint24,uint256,uint160) returns (uint256)',
+  ];
 
   constructor(
     private configService: ConfigService,
@@ -31,6 +35,7 @@ export class SwapService {
     if (!this.rpcUrl) {
       throw new BadRequestException('RPC_URL is required in config');
     }
+    // Initialize swapper/provider/contract stuff here if needed or lazily in methods
   }
 
   async getTokenBalance(
@@ -59,69 +64,60 @@ export class SwapService {
   }
 
   /**
-   * Get USD/NGN rate from MonieRate API with caching
-   * Caches the rate for 1 minute to respect API rate limit (1 request/minute)
-   * @returns USD/NGN rate (e.g., 1619.01 means 1 USD = 1619.01 NGN)
+   * Get USD/NGN rate from Aerodrome Quoter (On-chain) using USDC -> CNGN pool
+   * Now fetches real-time on-chain data instead of cached MonieRate API
+   * @returns rate (How many CNGN for 1 USDC)
    */
   async getUsdNgnRate(): Promise<number> {
     try {
-      const now = Date.now();
-      
-      // Check if we have a valid cached rate (within 1 minute)
-      if (
-        this.usdNgnRateCache &&
-        (now - this.usdNgnRateCache.timestamp) < this.CACHE_TTL_MS
-      ) {
-        this.logger.debug(`Using cached USD/NGN rate: ${this.usdNgnRateCache.rate}`);
-        return this.usdNgnRateCache.rate;
-      }
+      // 1. Setup Provider
+      const provider = new ethers.JsonRpcProvider(this.rpcUrl);
 
-      // Cache expired or doesn't exist - fetch new rate
-      const apiKey = this.configService.get<string>('MONIE_RATE_API_KEY');
-      if (!apiKey) {
-        throw new Error('MONIE_RATE_API_KEY is not configured');
-      }
+      // 2. Setup Quoter Contract
+      const quoterAddress = ADDRESSES.AERODROME.QUOTER; // Ensure this is 0x254cF9E1E6e233aa1AC962CB9B05b2cfeAaE15b0 
+      const quoter = new ethers.Contract(quoterAddress, this.QUOTER_ABI, provider);
 
-      this.logger.debug('Fetching USD/NGN rate from MonieRate API');
-      const response = await firstValueFrom(
-        this.httpService.get<{
-          status: string;
-          message: string;
-          data: {
-            timestamp: number;
-            base: string;
-            market: string;
-            rates: {
-              NGN: number;
-            };
-          };
-        }>(
-          'https://api.monierate.com/core/rates/latest.json?base=USD&market=mid',
-          {
-            headers: {
-              api_key: apiKey,
-            },
-          },
-        ),
+      // 3. Prepare quote params
+      // We want to know how much CNGN we get for 1 USDC
+      const amountIn = ethers.parseUnits('1', 6); // 1 USDC (6 decimals)
+      const tokenIn = ADDRESSES.USDC;
+      const tokenOut = ADDRESSES.CNGN;
+      const fee = 100; // 0.01% -> 100 ticks?  Wait, user snippet said 10. Let's start with 10 as user suggested or check constant. User used 10 in snippet. 
+      // Actually, Aerodrome pools often have very low fees for stable pairs. 
+      // The snippet used 10 (0.001%?). Let's stick to the snippet for now or make it configurable/constant.
+      // Standard Uniswap V3 fees: 100 (0.01%), 500 (0.05%), 3000 (0.3%), 10000 (1%)
+      // Aerodrome might differ. User snippet had 10.
+      const feeTier = 10;
+      const sqrtPriceLimitX96 = 0;
+
+      this.logger.debug(`Fetching on-chain rate for 1 USDC -> CNGN`);
+
+      // 4. Call static quote
+      const amountOut = await quoter.quoteExactInputSingle.staticCall(
+        tokenIn,
+        tokenOut,
+        feeTier,
+        amountIn,
+        sqrtPriceLimitX96
       );
 
-      const rate = response.data?.data?.rates?.NGN;
+      // 5. Format result
+      // CNGN has 6 decimals
+      const rate = parseFloat(ethers.formatUnits(amountOut, 6));
+
+      this.logger.debug(`On-chain USDC/CNGN Rate: ${rate}`);
+
       if (!rate || rate <= 0) {
-        throw new Error('Invalid rate from MonieRate API');
+        throw new Error('Invalid rate returned from Quoter');
       }
 
-      // Cache the rate with current timestamp
-      this.usdNgnRateCache = {
-        rate,
-        timestamp: now,
-      };
-
-      this.logger.debug(`Cached USD/NGN rate: ${rate}`);
       return rate;
     } catch (error: any) {
-      this.logger.error('Error fetching USD/NGN rate from MonieRate:', error.message);
+      this.logger.error('Error fetching on-chain rate:', error);
+      // Fallback or rethrow? 
+      // For now, rethrow as this is critical
       throw new BadRequestException(
-        `Failed to fetch USD/NGN rate: ${error.message}`,
+        `Failed to fetch on-chain rate: ${error.message}`,
       );
     }
   }
@@ -137,14 +133,14 @@ export class SwapService {
     try {
       // Get USD/NGN rate from MonieRate API (e.g., 1619.01 means 1 USD = 1619.01 NGN)
       const usdNgnRate = await this.getUsdNgnRate();
-      
+
       // Since CNGN = NGN (1:1), multiply CNGN amount by USD/NGN rate
       // Example: 100 CNGN * 1619.01 = 161,901 NGN
       const estimatedNgn = cngnAmount * usdNgnRate;
-      
+
       // Calculate USD value: NGN / (USD/NGN rate)
       const usdValue = cngnAmount;
-      
+
       return {
         estimatedNgn,
         usdNgnRate,
@@ -200,7 +196,7 @@ export class SwapService {
       // Extract recipient address from offramp response
       // The address is at data.depositAddress, not data.depositAccount.address
       const recipientAddress = offrampResult?.data?.depositAddress || offrampResult?.data?.depositAccount?.address;
-      
+
       if (!recipientAddress) {
         this.logger.error('Offramp response structure:', JSON.stringify(offrampResult, null, 2));
         throw new BadRequestException('Recipient address not found in offramp response');
@@ -211,7 +207,7 @@ export class SwapService {
       const fromTokenType = 'USDC';
       const toTokenType = 'CNGN';
       const fromAmountDecimal = dto.usdcAmount;
-      
+
       // Placeholder values - will be updated when swap is completed
       // Using 1:1 exchange rate as placeholder (actual rate determined on-chain)
       const toAmountDecimal = fromAmountDecimal; // Placeholder - actual CNGN amount determined on-chain
@@ -491,7 +487,7 @@ export class SwapService {
       // If offramp destination is provided, trigger offramp
       if (dto.offrampDestination && dto.to_cngn) {
         this.logger.log(`Triggering offramp for swap ${reference}`);
-        
+
         try {
           const offrampResult = await this.stablestackService.offRamp(
             userId,
