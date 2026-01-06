@@ -1,446 +1,1630 @@
 "use client";
-
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { 
-  ArrowRight, 
-  ArrowDownLeft, 
-  ArrowUpRight,
-  Sparkles,
-  ChevronRight
+import { Input } from "@/components/ui/input";
+import {
+  ArrowUpDown,
+  CheckCircle,
+  AlertCircle,
+  Copy,
+  Loader2,
 } from "lucide-react";
-
-function AnimatedCounter({ target, suffix = "" }: { target: number; suffix?: string }) {
-  const [count, setCount] = useState(0);
-  
-  useEffect(() => {
-    const duration = 2000;
-    const steps = 60;
-    const increment = target / steps;
-    let current = 0;
-    
-    const timer = setInterval(() => {
-      current += increment;
-      if (current >= target) {
-        setCount(target);
-        clearInterval(timer);
-      } else {
-        setCount(Math.floor(current));
-      }
-    }, duration / steps);
-    
-    return () => clearInterval(timer);
-  }, [target]);
-  
-  return <span>{count.toLocaleString()}{suffix}</span>;
-}
+import { Header } from "@/components/layout/header";
+import { formatNumber } from "@/lib/utils";
+import { TabButton } from "@/components/swap/tab-button";
+import { SwapSection } from "@/components/swap/swap-section";
+import { CryptoSelectionModal } from "@/components/swap/crypto-selection-modal";
+import { HeroBackground } from "@/components/hero/hero-background";
+import {
+  useBanks,
+  useEstimateNgn,
+  useUsdNgnRate,
+  useOffRamp,
+  useOnRamp,
+  useInitializeSwap,
+  useUpdateSwapAfterExecution,
+  useSwapWebSocket,
+  useCreateSimpleSwap,
+  useResolveAccount,
+} from "@/lib/hooks";
+import { SearchableBankSelect } from "@/components/ui/searchable-bank-select";
+import { parseFormattedNumber } from "@/lib/utils";
+import { useToast } from "@/components/ui/toast";
+import { EmailOtpModal } from "@/components/auth/email-otp-modal";
+import { copyToClipboard } from "@/lib/utils";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+  useReadContract,
+} from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import {
+  SWAP_CONSTANTS,
+  SWAP_ROUTER_ABI,
+  ERC20_ABI,
+} from "@/lib/constants/swap-constants";
+import { parseUnits, formatUnits } from "viem";
+import { useTransactionStore } from "@/lib/store";
 
 export default function HomePage() {
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  
+  const { toast } = useToast();
+  const { data: banks = [] } = useBanks();
+  const offRamp = useOffRamp();
+  const onRamp = useOnRamp();
+  const initializeSwap = useInitializeSwap();
+  const updateSwap = useUpdateSwapAfterExecution();
+  const createSimpleSwap = useCreateSimpleSwap();
+  const { address, isConnected } = useAccount();
+
+  const activeTab = useTransactionStore((state) => state.activeTab);
+  const cryptoType = useTransactionStore((state) => state.cryptoType);
+  const fromCryptoType = useTransactionStore((state) => state.fromCryptoType);
+  const toCryptoType = useTransactionStore((state) => state.toCryptoType);
+  const isCryptoModalOpen = useTransactionStore(
+    (state) => state.isCryptoModalOpen
+  );
+  const isFromCryptoModalOpen = useTransactionStore(
+    (state) => state.isFromCryptoModalOpen
+  );
+  const isToCryptoModalOpen = useTransactionStore(
+    (state) => state.isToCryptoModalOpen
+  );
+  const sellAmount = useTransactionStore((state) => state.sellAmount);
+  const buyAmount = useTransactionStore((state) => state.buyAmount);
+  const bankCode = useTransactionStore((state) => state.bankCode);
+  const accountNumber = useTransactionStore((state) => state.accountNumber);
+  const walletAddress = useTransactionStore((state) => state.walletAddress);
+  const isAuthModalOpen = useTransactionStore((state) => state.isAuthModalOpen);
+  const step = useTransactionStore((state) => state.step);
+  const transactionData = useTransactionStore((state) => state.transactionData);
+  const swapData = useTransactionStore((state) => state.swapData);
+
+  const setActiveTab = useTransactionStore((state) => state.setActiveTab);
+  const setCryptoType = useTransactionStore((state) => state.setCryptoType);
+  const setFromCryptoType = useTransactionStore(
+    (state) => state.setFromCryptoType
+  );
+  const setToCryptoType = useTransactionStore((state) => state.setToCryptoType);
+  const setIsCryptoModalOpen = useTransactionStore(
+    (state) => state.setIsCryptoModalOpen
+  );
+  const setIsFromCryptoModalOpen = useTransactionStore(
+    (state) => state.setIsFromCryptoModalOpen
+  );
+  const setIsToCryptoModalOpen = useTransactionStore(
+    (state) => state.setIsToCryptoModalOpen
+  );
+  const setSellAmount = useTransactionStore((state) => state.setSellAmount);
+  const setBuyAmount = useTransactionStore((state) => state.setBuyAmount);
+  const setBankCode = useTransactionStore((state) => state.setBankCode);
+  const setAccountNumber = useTransactionStore(
+    (state) => state.setAccountNumber
+  );
+  const setWalletAddress = useTransactionStore(
+    (state) => state.setWalletAddress
+  );
+  const setIsAuthModalOpen = useTransactionStore(
+    (state) => state.setIsAuthModalOpen
+  );
+  const setStep = useTransactionStore((state) => state.setStep);
+  const setTransactionData = useTransactionStore(
+    (state) => state.setTransactionData
+  );
+  const setSwapData = useTransactionStore((state) => state.setSwapData);
+  const resetForm = useTransactionStore((state) => state.resetForm);
+
+  // Account resolution state (not in transaction store - handled by hook)
+  const [accountName, setAccountName] = useState<string | null>(null);
+  const [accountResolved, setAccountResolved] = useState(false);
+  const [accountResolutionError, setAccountResolutionError] = useState<
+    "auth" | "invalid" | null
+  >(null);
+  const resolveAccount = useResolveAccount();
+
+  // Local UI state
+  const [copied, setCopied] = useState(false);
+
+  const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
+  const parsedBuyAmount = buyAmount ? parseFormattedNumber(buyAmount) : null;
+
+  let amountToConvert: number | null = null;
+  let needsConversion = false;
+
+  if (activeTab === "sell") {
+    if (cryptoType === "USDC" && parsedSellAmount && parsedSellAmount > 0) {
+      amountToConvert = parsedSellAmount;
+      needsConversion = true;
+    }
+  } else if (activeTab === "buy") {
+    if (cryptoType === "USDC" && parsedBuyAmount && parsedBuyAmount > 0) {
+      amountToConvert = parsedBuyAmount;
+      needsConversion = true;
+    }
+  } else if (activeTab === "swap") {
+    if (fromCryptoType === "USDC" && parsedSellAmount && parsedSellAmount > 0) {
+      amountToConvert = parsedSellAmount;
+      needsConversion = true;
+    }
+  }
+
+  const {
+    data: ngnEstimate,
+    isLoading: isLoadingEstimate,
+    error: ngnEstimateError,
+  } = useEstimateNgn(needsConversion ? amountToConvert : null);
+  const { data: usdNgnRate } = useUsdNgnRate();
+
+  // Handle 401 errors for NGN estimate endpoint
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePosition({ x: e.clientX, y: e.clientY });
+    if (
+      ngnEstimateError &&
+      (ngnEstimateError as any)?.response?.status === 401
+    ) {
+      setIsAuthModalOpen(true);
+    }
+  }, [ngnEstimateError, setIsAuthModalOpen]);
+
+  // WebSocket for transaction updates
+  const handleWebSocketUpdate = useCallback(
+    (update: any) => {
+      console.log("WebSocket update received:", update);
+      if (update.status === "COMPLETED") {
+        setStep("completed");
+        toast({
+          title: "Transaction Completed",
+          description: "Your transaction has been completed successfully!",
+          variant: "success",
+        });
+      }
+    },
+    [toast]
+  );
+
+  const reference =
+    transactionData?.databaseRecord?.reference ||
+    transactionData?.data?.reference ||
+    swapData?.swap?.reference;
+  // Only use WebSocket for buy and sell tabs (not swap tab)
+  const { isConnected: wsConnected } = useSwapWebSocket({
+    reference,
+    token:
+      typeof window !== "undefined"
+        ? localStorage.getItem("token") || undefined
+        : undefined,
+    enabled: !!reference && step === "pending" && activeTab !== "swap",
+    onUpdate: handleWebSocketUpdate,
+  });
+
+  // Get USDC balance for connected wallet
+  const { data: usdcBalance } = useReadContract({
+    address: SWAP_CONSTANTS.USDC as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: address ? [address as `0x${string}`] : undefined,
+    query: {
+      enabled:
+        !!address &&
+        isConnected &&
+        ((activeTab === "sell" && cryptoType === "USDC") ||
+          (activeTab === "swap" && fromCryptoType === "USDC")),
+    },
+  });
+
+  // Swap execution (for USDC to NGN sell and swap tab)
+  // Determine which token to check allowance for based on swap data
+  const tokenAddressForAllowance = swapData?.swapParams?.tokenIn
+    ? swapData.swapParams.tokenIn.toLowerCase() ===
+      SWAP_CONSTANTS.USDC.toLowerCase()
+      ? SWAP_CONSTANTS.USDC
+      : SWAP_CONSTANTS.CNGN
+    : SWAP_CONSTANTS.USDC; // Default to USDC
+
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+    address: tokenAddressForAllowance as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args:
+      address && SWAP_CONSTANTS.SWAP_ROUTER
+        ? ([
+            address as `0x${string}`,
+            SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
+          ] as const)
+        : undefined,
+    query: {
+      enabled:
+        !!address &&
+        !!SWAP_CONSTANTS.SWAP_ROUTER &&
+        step === "execute" &&
+        !!swapData,
+    },
+  });
+
+  const {
+    writeContract: approveToken,
+    data: approveHash,
+    isPending: isApproving,
+  } = useWriteContract();
+  const { isLoading: isWaitingApproval, isSuccess: isApproved } =
+    useWaitForTransactionReceipt({ hash: approveHash });
+
+  const {
+    writeContract: executeSwap,
+    data: swapHash,
+    isPending: isExecuting,
+  } = useWriteContract();
+  const { isLoading: isWaitingSwap, isSuccess: isSwapSuccess } =
+    useWaitForTransactionReceipt({ hash: swapHash });
+
+  const hasUpdatedSwap = useRef(false);
+  useEffect(() => {
+    if (
+      isSwapSuccess &&
+      swapHash &&
+      swapData &&
+      address &&
+      !hasUpdatedSwap.current &&
+      step === "execute"
+    ) {
+      hasUpdatedSwap.current = true;
+      updateSwap.mutate(
+        {
+          reference: swapData.swap.reference,
+          data: { transactionHash: swapHash, sourceAddress: address },
+        },
+        {
+          onSuccess: () => {
+            if (activeTab === "swap") {
+              setStep("completed");
+              toast({
+                title: "Swap Completed",
+                description:
+                  "Your swap transaction has been completed successfully!",
+                variant: "default",
+              });
+            } else {
+              setStep("pending");
+            }
+          },
+          onError: () => {
+            hasUpdatedSwap.current = false;
+          },
+        }
+      );
+    }
+  }, [
+    isSwapSuccess,
+    swapHash,
+    swapData,
+    address,
+    step,
+    updateSwap,
+    activeTab,
+    toast,
+  ]);
+
+  useEffect(() => {
+    hasUpdatedSwap.current = false;
+  }, [swapHash]);
+
+  useEffect(() => {
+    if (isApproved) refetchAllowance();
+  }, [isApproved, refetchAllowance]);
+
+  const tabs = [
+    { id: "buy" as const, label: "Buy crypto" },
+    { id: "sell" as const, label: "Sell crypto" },
+    { id: "swap" as const, label: "Swap" },
+  ];
+
+  const handleSellAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (value === "") {
+      setSellAmount("");
+      return;
+    }
+    const formatted = formatNumber(value);
+    setSellAmount(formatted);
+  };
+
+  const handleBuyAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (value === "") {
+      setBuyAmount("");
+      return;
+    }
+    const formatted = formatNumber(value);
+    setBuyAmount(formatted);
+  };
+
+  const handleCryptoSelect = (type: "CNGN" | "USDC") => {
+    setCryptoType(type);
+    setIsCryptoModalOpen(false);
+  };
+
+  const handleFromCryptoSelect = (type: "CNGN" | "USDC") => {
+    setFromCryptoType(type);
+    setIsFromCryptoModalOpen(false);
+    if (type === toCryptoType) {
+      setToCryptoType(type === "CNGN" ? "USDC" : "CNGN");
+    }
+  };
+
+  const handleToCryptoSelect = (type: "CNGN" | "USDC") => {
+    setToCryptoType(type);
+    setIsToCryptoModalOpen(false);
+    if (type === fromCryptoType) {
+      setFromCryptoType(type === "CNGN" ? "USDC" : "CNGN");
+    }
+  };
+
+  const isAuthenticated = () => {
+    if (typeof window === "undefined") return false;
+    return !!localStorage.getItem("token");
+  };
+
+  // Wrapper to reset form and account resolution state
+  const handleResetForm = () => {
+    resetForm(); // Reset transaction store state
+    setAccountName(null);
+    setAccountResolved(false);
+  };
+
+  const lastResolvedRef = useRef<{
+    bankCode: string;
+    accountNumber: string;
+  } | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    // Clear any pending timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    // Reset state if account number is not 10 digits or not in sell tab
+    if (activeTab !== "sell" || !bankCode || accountNumber.length !== 10) {
+      if (accountNumber.length !== 10) {
+        setAccountName(null);
+        setAccountResolved(false);
+        setAccountResolutionError(null);
+        lastResolvedRef.current = null;
+      }
+      return;
+    }
+
+    // Check if this combination was already resolved
+    const combination = `${bankCode}-${accountNumber}`;
+    const lastCombination = lastResolvedRef.current
+      ? `${lastResolvedRef.current.bankCode}-${lastResolvedRef.current.accountNumber}`
+      : null;
+
+    // If already resolved this combination, don't resolve again
+    if (combination === lastCombination) {
+      return;
+    }
+
+    // Don't trigger if a request is already pending
+    if (resolveAccount.isPending) {
+      return;
+    }
+
+    // Debounce the resolution request by 500ms to prevent rapid-fire requests
+    timeoutRef.current = setTimeout(() => {
+      // Double-check conditions after debounce delay
+      if (
+        activeTab === "sell" &&
+        bankCode &&
+        accountNumber.length === 10 &&
+        !resolveAccount.isPending
+      ) {
+        const currentCombination = `${bankCode}-${accountNumber}`;
+        const currentLastCombination = lastResolvedRef.current
+          ? `${lastResolvedRef.current.bankCode}-${lastResolvedRef.current.accountNumber}`
+          : null;
+
+        // Only resolve if this combination hasn't been resolved yet
+        if (currentCombination !== currentLastCombination) {
+          lastResolvedRef.current = { bankCode, accountNumber };
+          resolveAccount.mutate(
+            { bankCode, accountNumber },
+            {
+              onSuccess: (response) => {
+                const resolvedName = response.data?.data?.accountName;
+                if (resolvedName) {
+                  setAccountName(resolvedName);
+                  setAccountResolved(true);
+                  setAccountResolutionError(null);
+                } else {
+                  setAccountName(null);
+                  setAccountResolved(false);
+                  setAccountResolutionError("invalid");
+                  lastResolvedRef.current = null;
+                }
+              },
+              onError: (error: any) => {
+                setAccountName(null);
+                setAccountResolved(false);
+                // Check if error is 401 (authentication required)
+                if (error?.response?.status === 401) {
+                  setAccountResolutionError("auth");
+                  setIsAuthModalOpen(true);
+                } else {
+                  setAccountResolutionError("invalid");
+                }
+                // Reset ref on error so we can retry if user changes and types again
+                lastResolvedRef.current = null;
+              },
+            }
+          );
+        }
+      }
+    }, 500); // 500ms debounce delay
+
+    // Cleanup function to clear timeout on unmount or dependency change
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
     };
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, []);
+  }, [accountNumber, bankCode, activeTab, resolveAccount.mutate]);
+
+  // Handle sell: CNGN to NGN (offramp) or USDC to NGN (swap)
+  const handleSell = async () => {
+    if (!isAuthenticated()) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    if (!sellAmount || !bankCode || !accountNumber) {
+      toast({
+        title: "Missing fields",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!accountResolved || !accountName) {
+      toast({
+        title: "Invalid account",
+        description: "Please ensure the account number is valid and resolved",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const parsedAmount = parseFormattedNumber(sellAmount);
+    if (cryptoType === "CNGN" && parsedAmount < 100) {
+      toast({
+        title: "Invalid amount",
+        description: "Minimum amount for CNGN is 100",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (cryptoType === "USDC" && parsedAmount < 1) {
+      toast({
+        title: "Invalid amount",
+        description: "Minimum amount for USDC is 1",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (parsedAmount <= 0) {
+      toast({
+        title: "Invalid amount",
+        description: "Please enter a valid amount",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (cryptoType === "CNGN") {
+      // CNGN to NGN: Direct offramp
+      const amountToSend = Math.round(parsedAmount);
+      offRamp.mutate(
+        {
+          network: "base",
+          amount: amountToSend,
+          destination: { bankCode, accountNumber },
+        },
+        {
+          onSuccess: (response) => {
+            setTransactionData(response.data);
+            setStep("pending");
+          },
+        }
+      );
+    } else if (cryptoType === "USDC") {
+      // USDC to NGN: Swap flow
+      if (!isConnected || !address) {
+        toast({
+          title: "Wallet not connected",
+          description: "Please connect your wallet to continue",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!ngnEstimate?.estimatedNgn) {
+        toast({
+          title: "Rate calculation in progress",
+          description: "Please wait for the estimated NGN value",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const ngnAmount = Math.round(ngnEstimate.estimatedNgn);
+      initializeSwap.mutate(
+        {
+          amount: ngnAmount,
+          usdcAmount: parsedAmount,
+          slippage: 0.05,
+          network: "base",
+          offrampDestination: { bankCode, accountNumber },
+        },
+        {
+          onSuccess: (response) => {
+            setSwapData(response.data);
+            setStep("execute");
+          },
+        }
+      );
+    }
+  };
+
+  // Handle buy: NGN to CNGN (onramp)
+  const handleBuy = async () => {
+    if (!isAuthenticated()) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    if (!buyAmount || !walletAddress) {
+      toast({
+        title: "Missing fields",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const parsedAmount = parseFloat(buyAmount);
+    if (isNaN(parsedAmount) || parsedAmount < 100) {
+      toast({
+        title: "Invalid amount",
+        description: "Minimum amount is 100 NGN",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    onRamp.mutate(
+      {
+        network: "base",
+        amount: parsedAmount,
+        destination: { address: walletAddress },
+      },
+      {
+        onSuccess: (response) => {
+          setTransactionData(response.data);
+          setStep("pending");
+        },
+      }
+    );
+  };
+
+  // Handle swap execution
+  const handleApprove = async () => {
+    if (!swapData || !address) return;
+    try {
+      const parsedAmount = parseFloat(swapData.swapParams.amountIn);
+      // Determine token address and decimals based on input token
+      const isUSDC =
+        swapData.swapParams.tokenIn.toLowerCase() ===
+        SWAP_CONSTANTS.USDC.toLowerCase();
+      const tokenAddress = isUSDC ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN;
+      const decimals = isUSDC
+        ? SWAP_CONSTANTS.USDC_DECIMALS
+        : SWAP_CONSTANTS.CNGN_DECIMALS;
+      const tokenAmount = parseUnits(parsedAmount.toString(), decimals);
+
+      approveToken({
+        address: tokenAddress as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: "approve",
+        args: [SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`, tokenAmount],
+      });
+    } catch (error: any) {
+      toast({
+        title: "Approval Failed",
+        description: error.message || "Failed to approve token",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleExecuteSwap = async () => {
+    if (!address || !swapData || !SWAP_CONSTANTS.SWAP_ROUTER) return;
+
+    // Determine which token is being swapped in/out and their decimals
+    const isTokenInUSDC =
+      swapData.swapParams.tokenIn.toLowerCase() ===
+      SWAP_CONSTANTS.USDC.toLowerCase();
+    const isTokenOutUSDC =
+      swapData.swapParams.tokenOut.toLowerCase() ===
+      SWAP_CONSTANTS.USDC.toLowerCase();
+
+    const tokenInDecimals = isTokenInUSDC
+      ? SWAP_CONSTANTS.USDC_DECIMALS
+      : SWAP_CONSTANTS.CNGN_DECIMALS;
+    const tokenOutDecimals = isTokenOutUSDC
+      ? SWAP_CONSTANTS.USDC_DECIMALS
+      : SWAP_CONSTANTS.CNGN_DECIMALS;
+
+    const amountIn = parseUnits(swapData.swapParams.amountIn, tokenInDecimals);
+    const slippage = swapData.swapParams.slippage || 0.05;
+
+    // Calculate expected output amount
+    let expectedOutput: number;
+    const fromAmount = parseFloat(swapData.swapParams.amountIn);
+
+    if (!isTokenInUSDC && isTokenOutUSDC) {
+      // CNGN to USDC: Divide by USD/NGN rate
+      if (usdNgnRate) {
+        expectedOutput = fromAmount / usdNgnRate;
+      } else {
+        // Fallback to toAmount if available, otherwise use a very low minimum
+        expectedOutput = swapData.swap?.toAmount
+          ? Number(swapData.swap.toAmount)
+          : fromAmount * 0.0001;
+      }
+    } else if (isTokenInUSDC && !isTokenOutUSDC) {
+      // USDC to CNGN: Multiply by USD/NGN rate
+      if (usdNgnRate) {
+        expectedOutput = fromAmount * usdNgnRate;
+      } else {
+        expectedOutput = swapData.swap?.toAmount
+          ? Number(swapData.swap.toAmount)
+          : fromAmount;
+      }
+    } else {
+      // Same token type or fallback
+      expectedOutput = swapData.swap?.toAmount
+        ? Number(swapData.swap.toAmount)
+        : fromAmount;
+    }
+
+    // Apply slippage tolerance to get minimum output (use a very low minimum to avoid transaction failures)
+    const minAmount = Math.max(expectedOutput * (1 - slippage), 0.000001); // At least 0.000001 to avoid zero
+    const amountOutMin = parseUnits(
+      minAmount.toFixed(tokenOutDecimals),
+      tokenOutDecimals
+    );
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 120);
+
+    try {
+      console.log("executeSwap", {
+        args: [
+          {
+            tokenIn: swapData.swapParams.tokenIn as `0x${string}`,
+            tokenOut: swapData.swapParams.tokenOut as `0x${string}`,
+            tickSpacing: 10,
+            recipient: swapData.swapParams.recipient as `0x${string}`,
+            deadline,
+            amountIn,
+            amountOutMinimum: amountOutMin,
+            sqrtPriceLimitX96: BigInt(0),
+          },
+        ],
+      });
+      executeSwap({
+        address: SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
+        abi: SWAP_ROUTER_ABI,
+        functionName: "exactInputSingle",
+        args: [
+          {
+            tokenIn: swapData.swapParams.tokenIn as `0x${string}`,
+            tokenOut: swapData.swapParams.tokenOut as `0x${string}`,
+            tickSpacing: 10,
+            recipient: swapData.swapParams.recipient as `0x${string}`,
+            deadline,
+            amountIn,
+            amountOutMinimum: amountOutMin,
+            sqrtPriceLimitX96: BigInt(0),
+          },
+        ],
+      });
+    } catch (error: any) {
+      toast({
+        title: "Swap Failed",
+        description: error.message || "Failed to execute swap",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle swap: USDC ↔ CNGN (simple swap, no offramp)
+  const handleSwap = async () => {
+    if (!isConnected || !address) {
+      toast({
+        title: "Wallet not connected",
+        description: "Please connect your wallet to continue",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!sellAmount) {
+      toast({
+        title: "Missing amount",
+        description: "Please enter an amount to swap",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const parsedAmount = parseFormattedNumber(sellAmount);
+    if (
+      fromCryptoType === "CNGN" &&
+      toCryptoType === "USDC" &&
+      parsedAmount < 100
+    ) {
+      toast({
+        title: "Invalid amount",
+        description: "Minimum amount for CNGN to USDC swap is 100 CNGN",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (
+      fromCryptoType === "USDC" &&
+      toCryptoType === "CNGN" &&
+      parsedAmount < 1
+    ) {
+      toast({
+        title: "Invalid amount",
+        description: "Minimum amount for USDC to CNGN swap is 1 USDC",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (parsedAmount <= 0) {
+      toast({
+        title: "Invalid amount",
+        description: "Please enter a valid amount",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Calculate exchange rate and toAmount based on swap direction
+    let exchangeRate: number;
+    let toAmount: number;
+
+    if (fromCryptoType === "USDC" && toCryptoType === "CNGN") {
+      // USDC to CNGN: Multiply by USD/NGN rate
+      if (usdNgnRate) {
+        exchangeRate = usdNgnRate;
+        toAmount = parsedAmount * usdNgnRate;
+      } else {
+        // Fallback if rate not available
+        exchangeRate = 1;
+        toAmount = parsedAmount;
+      }
+    } else if (fromCryptoType === "CNGN" && toCryptoType === "USDC") {
+      // CNGN to USDC: Divide by USD/NGN rate
+      if (usdNgnRate) {
+        exchangeRate = 1 / usdNgnRate;
+        toAmount = parsedAmount / usdNgnRate;
+      } else {
+        // Fallback if rate not available
+        exchangeRate = 1;
+        toAmount = parsedAmount;
+      }
+    } else {
+      // Same token type (shouldn't happen, but fallback)
+      exchangeRate = 1;
+      toAmount = parsedAmount;
+    }
+
+    const swapResponseData = {
+      swap: {
+        id: "",
+        reference: "",
+        fromAmount: parsedAmount,
+        toAmount: toAmount,
+        exchangeRate: exchangeRate,
+        status: "PENDING",
+        createdAt: new Date().toISOString(),
+      },
+      recipientAddress: address, // User's wallet address (they receive the swapped tokens)
+      swapParams: {
+        tokenIn:
+          fromCryptoType === "USDC" ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN,
+        tokenOut:
+          toCryptoType === "USDC" ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN,
+        amountIn: parsedAmount.toString(),
+        recipient: address,
+        slippage: 0.05,
+      },
+    };
+
+    // Store swap in database
+    createSimpleSwap.mutate(
+      {
+        fromTokenType: fromCryptoType,
+        toTokenType: toCryptoType,
+        fromAmount: parsedAmount,
+        toAmount: toAmount,
+        exchangeRate: exchangeRate,
+        sourceAddress: address,
+        destinationAddress: address,
+        network: "base",
+      },
+      {
+        onSuccess: (response) => {
+          setSwapData({
+            swap: response.data,
+            recipientAddress: address,
+            swapParams: swapResponseData.swapParams,
+          });
+          setStep("execute");
+        },
+        onError: (error: any) => {
+          toast({
+            title: "Swap Creation Failed",
+            description:
+              error.response?.data?.message ||
+              "Failed to create swap transaction",
+            variant: "destructive",
+          });
+        },
+      }
+    );
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (activeTab === "sell") {
+      handleSell();
+    } else if (activeTab === "buy") {
+      handleBuy();
+    } else if (activeTab === "swap") {
+      handleSwap();
+    }
+  };
+
+  // Determine if approval is needed based on the input token
+  const needsApproval =
+    swapData &&
+    allowance !== undefined &&
+    (() => {
+      const parsedAmount = parseFloat(swapData.swapParams.amountIn);
+      const isUSDC =
+        swapData.swapParams.tokenIn.toLowerCase() ===
+        SWAP_CONSTANTS.USDC.toLowerCase();
+      const decimals = isUSDC
+        ? SWAP_CONSTANTS.USDC_DECIMALS
+        : SWAP_CONSTANTS.CNGN_DECIMALS;
+      const amountIn = parseUnits(parsedAmount.toString(), decimals);
+      return amountIn > allowance;
+    })();
+
+  // Render based on step
+  const renderContent = () => {
+    if (step === "form") {
+      return (
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl p-4 lg:p-6 space-y-4"
+        >
+          <div className="flex gap-2 mb-6">
+            {tabs.map((tab) => (
+              <TabButton
+                key={tab.id}
+                label={tab.label}
+                isActive={activeTab === tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  handleResetForm();
+                }}
+              />
+            ))}
+          </div>
+
+          <SwapSection
+            label="You'll send"
+            amount={
+              activeTab === "buy"
+                ? buyAmount
+                : activeTab === "swap"
+                ? sellAmount
+                : sellAmount
+            }
+            onAmountChange={
+              activeTab === "buy"
+                ? handleBuyAmountChange
+                : handleSellAmountChange
+            }
+            currencyType={
+              activeTab === "buy"
+                ? "NGN"
+                : activeTab === "swap"
+                ? (fromCryptoType as "CNGN" | "USDC")
+                : (cryptoType as "CNGN" | "USDC")
+            }
+            onCurrencyClick={
+              activeTab === "buy"
+                ? undefined
+                : activeTab === "swap"
+                ? () => setIsFromCryptoModalOpen(true)
+                : () => setIsCryptoModalOpen(true)
+            }
+          />
+
+          <div className="flex justify-center -my-6">
+            <button
+              type="button"
+              className="w-12 h-12 rounded-full bg-secondary hover:bg-secondary/90 flex items-center justify-center transition-colors shadow-lg"
+              onClick={
+                activeTab === "swap"
+                  ? () => {
+                      const temp = fromCryptoType;
+                      setFromCryptoType(toCryptoType);
+                      setToCryptoType(temp);
+                    }
+                  : undefined
+              }
+            >
+              <ArrowUpDown size={18} className="text-black" />
+            </button>
+          </div>
+
+          <SwapSection
+            label="You'll receive"
+            amount={
+              activeTab === "buy"
+                ? (() => {
+                    if (!buyAmount) return "";
+                    const parsed = parseFormattedNumber(buyAmount);
+                    return parsed.toLocaleString("en-NG");
+                  })()
+                : activeTab === "swap"
+                ? (() => {
+                    if (!sellAmount) return "";
+                    const parsed = parseFormattedNumber(sellAmount);
+                    // For swap, if from is USDC, convert to CNGN (NGN equivalent)
+                    if (
+                      fromCryptoType === "USDC" &&
+                      ngnEstimate?.estimatedNgn
+                    ) {
+                      return Math.round(
+                        ngnEstimate.estimatedNgn
+                      ).toLocaleString("en-NG");
+                    } else if (
+                      fromCryptoType === "CNGN" &&
+                      toCryptoType === "USDC" &&
+                      usdNgnRate
+                    ) {
+                      // CNGN to USDC: Divide by USD/NGN rate (since 1 CNGN ≈ 1 NGN)
+                      const usdcAmount = parsed / usdNgnRate;
+                      return usdcAmount.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      });
+                    } else if (
+                      fromCryptoType === "CNGN" &&
+                      toCryptoType === "CNGN"
+                    ) {
+                      return parsed.toLocaleString("en-NG");
+                    }
+                    return "";
+                  })()
+                : (() => {
+                    if (!sellAmount) return "";
+                    const parsed = parseFormattedNumber(sellAmount);
+                    if (cryptoType === "USDC" && ngnEstimate?.estimatedNgn) {
+                      return Math.round(
+                        ngnEstimate.estimatedNgn
+                      ).toLocaleString("en-NG");
+                    } else if (cryptoType === "CNGN") {
+                      return parsed.toLocaleString("en-NG");
+                    }
+                    return "";
+                  })()
+            }
+            onAmountChange={() => {}}
+            currencyType={
+              activeTab === "buy"
+                ? "CNGN"
+                : activeTab === "swap"
+                ? (toCryptoType as "CNGN" | "USDC")
+                : "NGN"
+            }
+            onCurrencyClick={
+              activeTab === "swap"
+                ? () => setIsToCryptoModalOpen(true)
+                : undefined
+            }
+            disabled={true}
+            isLoading={needsConversion && isLoadingEstimate}
+          />
+
+          {activeTab === "buy" && (
+            <div className="space-y-2">
+              <label className="text-sm text-white/70 mb-3 block">
+                Wallet Address
+              </label>
+              <Input
+                type="text"
+                placeholder="0x..."
+                value={walletAddress}
+                onChange={(e) => setWalletAddress(e.target.value)}
+                className="h-14 bg-black/50! border-white/10 text-white placeholder:text-white/30 border-0! outline-0!  focus:ring-0 focus:outline-0 focus:border-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            </div>
+          )}
+
+          {activeTab === "sell" && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-6 gap-2 p-2 bg-black/50 rounded-xl border border-white/10">
+                <div className="col-span-6 md:col-span-3">
+                  <SearchableBankSelect
+                    banks={banks}
+                    value={bankCode}
+                    onValueChange={setBankCode}
+                    placeholder="Choose bank"
+                  />
+                </div>
+                <div className="col-span-6 md:col-span-3">
+                  <Input
+                    type="number"
+                    placeholder="Enter account number"
+                    value={accountNumber}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, "");
+                      if (value.length <= 10) {
+                        setAccountNumber(value);
+                      }
+                    }}
+                    maxLength={10}
+                    className="w-full h-14 rounded-lg bg-white/5 text-white placeholder:text-white/30 border-0 outline-0 focus:ring-0 focus:outline-0 focus:border-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
+              </div>
+
+              {/* Account Resolution Status */}
+              {accountNumber.length === 10 && bankCode && (
+                <div className="px-2">
+                  {resolveAccount.isPending ? (
+                    <div className="flex items-center gap-2 text-sm text-white/60">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Resolving account...</span>
+                    </div>
+                  ) : accountResolved && accountName ? (
+                    <div className="flex items-center gap-2 text-sm text-green-400">
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Account Name: {accountName}</span>
+                    </div>
+                  ) : accountNumber.length === 10 &&
+                    !resolveAccount.isPending &&
+                    accountResolutionError ? (
+                    <div className="flex items-center gap-2 text-sm text-yellow-400">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>
+                        {accountResolutionError === "auth"
+                          ? "Please login to resolve account"
+                          : "Invalid account number"}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          )}
+
+          {(activeTab === "sell" && cryptoType === "USDC") ||
+          (activeTab === "swap") ? (
+            <div className="p-4 rounded-xl bg-black/50 border border-white/10">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-white/70">Wallet Connection</span>
+                <ConnectButton showBalance={false} />
+              </div>
+              {isConnected && usdcBalance !== undefined && (
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-xs text-white/50">USDC Balance</span>
+                  <span className="text-sm font-medium text-white">
+                    {parseFloat(
+                      formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS)
+                    ).toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 6,
+                    })}{" "}
+                    USDC
+                  </span>
+                </div>
+              )}
+              {!isConnected && (
+                <p className="text-xs text-white/50 mt-2">
+                  Connect your wallet to continue
+                </p>
+              )}
+            </div>
+          ) : null}
+
+          <Button
+            type="submit"
+            className="w-full h-14 text-sm md:font-medium rounded-xl bg-secondary hover:bg-secondary/90 text-black"
+            disabled={
+              activeTab === "sell" &&
+              (!accountResolved || !accountName || resolveAccount.isPending)
+            }
+            isLoading={
+              (activeTab === "sell" && offRamp.isPending) ||
+              (activeTab === "sell" &&
+                cryptoType === "USDC" &&
+                initializeSwap.isPending) ||
+              (activeTab === "buy" && onRamp.isPending) ||
+              (activeTab === "swap" && createSimpleSwap.isPending)
+            }
+          >
+            {activeTab === "buy"
+              ? "BUY CRYPTO"
+              : activeTab === "sell"
+              ? "SELL CRYPTO"
+              : "SWAP"}
+          </Button>
+        </form>
+      );
+    }
+
+    if (step === "execute" && swapData) {
+      const fromAmount = Number(swapData.swap.fromAmount);
+      const fromToken =
+        swapData.swap.fromTokenType ||
+        (swapData.swapParams?.tokenIn?.toLowerCase() ===
+        SWAP_CONSTANTS.USDC.toLowerCase()
+          ? "USDC"
+          : "CNGN");
+      const toToken =
+        swapData.swap.toTokenType ||
+        (swapData.swapParams?.tokenOut?.toLowerCase() ===
+        SWAP_CONSTANTS.USDC.toLowerCase()
+          ? "USDC"
+          : "CNGN");
+
+      // For sell tab (USDC to NGN), calculate NGN amount using USD/NGN rate
+      // For swap tab, use the toAmount directly
+      let displayAmount: number;
+      let displayCurrency: string;
+      let exchangeRateDisplay: React.ReactNode = null;
+
+      if (
+        swapData.swapParams?.tokenOut?.toLowerCase() ===
+          SWAP_CONSTANTS.CNGN.toLowerCase() &&
+        swapData.swapParams?.tokenIn?.toLowerCase() ===
+          SWAP_CONSTANTS.USDC.toLowerCase()
+      ) {
+        // This is USDC to NGN (sell flow) - use USD/NGN rate
+        const usdNgnRate =
+          ngnEstimate?.usdNgnRate ||
+          (swapData.swap.exchangeRate && swapData.swap.exchangeRate > 1
+            ? swapData.swap.exchangeRate
+            : null);
+        displayAmount = usdNgnRate
+          ? fromAmount * usdNgnRate
+          : swapData.swap.toAmount
+          ? Number(swapData.swap.toAmount)
+          : 0;
+        displayCurrency = "NGN";
+        if (usdNgnRate) {
+          exchangeRateDisplay = (
+            <div className="flex justify-between">
+              <span className="text-white/70">Exchange Rate</span>
+              <span className="text-white font-bold">
+                1 USDC ={" "}
+                {usdNgnRate.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                NGN
+              </span>
+            </div>
+          );
+        }
+      } else {
+        // This is a swap (USDC ↔ CNGN)
+        if (fromToken === "CNGN" && toToken === "USDC" && usdNgnRate) {
+          // CNGN to USDC: Divide by USD/NGN rate
+          displayAmount = fromAmount / usdNgnRate;
+          displayCurrency = toToken;
+          exchangeRateDisplay = (
+            <div className="flex justify-between">
+              <span className="text-white/70">Exchange Rate</span>
+              <span className="text-white font-bold">
+                1 CNGN ={" "}
+                {(1 / usdNgnRate).toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                USDC
+              </span>
+            </div>
+          );
+        } else if (
+          fromToken === "USDC" &&
+          toToken === "CNGN" &&
+          ngnEstimate?.usdNgnRate
+        ) {
+          // USDC to CNGN: Multiply by USD/NGN rate
+          displayAmount = fromAmount * ngnEstimate.usdNgnRate;
+          displayCurrency = toToken;
+          exchangeRateDisplay = (
+            <div className="flex justify-between">
+              <span className="text-white/70">Exchange Rate</span>
+              <span className="text-white font-bold">
+                1 USDC ={" "}
+                {ngnEstimate.usdNgnRate.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                CNGN
+              </span>
+            </div>
+          );
+        } else {
+          // Fallback to toAmount if rates not available
+          displayAmount = swapData.swap.toAmount
+            ? Number(swapData.swap.toAmount)
+            : fromAmount;
+          displayCurrency = toToken;
+          if (swapData.swap.exchangeRate) {
+            exchangeRateDisplay = (
+              <div className="flex justify-between">
+                <span className="text-white/70">Exchange Rate</span>
+                <span className="text-white font-bold">
+                  1 {fromToken} ={" "}
+                  {swapData.swap.exchangeRate.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 6,
+                  })}{" "}
+                  {toToken}
+                </span>
+              </div>
+            );
+          }
+        }
+      }
+
+      const tokenToApprove =
+        swapData.swapParams?.tokenIn?.toLowerCase() ===
+        SWAP_CONSTANTS.USDC.toLowerCase()
+          ? "USDC"
+          : "CNGN";
+
+      return (
+        <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl p-4 lg:p-6 space-y-4">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold text-white mb-2">Execute Swap</h2>
+            <p className="text-white/50">Complete your swap transaction</p>
+          </div>
+
+          <div className="space-y-4 p-4 bg-black/50 rounded-xl">
+            <div className="flex justify-between">
+              <span className="text-white/70">From</span>
+              <span className="text-white font-bold">
+                {fromAmount} {fromToken}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-white/70">To (estimated)</span>
+              <span className="text-white font-bold">
+                {displayCurrency === "USDC"
+                  ? displayAmount.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })
+                  : displayAmount.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 6,
+                    })}{" "}
+                {displayCurrency}
+              </span>
+            </div>
+            {exchangeRateDisplay}
+            <div className="flex justify-between">
+              <span className="text-white/70">Recipient</span>
+              <span className="text-white font-mono text-sm">
+                {swapData.recipientAddress}
+              </span>
+            </div>
+          </div>
+
+          {needsApproval && !isApproved && (
+            <Button
+              onClick={handleApprove}
+              className="w-full h-14"
+              disabled={isApproving || isWaitingApproval}
+            >
+              {isApproving || isWaitingApproval ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Approving...
+                </>
+              ) : (
+                `Approve ${tokenToApprove}`
+              )}
+            </Button>
+          )}
+
+          {(!needsApproval || isApproved) && (
+            <Button
+              onClick={handleExecuteSwap}
+              className="w-full h-14"
+              disabled={isExecuting || isWaitingSwap}
+            >
+              {isExecuting || isWaitingSwap ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Executing...
+                </>
+              ) : (
+                "Execute Swap"
+              )}
+            </Button>
+          )}
+
+          {swapHash && (
+            <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle className="text-green-400" size={20} />
+                <span className="text-green-400 font-semibold">
+                  Transaction Submitted
+                </span>
+              </div>
+              <code className="text-xs text-white/70 break-all">
+                {swapHash}
+              </code>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (step === "pending") {
+      return (
+        <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl p-4 lg:p-6 space-y-4">
+          <div className="text-center mb-6">
+            <Loader2 className="w-12 h-12 text-secondary animate-spin mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-white mb-2">
+              {activeTab === "buy"
+                ? "Waiting for Payment"
+                : "Processing Transaction"}
+            </h2>
+            <p className="text-white/50">
+              {activeTab === "buy"
+                ? "Please complete the bank transfer. We'll automatically detect your payment."
+                : "Your transaction is being processed..."}
+            </p>
+          </div>
+
+          {reference && (
+            <div className="p-4 bg-black/50 rounded-xl">
+              <p className="text-white/70 mb-2">Reference</p>
+              <code className="text-sm text-white font-mono">{reference}</code>
+              {wsConnected && (
+                <p className="text-sm text-green-400 mt-2 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  Connected for real-time updates
+                </p>
+              )}
+            </div>
+          )}
+
+          {activeTab === "buy" && transactionData?.data?.depositAccount && (
+            <>
+              <div className="p-4 bg-black/50 rounded-xl">
+                <p className="text-white/70 mb-2">Amount to Pay</p>
+                <p className="text-3xl font-bold text-white">
+                  ₦{parseFloat(buyAmount).toLocaleString()}
+                </p>
+              </div>
+
+              <div className="space-y-4 p-4 bg-black/50 rounded-xl">
+                <div className="flex justify-between">
+                  <span className="text-white/70">Bank Name</span>
+                  <span className="text-white">
+                    {transactionData.data.depositAccount.bankName}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white/70">Account Number</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-white font-mono font-bold">
+                      {transactionData.data.depositAccount.accountNumber}
+                    </span>
+                    <button
+                      onClick={async () => {
+                        const success = await copyToClipboard(
+                          transactionData.data.depositAccount.accountNumber
+                        );
+                        if (success) {
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                          toast({
+                            title: "Copied!",
+                            description: "Account number copied",
+                            variant: "success",
+                          });
+                        }
+                      }}
+                      className="p-1 hover:bg-white/10 rounded"
+                    >
+                      {copied ? (
+                        <CheckCircle size={16} className="text-green-400" />
+                      ) : (
+                        <Copy size={16} className="text-white/50" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-white/70">Account Name</span>
+                  <span className="text-white">
+                    {transactionData.data.depositAccount.accountName}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === "sell" &&
+            cryptoType === "CNGN" &&
+            transactionData?.data?.depositAddress && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertCircle className="text-amber-400" size={20} />
+                  <span className="text-amber-400 font-semibold">
+                    Deposit Address
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs text-white flex-1 break-all">
+                    {transactionData.data.depositAddress}
+                  </code>
+                  <button
+                    onClick={async () => {
+                      const success = await copyToClipboard(
+                        transactionData.data.depositAddress
+                      );
+                      if (success) {
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                        toast({ title: "Copied!", variant: "success" });
+                      }
+                    }}
+                    className="p-1 hover:bg-white/10 rounded"
+                  >
+                    {copied ? (
+                      <CheckCircle size={16} className="text-green-400" />
+                    ) : (
+                      <Copy size={16} className="text-white/50" />
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs text-white/70 mt-2">
+                  Send your crypto to this address
+                </p>
+              </div>
+            )}
+        </div>
+      );
+    }
+
+    if (step === "completed") {
+      return (
+        <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl p-4 lg:p-6 space-y-4">
+          <div className="text-center mb-6">
+            <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-white mb-2">
+              Transaction Completed
+            </h2>
+            <p className="text-white/50">
+              Your transaction has been completed successfully
+            </p>
+          </div>
+
+          {reference && (
+            <div className="p-4 bg-black/50 rounded-xl">
+              <p className="text-white/70 mb-2">Reference</p>
+              <code className="text-sm text-white font-mono">{reference}</code>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button className="flex-1" onClick={handleResetForm}>
+              New Transaction
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
 
   return (
-    <div className="min-h-screen bg-background overflow-hidden">
-      {/* Gradient orbs */}
-      <div 
-        className="fixed w-[600px] h-[600px] rounded-full bg-gradient-to-r from-white/5 to-transparent blur-3xl pointer-events-none transition-transform duration-1000 ease-out"
-        style={{
-          left: mousePosition.x - 300,
-          top: mousePosition.y - 300,
+    <div className="bg-background overflow-hidden">
+      {/* <GridLines /> */}
+      <Header onOpenAuthModal={() => setIsAuthModalOpen(true)} />
+      <section className="relative min-h-screen flex items-center pt-32 pb-20 px-6 overflow-hidden">
+        <HeroBackground />
+
+        <div className="max-w-5xl mx-auto w-full relative z-10">
+          <div className="text-center mb-12">
+            <h1 className="text-3xl max-w-2xl mx-auto md:text-5xl font-bold mb-4">
+              Move <span className="text-secondary">money</span> between
+              <span className="text-secondary"> crypto</span> and your{" "}
+              <span className="text-secondary">bank</span>
+            </h1>
+          </div>
+          <div className="max-w-xl mx-auto">{renderContent()}</div>
+        </div>
+      </section>
+
+      {activeTab === "buy" ? (
+        <CryptoSelectionModal
+          open={isCryptoModalOpen}
+          onOpenChange={setIsCryptoModalOpen}
+          selectedCrypto="CNGN"
+          onSelect={() => {}}
+          showComingSoon={true}
+        />
+      ) : (
+        <CryptoSelectionModal
+          open={isCryptoModalOpen}
+          onOpenChange={setIsCryptoModalOpen}
+          selectedCrypto={cryptoType}
+          onSelect={handleCryptoSelect}
+        />
+      )}
+
+      <CryptoSelectionModal
+        open={isFromCryptoModalOpen}
+        onOpenChange={setIsFromCryptoModalOpen}
+        selectedCrypto={fromCryptoType}
+        onSelect={handleFromCryptoSelect}
+      />
+
+      <CryptoSelectionModal
+        open={isToCryptoModalOpen}
+        onOpenChange={setIsToCryptoModalOpen}
+        selectedCrypto={toCryptoType}
+        onSelect={handleToCryptoSelect}
+      />
+
+      <EmailOtpModal
+        open={isAuthModalOpen}
+        onOpenChange={setIsAuthModalOpen}
+        onSuccess={() => {
+          if (activeTab === "sell" && sellAmount && bankCode && accountNumber) {
+            setTimeout(() => {
+              const form = document.querySelector("form") as HTMLFormElement;
+              if (form) form.requestSubmit();
+            }, 100);
+          } else if (activeTab === "buy" && buyAmount && walletAddress) {
+            setTimeout(() => {
+              const form = document.querySelector("form") as HTMLFormElement;
+              if (form) form.requestSubmit();
+            }, 100);
+          }
         }}
       />
-      
-      {/* Grid pattern */}
-      <div className="fixed inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px] pointer-events-none" />
-
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50">
-        <div className="mx-6 mt-6">
-          <div className="max-w-7xl mx-auto px-6 py-4 rounded-2xl bg-background/50 backdrop-blur-xl border border-white/10">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center">
-                  <span className="text-black font-black text-lg">A</span>
-                </div>
-                <span className="font-bold text-xl tracking-tight">AutoRamp</span>
-              </div>
-              <nav className="hidden md:flex items-center gap-8">
-                <a href="#features" className="text-sm text-white/60 hover:text-white transition-colors">Features</a>
-                <a href="#how-it-works" className="text-sm text-white/60 hover:text-white transition-colors">How it works</a>
-                <a href="#api" className="text-sm text-white/60 hover:text-white transition-colors">API</a>
-              </nav>
-              <div className="flex items-center gap-3">
-                <Link href="/auth/signin">
-                  <Button variant="ghost" size="sm">Sign In</Button>
-                </Link>
-                <Link href="/auth/signup">
-                  <Button size="sm">
-                    Get Started
-                    <ChevronRight size={16} />
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Hero */}
-      <section className="relative min-h-screen flex items-center pt-32 pb-20 px-6">
-        <div className="max-w-7xl mx-auto w-full">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-            <div className="space-y-8">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 bg-white/5 text-sm">
-                <Sparkles size={14} className="text-white" />
-                <span className="text-white/80">Now live on Base</span>
-              </div>
-              
-              <h1 className="text-6xl md:text-8xl font-bold leading-[0.9] tracking-tighter">
-                <span className="block">Naira to Crypto</span>
-          </h1>
-              
-              <p className="text-lg text-white/50 max-w-md leading-relaxed">
-                The fastest on/off ramp for Nigerian Naira. 
-                Convert in seconds, not days.
-              </p>
-              
-              <div className="flex gap-4 pt-4">
-                <Link href="/auth/signup">
-                  <Button size="lg" className="h-14 px-6 text-sm rounded-full">
-                    Start Trading
-                    <ArrowRight size={20} />
-                  </Button>
-                </Link>
-                <Link href="#how-it-works">
-                  <Button size="lg" variant="outline" className="h-14 px-6 text-sm rounded-full border-white/20 hover:bg-white/5">
-                    See how it works
-                  </Button>
-                </Link>
-              </div>
-            </div>
-
-            {/* Hero visual */}
-            <div className="relative hidden lg:block">
-              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent rounded-3xl blur-3xl" />
-              
-              {/* Cards stack */}
-              <div className="relative space-y-4">
-                <div className="p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm transform hover:scale-[1.02] transition-transform">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-green-500/20 text-green-400 flex items-center justify-center">
-                        <ArrowDownLeft size={20} />
-                      </div>
-                      <div>
-                        <p className="text-sm text-white/50">Buy Crypto</p>
-                        <p className="font-semibold">OnRamp</p>
-                      </div>
-                    </div>
-                    <span className="text-green-400 text-sm font-medium">+2.5%</span>
-                  </div>
-                  <div className="h-px bg-white/10 mb-4" />
-                  <div className="flex justify-between text-sm">
-                    <span className="text-white/50">NGN → CNGN</span>
-                    <span className="font-mono">₦100,000</span>
-                  </div>
-                </div>
-
-                <div className="p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm transform hover:scale-[1.02] transition-transform ml-8">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center">
-                        <ArrowUpRight size={20} />
-                      </div>
-                      <div>
-                        <p className="text-sm text-white/50">Sell Crypto</p>
-                        <p className="font-semibold">OffRamp</p>
-                      </div>
-                    </div>
-                    <span className="text-orange-400 text-sm font-medium">Instant</span>
-                  </div>
-                  <div className="h-px bg-white/10 mb-4" />
-                  <div className="flex justify-between text-sm">
-                    <span className="text-white/50">CNGN → NGN</span>
-                    <span className="font-mono">100 CNGN</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats marquee */}
-      <section className="py-8 border-y border-white/10 bg-white/[0.02] overflow-hidden">
-        <div className="flex animate-marquee whitespace-nowrap">
-          {[...Array(2)].map((_, i) => (
-            <div key={i} className="flex items-center gap-16 mx-8">
-              <div className="flex items-center gap-4">
-                <span className="text-4xl font-bold">₦<AnimatedCounter target={50} />M+</span>
-                <span className="text-white/40 text-sm">Volume</span>
-              </div>
-              <div className="w-px h-8 bg-white/10" />
-              <div className="flex items-center gap-4">
-                <span className="text-4xl font-bold"><AnimatedCounter target={5000} />+</span>
-                <span className="text-white/40 text-sm">Users</span>
-              </div>
-              <div className="w-px h-8 bg-white/10" />
-              <div className="flex items-center gap-4">
-                <span className="text-4xl font-bold">&lt;<AnimatedCounter target={30} />s</span>
-                <span className="text-white/40 text-sm">Avg. Time</span>
-              </div>
-              <div className="w-px h-8 bg-white/10" />
-              <div className="flex items-center gap-4">
-                <span className="text-4xl font-bold"><AnimatedCounter target={4} /></span>
-                <span className="text-white/40 text-sm">Networks</span>
-              </div>
-              <div className="w-px h-8 bg-white/10" />
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Features */}
-      <section id="features" className="py-32 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="max-w-2xl mb-20">
-            <p className="text-white/40 text-sm font-medium tracking-widest uppercase mb-4">Features</p>
-            <h2 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
-              Built for speed.<br />
-              <span className="text-white/30">Designed for Africa.</span>
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {[
-              {
-                title: "Lightning Fast",
-                description: "Complete transactions in under 30 seconds. No waiting, no delays.",
-                metric: "<30s",
-                metricLabel: "avg transaction"
-              },
-              {
-                title: "Bank Transfer",
-                description: "Pay directly from your Nigerian bank account. No cards needed.",
-                metric: "200+",
-                metricLabel: "banks supported"
-              },
-              {
-                title: "Multi-Chain",
-                description: "Access Base, Ethereum, Polygon, and BSC all in one place.",
-                metric: "4",
-                metricLabel: "networks"
-              }
-            ].map((feature, i) => (
-              <div 
-                key={i}
-                className="group relative p-8 rounded-3xl bg-white/[0.02] border border-white/10 hover:border-white/20 hover:bg-white/[0.04] transition-all duration-300"
-              >
-                <div className="absolute top-8 right-8 text-right">
-                  <p className="text-3xl font-bold font-mono">{feature.metric}</p>
-                  <p className="text-xs text-white/40">{feature.metricLabel}</p>
-                </div>
-                <div className="pt-20">
-                  <h3 className="text-xl font-bold mb-3">{feature.title}</h3>
-                  <p className="text-white/50 leading-relaxed">{feature.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section id="how-it-works" className="py-32 px-6 bg-white/[0.02]">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center max-w-2xl mx-auto mb-20">
-            <p className="text-white/40 text-sm font-medium tracking-widest uppercase mb-4">How it works</p>
-            <h2 className="text-4xl md:text-6xl font-bold tracking-tight">
-              Three steps.<br />
-              <span className="text-white/30">That&apos;s it.</span>
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              { step: "01", title: "Create Account", desc: "Sign up with your email in under a minute" },
-              { step: "02", title: "Verify Identity", desc: "Quick KYC with BVN or NIN verification" },
-              { step: "03", title: "Start Trading", desc: "Buy or sell crypto via bank transfer" },
-            ].map((item, i) => (
-              <div key={i} className="relative">
-                <div className="text-8xl font-bold text-white/5 absolute -top-4 -left-2">{item.step}</div>
-                <div className="relative pt-16 pl-4">
-                  <h3 className="text-2xl font-bold mb-3">{item.title}</h3>
-                  <p className="text-white/50">{item.desc}</p>
-                </div>
-                {i < 2 && (
-                  <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-px bg-white/20" />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Services */}
-      <section className="py-32 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="group relative p-10 rounded-3xl bg-white/5 border border-white/10 overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-black/5 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2 group-hover:scale-150 transition-transform duration-700" />
-              <div className="relative">
-                <div className="w-14 h-14 rounded-2xl bg-white text-black flex items-center justify-center mb-8">
-                  <ArrowDownLeft size={28} />
-                </div>
-                <h3 className="text-3xl font-bold mb-4">Buy Crypto</h3>
-                <p className="text-white/60 mb-8 text-lg leading-relaxed">
-                  Convert Nigerian Naira to crypto instantly. Pay via bank transfer, receive tokens in your wallet.
-                </p>
-                <ul className="space-y-3 mb-8">
-                  {["Pay with any Nigerian bank", "Receive in 30 seconds", "Multiple networks supported"].map((item, i) => (
-                    <li key={i} className="flex items-center gap-3 text-white/70">
-                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <Link href="/auth/signup">
-                  <Button className="bg-white text-black rounded-full h-12 px-6">
-                    Start Buying
-                    <ArrowRight size={18} />
-                  </Button>
-                </Link>
-              </div>
-            </div>
-
-            <div className="group relative p-10 rounded-3xl bg-white/5 border border-white/10 overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2 group-hover:scale-150 transition-transform duration-700" />
-              <div className="relative">
-                <div className="w-14 h-14 rounded-2xl bg-white text-black flex items-center justify-center mb-8">
-                  <ArrowUpRight size={28} />
-                </div>
-                <h3 className="text-3xl font-bold mb-4">Sell Crypto</h3>
-                <p className="text-white/60 mb-8 text-lg leading-relaxed">
-                  Convert crypto back to Naira. Send tokens, receive NGN directly in your bank account.
-                </p>
-                <ul className="space-y-3 mb-8">
-                  {["Send from any wallet", "Instant bank transfer", "Competitive rates"].map((item, i) => (
-                    <li key={i} className="flex items-center gap-3 text-white/70">
-                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <Link href="/auth/signup">
-                  <Button variant="outline" className="bg-white text-black rounded-full h-12 px-6">
-                    Start Selling
-                    <ArrowRight size={18} />
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* API */}
-      <section id="api" className="py-32 px-6 bg-white/[0.02]">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-            <div>
-              <p className="text-white/40 text-sm font-medium tracking-widest uppercase mb-4">For Developers</p>
-              <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-6">
-                Powerful API.<br />
-                <span className="text-white/30">Simple integration.</span>
-              </h2>
-              <p className="text-white/50 text-lg leading-relaxed mb-8">
-                Integrate AutoRamp into your application with just a few lines of code. 
-                Perfect for exchanges, wallets, and fintech platforms.
-              </p>
-              <Link href="/auth/signup">
-                <Button size="lg" className="rounded-full h-14 px-8">
-                  Get API Access
-                  <ArrowRight size={20} />
-                </Button>
-              </Link>
-            </div>
-
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent rounded-3xl blur-2xl" />
-              <div className="relative p-6 rounded-2xl bg-black border border-white/10 font-mono text-sm overflow-hidden">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-3 h-3 rounded-full bg-white/20" />
-                  <div className="w-3 h-3 rounded-full bg-white/20" />
-                  <div className="w-3 h-3 rounded-full bg-white/20" />
-                </div>
-                <pre className="text-white/70 overflow-x-auto">
-{`curl -X POST https://api.cngn.app/onramp \\
-  -H "x-api-key: sk_live_..." \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "amount": 100000,
-    "network": "base",
-    "destination": {
-      "address": "0x..."
-    }
-  }'`}
-                </pre>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="py-32 px-6">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
-            Ready to start?
-          </h2>
-          <p className="text-white/50 text-xl mb-10 max-w-xl mx-auto">
-            Join thousands of Nigerians converting Naira to crypto every day.
-          </p>
-          <Link href="/auth/signup">
-            <Button size="lg" className="h-16 px-10 text-lg rounded-full">
-              Create Free Account
-              <ArrowRight size={24} />
-            </Button>
-          </Link>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="py-8 px-6 border-t border-white/10">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center">
-              <span className="text-black font-black text-sm">A</span>
-            </div>
-            <span className="font-bold tracking-tight">AutoRamp</span>
-          </div>
-          <p className="text-sm text-white/40">
-            © 2025 AutoRamp. All rights reserved.
-          </p>
-        </div>
-      </footer>
-
-      <style jsx>{`
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .animate-marquee {
-          animation: marquee 20s linear infinite;
-        }
-      `}</style>
     </div>
   );
 }

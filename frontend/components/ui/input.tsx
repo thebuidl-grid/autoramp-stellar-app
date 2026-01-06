@@ -25,12 +25,13 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <input
             type={isPassword && showPassword ? "text" : type}
             className={cn(
-              "flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-sm ring-offset-background transition-all duration-200",
+              "flex h-12 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition-all duration-200",
               "file:border-0 file:bg-transparent file:text-sm file:font-medium",
-              "placeholder:text-muted-foreground",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              "placeholder:text-white/30",
+              "focus:ring-0 focus:outline-0 focus:border-2 focus:border-secondary",
+              "focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-0 focus-visible:border-2 focus-visible:border-secondary",
               "disabled:cursor-not-allowed disabled:opacity-50",
-              error && "border-destructive focus-visible:ring-destructive",
+              error && "border-destructive focus:border-destructive focus-visible:border-destructive",
               isPassword && "pr-11",
               className
             )}

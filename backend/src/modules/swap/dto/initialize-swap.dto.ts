@@ -40,7 +40,7 @@ export class InitializeSwapDto {
     description: 'USDC amount for swap (amount user wants to swap)',
   })
   @IsNumber()
-  @Min(0.000001)
+  @Min(1, { message: 'USDC amount must be at least 1' })
   usdcAmount: number;
 
   @ApiProperty({
