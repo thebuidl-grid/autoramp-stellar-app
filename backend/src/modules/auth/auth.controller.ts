@@ -35,29 +35,24 @@ export class AuthController {
   @Public()
   @Throttle({ short: { limit: 5, ttl: 60000 } }) // 5 requests per minute
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Register a new user (requires OTP verification)' })
+  @ApiOperation({ summary: 'Sign up or login with email and OTP (simplified auth)' })
   @ApiBody({ type: SignUpDto })
   @ApiResponse({
     status: 201,
-    description: 'User successfully registered',
+    description: 'User signed up or logged in successfully',
     schema: {
       example: {
         user: {
           id: 'uuid',
           email: 'user@example.com',
-          phoneNumber: '+2348012345678',
+          phoneNumber: null,
           walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
-          kycStatus: 'PENDING',
           role: 'USER',
           createdAt: '2024-01-01T00:00:00.000Z',
         },
         accessToken: 'jwt-token-string',
       },
     },
-  })
-  @ApiResponse({
-    status: 409,
-    description: 'User with this email already exists',
   })
   async signUp(@Body() signUpDto: SignUpDto) {
     return this.authService.signUp(signUpDto);

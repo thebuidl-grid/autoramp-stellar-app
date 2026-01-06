@@ -92,3 +92,20 @@ export function getStatusBadge(status: string): string {
   return `${baseClasses} ${statusClasses[status] || "bg-muted text-muted-foreground"}`;
 }
 
+
+export function formatNumber(value: string): string {
+  const numericValue = value.replace(/[^\d.]/g, "");
+  
+  const parts = numericValue.split(".");
+  const integerPart = parts[0];
+  const decimalPart = parts[1];
+  
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  
+  return decimalPart !== undefined ? `${formattedInteger}.${decimalPart}` : formattedInteger;
+}
+
+export function parseFormattedNumber(value: string): number {
+  const numericValue = value.replace(/,/g, "");
+  return parseFloat(numericValue) || 0;
+}

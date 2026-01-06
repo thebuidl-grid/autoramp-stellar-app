@@ -39,11 +39,8 @@ api.interceptors.response.use(
         localStorage.removeItem("token");
         localStorage.removeItem("auth-storage");
         // Only redirect if not already on auth page
-        if (
-          !window.location.pathname.startsWith("/auth") &&
-          window.location.pathname !== "/"
-        ) {
-          window.location.href = "/auth/signin";
+        if (!window.location.pathname.startsWith("/auth") && window.location.pathname !== "/") {
+          window.location.href = "/";
         }
       }
     }
@@ -75,9 +72,8 @@ export function getErrorMessage(error: unknown): string {
 
 export interface SignUpDto {
   email: string;
-  password: string;
-  phoneNumber: string;
   otpCode: string;
+  walletAddress?: string;
 }
 
 export interface SendOtpDto {
@@ -226,39 +222,78 @@ export interface Transaction {
   accountNumber?: string;
   accountName?: string;
   bankName?: string;
+  network?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  depositAddress?: string;
+  depositAccount?: any;
+  metadata?: any;
+}
 
-  // Swap specific fields (combined from existing SwapTransaction and TransactionDto)
-  fromTokenType?: string; // from SwapTransaction and TransactionDto
-  fromAmount?: number; // from SwapTransaction and TransactionDto
-  toTokenType?: string; // from TransactionDto
-  toAmount?: number; // from SwapTransaction and TransactionDto
-  exchangeRate?: number; // from SwapTransaction
-  sourceAddress?: string; // from TransactionDto
-  destinationAddress_swap?: string; // from TransactionDto
+export interface SwapTransaction {
+  id: string;
+  reference: string;
+  fromTokenType: string;
+  fromAmount: number;
+  toTokenType: string;
+  toAmount: number;
+  exchangeRate: number;
+  sourceAddress: string;
+  destinationAddress: string;
+  status: string;
+  transactionHash?: string;
+  fromNetwork?: string;
+  toNetwork?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
 }
 
 export interface TransactionsResponse {
-  transactions: Transaction[]; // Unified transactions
+  onramp: Transaction[];
+  offramp: Transaction[];
+  swap: SwapTransaction[];
   total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ResolveAccountResponse {
+  status?: string;
+  message?: string;
+  data?: {
+    accountName?: string;
+    accountNumber?: string;
+    bankCode?: string;
+  };
 }
 
 export const stablestackApi = {
-  getBanks: () =>
-    api.get<{ status: string; message: string; data: Bank[] }>(
-      "/stablestack/banks",
-    ),
-
-  onRamp: (data: OnRampDto) => api.post("/stablestack/onramp", data),
-
-  offRamp: (data: OffRampDto) => api.post("/stablestack/offramp", data),
-
-  getTransactions: (id?: string, reference?: string) => {
+  getBanks: () => 
+    api.get<{ status: string; message: string; data: Bank[] }>("/stablestack/banks"),
+  
+  resolveAccount: (bankCode: string, accountNumber: string) => {
+    const params = new URLSearchParams();
+    params.append("bankCode", bankCode);
+    params.append("accountNumber", accountNumber);
+    return api.get<ResolveAccountResponse>(`/stablestack/resolve-account?${params.toString()}`);
+  },
+  
+  onRamp: (data: OnRampDto) => 
+    api.post("/stablestack/onramp", data),
+  
+  offRamp: (data: OffRampDto) => 
+    api.post("/stablestack/offramp", data),
+  
+  getTransactions: (id?: string, reference?: string, page?: number, limit?: number) => {
     const params = new URLSearchParams();
     if (id) params.append("id", id);
     if (reference) params.append("reference", reference);
-    return api.get<TransactionsResponse>(
-      `/stablestack/transactions?${params.toString()}`,
-    );
+    if (page) params.append("page", page.toString());
+    if (limit) params.append("limit", limit.toString());
+    return api.get<TransactionsResponse>(`/stablestack/transactions?${params.toString()}`);
   },
 };
 
@@ -390,28 +425,41 @@ export interface UpdateSwapDto {
   sourceAddress: string;
 }
 
-// Remove SwapTransaction interface as it's merged into Transaction
-// export interface SwapTransaction {
-//   id: string;
-//   reference: string;
-//   fromAmount: number;
-//   toAmount: number;
-//   exchangeRate: number;
-//   status: string;
-//   createdAt: string;
-//   transactionHash?: string;
-//   sourceAddress?: string;
-// }
+export interface CreateSimpleSwapDto {
+  fromTokenType: string;
+  toTokenType: string;
+  fromAmount: number;
+  toAmount: number;
+  exchangeRate: number;
+  sourceAddress: string;
+  destinationAddress: string;
+  network?: string;
+  slippage?: number;
+}
 
-export interface AdminTransactionsResponse {
-  transactions: Transaction[]; // Unified transactions
+export interface CreateSimpleSwapResponse {
+  id: string;
+  reference: string;
+  fromTokenType: string;
+  fromAmount: number;
+  toTokenType: string;
+  toAmount: number;
+  exchangeRate: number;
+  sourceAddress: string;
+  destinationAddress: string;
+  status: string;
+  network: string;
+  createdAt: string;
 }
 
 export const swapApi = {
   initializeSwap: (data: InitializeSwapDto) =>
     api.post<SwapResponse>("/swap/initialize", data),
-
-  updateSwapAfterExecution: (reference: string, data: UpdateSwapDto) =>
+  
+  createSimpleSwap: (data: CreateSimpleSwapDto) => 
+    api.post<CreateSimpleSwapResponse>("/swap/create", data),
+  
+  updateSwapAfterExecution: (reference: string, data: UpdateSwapDto) => 
     api.post(`/swap/${reference}/complete`, data),
 
   getTokenBalance: (token: string, address: string) =>

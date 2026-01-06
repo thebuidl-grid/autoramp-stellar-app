@@ -32,41 +32,25 @@ export class AuthService {
   ) {}
 
   /**
-   * Register a new user
+   * Sign up or Login (Email-only authentication)
    * 
-   * Creates a new user account with hashed password.
-   * Requires OTP verification before account creation.
-   * Email must be unique.
+   * Simplified authentication flow:
+   * - Verifies OTP code
+   * - If user exists: logs them in
+   * - If user doesn't exist: creates new account automatically
    * 
-   * @param signUpDto - User registration data including OTP code
-   * @returns User object (without password) and access token
+   * @param signUpDto - User email and OTP code
+   * @returns User object and access token
    */
   async signUp(signUpDto: SignUpDto) {
-    const { email, password, walletAddress, phoneNumber, otpCode } = signUpDto;
+    const { email, walletAddress, otpCode } = signUpDto;
 
     // Verify OTP first
     await this.otpService.verifyOtp(email, otpCode, 'SIGNUP');
 
     // Check if user already exists
-    const existingUser = await this.prisma.user.findUnique({
+    let user = await this.prisma.user.findUnique({
       where: { email },
-    });
-
-    if (existingUser) {
-      throw new ConflictException('User with this email already exists');
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create user
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        walletAddress,
-        phoneNumber,
-      },
       select: {
         id: true,
         email: true,
@@ -76,6 +60,42 @@ export class AuthService {
         createdAt: true,
       },
     });
+
+    if (user) {
+      // Existing user: just log them in
+      // Update wallet address if provided and different
+      if (walletAddress && user.walletAddress !== walletAddress) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { walletAddress },
+          select: {
+            id: true,
+            email: true,
+            phoneNumber: true,
+            walletAddress: true,
+            role: true,
+            createdAt: true,
+          },
+        });
+      }
+    } else {
+      // New user: create account (no password needed)
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          password: '', // Empty password for email-only auth
+          walletAddress,
+        },
+        select: {
+          id: true,
+          email: true,
+          phoneNumber: true,
+          walletAddress: true,
+          role: true,
+          createdAt: true,
+        },
+      });
+    }
 
     // Generate JWT token
     const token = this.generateToken(user.id, user.email, user.role);
@@ -106,7 +126,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    // Verify password
+    // Verify password (only if password exists)
+    if (!user.password) {
+      throw new UnauthorizedException('Please use email verification to sign in');
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {

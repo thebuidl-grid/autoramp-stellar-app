@@ -86,3 +86,13 @@ export function useOffRamp() {
   });
 }
 
+/**
+ * Resolve Account Hook
+ */
+export function useResolveAccount() {
+  return useMutation({
+    mutationFn: ({ bankCode, accountNumber }: { bankCode: string; accountNumber: string }) =>
+      stablestackApi.resolveAccount(bankCode, accountNumber),
+  });
+}
+
