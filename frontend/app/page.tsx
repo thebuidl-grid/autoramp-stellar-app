@@ -46,6 +46,7 @@ import {
 } from "@/lib/constants/swap-constants";
 import { parseUnits, formatUnits } from "viem";
 import { useTransactionStore } from "@/lib/store";
+import { QUOTER_ABI, QUOTER_ADDRESS } from "@/lib/constants/quoter-constants";
 
 export default function HomePage() {
   const { toast } = useToast();
@@ -470,6 +471,55 @@ export default function HomePage() {
       }
     };
   }, [accountNumber, bankCode, activeTab, resolveAccount.mutate]);
+
+  const isFromUSDC = fromCryptoType === "USDC";
+  const tokenInAddress = isFromUSDC ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN;
+  const tokenOutAddress = isFromUSDC
+    ? SWAP_CONSTANTS.CNGN
+    : SWAP_CONSTANTS.USDC;
+
+  const tokenInDecimals = isFromUSDC
+    ? SWAP_CONSTANTS.USDC_DECIMALS
+    : SWAP_CONSTANTS.CNGN_DECIMALS;
+
+  const tokenOutDecimals = isFromUSDC
+    ? SWAP_CONSTANTS.CNGN_DECIMALS
+    : SWAP_CONSTANTS.USDC_DECIMALS;
+
+  const parsedSellAmountBigInt = sellAmount
+    ? parseUnits(parseFormattedNumber(sellAmount).toString(), tokenInDecimals)
+    : 0n;
+
+  const {
+    data: quoteResult,
+    isLoading: isQuoteLoading,
+    error: quoteError,
+  } = useReadContract({
+    address: QUOTER_ADDRESS,
+    abi: QUOTER_ABI,
+    functionName: "quoteExactInputSingle",
+    args: [
+      {
+        tokenIn: tokenInAddress as `0x${string}`,
+        tokenOut: tokenOutAddress as `0x${string}`,
+        amountIn: parsedSellAmountBigInt,
+        tickSpacing: 10,
+        sqrtPriceLimitX96: 0n,
+      },
+    ],
+    query: {
+      enabled:
+        activeTab === "swap" &&
+        parsedSellAmountBigInt > 0n &&
+        !!tokenInAddress &&
+        !!tokenOutAddress,
+      staleTime: 10_000,
+    },
+  });
+
+  console.log(quoteResult, "quote result");
+
+  const quoteAmountOut = quoteResult ? (quoteResult as any)[0] : 0n;
 
   // Handle sell: CNGN to NGN (offramp) or USDC to NGN (swap)
   const handleSell = async () => {
@@ -997,33 +1047,18 @@ export default function HomePage() {
                 : activeTab === "swap"
                 ? (() => {
                     if (!sellAmount) return "";
-                    const parsed = parseFormattedNumber(sellAmount);
-                    // For swap, if from is USDC, convert to CNGN (NGN equivalent)
-                    if (
-                      fromCryptoType === "USDC" &&
-                      ngnEstimate?.estimatedNgn
-                    ) {
-                      return Math.round(
-                        ngnEstimate.estimatedNgn
-                      ).toLocaleString("en-NG");
-                    } else if (
-                      fromCryptoType === "CNGN" &&
-                      toCryptoType === "USDC" &&
-                      usdNgnRate
-                    ) {
-                      // CNGN to USDC: Divide by USD/NGN rate (since 1 CNGN ≈ 1 NGN)
-                      const usdcAmount = parsed / usdNgnRate;
-                      return usdcAmount.toLocaleString("en-US", {
+                    if (quoteAmountOut > 0n) {
+                      const formatted = formatUnits(
+                        quoteAmountOut,
+                        tokenOutDecimals
+                      );
+
+                      return parseFloat(formatted).toLocaleString("en-US", {
                         minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
+                        maximumFractionDigits: 3,
                       });
-                    } else if (
-                      fromCryptoType === "CNGN" &&
-                      toCryptoType === "CNGN"
-                    ) {
-                      return parsed.toLocaleString("en-NG");
                     }
-                    return "";
+                    return "0.00";
                   })()
                 : (() => {
                     if (!sellAmount) return "";
@@ -1052,7 +1087,10 @@ export default function HomePage() {
                 : undefined
             }
             disabled={true}
-            isLoading={needsConversion && isLoadingEstimate}
+            isLoading={
+              (needsConversion && isLoadingEstimate) ||
+              (activeTab === "swap" && isQuoteLoading)
+            }
           />
 
           {activeTab === "buy" && (
@@ -1129,7 +1167,7 @@ export default function HomePage() {
           )}
 
           {(activeTab === "sell" && cryptoType === "USDC") ||
-          (activeTab === "swap") ? (
+          activeTab === "swap" ? (
             <div className="p-4 rounded-xl bg-black/50 border border-white/10">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-white/70">Wallet Connection</span>
