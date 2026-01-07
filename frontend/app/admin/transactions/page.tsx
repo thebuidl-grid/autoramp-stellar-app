@@ -15,11 +15,13 @@ import { OffRampTable } from "@/components/admin/transactions/OffRampTable";
 import { SwapTable } from "@/components/admin/transactions/SwapTable";
 import { useAdminTransactionSummary } from "@/lib/hooks/use-admin";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TransactionsOverview } from "@/components/admin/transactions/TransactionsOverview";
 
 export default function AdminTransactionsPage() {
-  const { data: stats, isLoading, isError } = useAdminTransactionSummary();
+  const { data: response, isLoading, isError } = useAdminTransactionSummary();
+  const stats = response?.data;
 
-  const [activeTab, setActiveTab] = useState("onramp");
+  const [activeTab, setActiveTab] = useState("overview");
   const [referenceSearchTerm, setReferenceSearchTerm] = useState("");
 
   if (isLoading) {
@@ -266,6 +268,8 @@ export default function AdminTransactionsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <TransactionsOverview />
 
       <Card>
         <CardHeader>
