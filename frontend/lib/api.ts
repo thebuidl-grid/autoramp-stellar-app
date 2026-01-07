@@ -222,13 +222,6 @@ export interface Transaction {
   accountNumber?: string;
   accountName?: string;
   bankName?: string;
-  network?: string;
-  createdAt: string;
-  updatedAt: string;
-  completedAt?: string;
-  depositAddress?: string;
-  depositAccount?: any;
-  metadata?: any;
 }
 
 export interface SwapTransaction {
@@ -271,22 +264,22 @@ export interface ResolveAccountResponse {
 }
 
 export const stablestackApi = {
-  getBanks: () => 
+  getBanks: () =>
     api.get<{ status: string; message: string; data: Bank[] }>("/stablestack/banks"),
-  
+
   resolveAccount: (bankCode: string, accountNumber: string) => {
     const params = new URLSearchParams();
     params.append("bankCode", bankCode);
     params.append("accountNumber", accountNumber);
     return api.get<ResolveAccountResponse>(`/stablestack/resolve-account?${params.toString()}`);
   },
-  
-  onRamp: (data: OnRampDto) => 
+
+  onRamp: (data: OnRampDto) =>
     api.post("/stablestack/onramp", data),
-  
-  offRamp: (data: OffRampDto) => 
+
+  offRamp: (data: OffRampDto) =>
     api.post("/stablestack/offramp", data),
-  
+
   getTransactions: (id?: string, reference?: string, page?: number, limit?: number) => {
     const params = new URLSearchParams();
     if (id) params.append("id", id);
@@ -365,6 +358,11 @@ export const adminApi = {
   },
   getAdminTransactionSummary: () =>
     api.get<AdminTransactionSummaryResponse>(`/admin/transactions/summary`),
+
+  getAnalytics: (period: "daily" | "weekly" | "monthly" = "daily") =>
+    api.get<AnalyticsDataPoint[]>(
+      `/admin/transactions/analytics?period=${period}`,
+    ),
 };
 
 export interface AdminTransactionSummaryResponse {
@@ -380,6 +378,16 @@ export interface AdminTransactionSummaryResponse {
     count: number;
     totalAmount: number;
   };
+}
+
+export interface AnalyticsDataPoint {
+  date: string;
+  onRampCount: number;
+  offRampCount: number;
+  swapCount: number;
+  onRampVolume: number;
+  offRampVolume: number;
+  swapVolume: number;
 }
 // ============== Swap API ==============
 
@@ -455,11 +463,11 @@ export interface CreateSimpleSwapResponse {
 export const swapApi = {
   initializeSwap: (data: InitializeSwapDto) =>
     api.post<SwapResponse>("/swap/initialize", data),
-  
-  createSimpleSwap: (data: CreateSimpleSwapDto) => 
+
+  createSimpleSwap: (data: CreateSimpleSwapDto) =>
     api.post<CreateSimpleSwapResponse>("/swap/create", data),
-  
-  updateSwapAfterExecution: (reference: string, data: UpdateSwapDto) => 
+
+  updateSwapAfterExecution: (reference: string, data: UpdateSwapDto) =>
     api.post(`/swap/${reference}/complete`, data),
 
   getTokenBalance: (token: string, address: string) =>
