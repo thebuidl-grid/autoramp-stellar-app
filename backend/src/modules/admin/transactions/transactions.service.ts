@@ -1,10 +1,106 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/database/prisma.service';
 import { TransactionSummaryDto } from './dto/transaction-summary.dto';
+import { GetAnalyticsDto, AnalyticsPeriod } from './dto/get-analytics.dto';
+import { AnalyticsDataPoint } from './dto/analytics-response.dto';
 
 @Injectable()
 export class TransactionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
+
+  async getAnalytics(query: GetAnalyticsDto): Promise<AnalyticsDataPoint[]> {
+    const { period } = query;
+    const now = new Date();
+    let startDate: Date;
+
+    // Determine start date based on period
+    switch (period) {
+      case AnalyticsPeriod.DAILY:
+        startDate = new Date(now.setDate(now.getDate() - 30)); // Last 30 days
+        break;
+      case AnalyticsPeriod.WEEKLY:
+        startDate = new Date(now.setDate(now.getDate() - 7 * 12)); // Last 12 weeks
+        break;
+      case AnalyticsPeriod.MONTHLY:
+        startDate = new Date(now.setMonth(now.getMonth() - 12)); // Last 12 months
+        break;
+      default:
+        startDate = new Date(now.setDate(now.getDate() - 30));
+    }
+
+    // Fetch raw data
+    const [onRamps, offRamps, swaps] = await Promise.all([
+      this.prisma.onrampTransaction.findMany({
+        where: { createdAt: { gte: startDate } },
+        select: { createdAt: true, amount: true },
+      }),
+      this.prisma.offrampTransaction.findMany({
+        where: { createdAt: { gte: startDate } },
+        select: { createdAt: true, fiatAmount: true },
+      }),
+      this.prisma.swapTransaction.findMany({
+        where: { createdAt: { gte: startDate } },
+        select: { createdAt: true, toAmount: true },
+      }),
+    ]);
+
+    // Helper to format date key
+    const getDateKey = (date: Date): string => {
+      const d = new Date(date);
+      if (period === AnalyticsPeriod.MONTHLY) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      }
+      if (period === AnalyticsPeriod.WEEKLY) {
+        const firstDay = new Date(d.setDate(d.getDate() - d.getDay()));
+        return `${firstDay.getFullYear()}-${String(firstDay.getMonth() + 1).padStart(2, '0')}-${String(firstDay.getDate()).padStart(2, '0')}`;
+      }
+      return d.toISOString().split('T')[0];
+    };
+
+    // Aggregate data
+    const analyticsMap = new Map<string, AnalyticsDataPoint>();
+
+    const processTransaction = (
+      items: any[],
+      type: 'onRamp' | 'offRamp' | 'swap',
+      amountKey: string,
+    ) => {
+      items.forEach((item) => {
+        const key = getDateKey(item.createdAt);
+        if (!analyticsMap.has(key)) {
+          analyticsMap.set(key, {
+            date: key,
+            onRampCount: 0,
+            offRampCount: 0,
+            swapCount: 0,
+            onRampVolume: 0,
+            offRampVolume: 0,
+            swapVolume: 0,
+          });
+        }
+        const entry = analyticsMap.get(key)!;
+        if (type === 'onRamp') {
+          entry.onRampCount++;
+          entry.onRampVolume += Number(item[amountKey] || 0);
+        } else if (type === 'offRamp') {
+          entry.offRampCount++;
+          entry.offRampVolume += Number(item[amountKey] || 0);
+        } else {
+          entry.swapCount++;
+          entry.swapVolume += Number(item[amountKey] || 0);
+        }
+      });
+    };
+
+    processTransaction(onRamps, 'onRamp', 'amount');
+    processTransaction(offRamps, 'offRamp', 'fiatAmount');
+    processTransaction(swaps, 'swap', 'toAmount');
+
+    // Sort by date
+    return Array.from(analyticsMap.values()).sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
+  }
 
   async getOnRamps(page: number, limit: number) {
     const [onramps, total] = await this.prisma.$transaction([
