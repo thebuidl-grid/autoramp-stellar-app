@@ -6,7 +6,7 @@ import { CreateApiKeyDto } from './dto/create-api-key.dto';
 
 @Injectable()
 export class ApiKeysService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   /**
    * Generate a new API key for a user
@@ -40,6 +40,11 @@ export class ApiKeysService {
         key: hashedKey,
         keyPrefix,
         name: dto.name || null,
+        metadata: {
+          businessName: dto.businessName,
+          trafficEstimate: dto.trafficEstimate,
+          requestLimit: dto.requestLimit,
+        },
       },
       select: {
         id: true,
@@ -48,6 +53,7 @@ export class ApiKeysService {
         isActive: true,
         createdAt: true,
         expiresAt: true,
+        metadata: true,
       },
     });
 

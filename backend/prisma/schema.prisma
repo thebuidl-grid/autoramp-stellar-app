@@ -319,6 +319,9 @@ model ApiKey {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamp
   expiresAt DateTime? @map("expires_at") @db.Timestamp
 
+  // Additional Data
+  metadata Json? @db.JsonB
+
   // Relations
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   apiRequestLogs ApiRequestLog[]
