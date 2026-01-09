@@ -8,6 +8,7 @@ import {
   AlertCircle,
   Copy,
   Loader2,
+  ArrowDown,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { formatNumber } from "@/lib/utils";
@@ -197,7 +198,16 @@ export default function HomePage() {
     onUpdate: handleWebSocketUpdate,
   });
 
-  // Get USDC balance for connected wallet
+  const { data: cngnBalance } = useReadContract({
+    address: SWAP_CONSTANTS.CNGN as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: address ? [address as `0x${string}`] : undefined,
+    query: {
+      enabled: !!address && isConnected,
+    },
+  });
+
   const { data: usdcBalance } = useReadContract({
     address: SWAP_CONSTANTS.USDC as `0x${string}`,
     abi: ERC20_ABI,
@@ -672,16 +682,24 @@ export default function HomePage() {
   const handleApprove = async () => {
     if (!swapData || !address) return;
     try {
-      const parsedAmount = parseFloat(swapData.swapParams.amountIn);
-      // Determine token address and decimals based on input token
+      // 1. Setup Tokens
       const isUSDC =
         swapData.swapParams.tokenIn.toLowerCase() ===
         SWAP_CONSTANTS.USDC.toLowerCase();
+
       const tokenAddress = isUSDC ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN;
       const decimals = isUSDC
         ? SWAP_CONSTANTS.USDC_DECIMALS
         : SWAP_CONSTANTS.CNGN_DECIMALS;
-      const tokenAmount = parseUnits(parsedAmount.toString(), decimals);
+
+      // 2. Parse Amount Safely
+      // DIRECTLY use the string from the DB/State. Do not convert to number first.
+      const rawAmountString = swapData.swapParams.amountIn;
+      const tokenAmount = parseUnits(rawAmountString, decimals);
+
+      console.log(
+        `Approving ${rawAmountString} (${tokenAmount}) for ${tokenAddress}`
+      );
 
       approveToken({
         address: tokenAddress as `0x${string}`,
@@ -690,9 +708,10 @@ export default function HomePage() {
         args: [SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`, tokenAmount],
       });
     } catch (error: any) {
+      console.error("Approval logic error:", error);
       toast({
         title: "Approval Failed",
-        description: error.message || "Failed to approve token",
+        description: error.message || "Failed to prepare approval",
         variant: "destructive",
       });
     }
@@ -701,7 +720,7 @@ export default function HomePage() {
   const handleExecuteSwap = async () => {
     if (!address || !swapData || !SWAP_CONSTANTS.SWAP_ROUTER) return;
 
-    // Determine which token is being swapped in/out and their decimals
+    // 1. Setup Tokens
     const isTokenInUSDC =
       swapData.swapParams.tokenIn.toLowerCase() ===
       SWAP_CONSTANTS.USDC.toLowerCase();
@@ -716,62 +735,40 @@ export default function HomePage() {
       ? SWAP_CONSTANTS.USDC_DECIMALS
       : SWAP_CONSTANTS.CNGN_DECIMALS;
 
+    // 2. Parse Inputs
+    // We re-parse amountIn to ensure it matches the decimals exactly
     const amountIn = parseUnits(swapData.swapParams.amountIn, tokenInDecimals);
-    const slippage = swapData.swapParams.slippage || 0.05;
+    const slippage = swapData.swapParams.slippage || 0.05; // 5%
 
-    // Calculate expected output amount
-    let expectedOutput: number;
-    const fromAmount = parseFloat(swapData.swapParams.amountIn);
+    // 3. Calculate Minimum Output (Slippage Protection)
+    // TRUST THE DB: We saved the exact quote in handleSwap, so use it.
+    const expectedOutput = Number(swapData.swap.toAmount);
 
-    if (!isTokenInUSDC && isTokenOutUSDC) {
-      // CNGN to USDC: Divide by USD/NGN rate
-      if (usdNgnRate) {
-        expectedOutput = fromAmount / usdNgnRate;
-      } else {
-        // Fallback to toAmount if available, otherwise use a very low minimum
-        expectedOutput = swapData.swap?.toAmount
-          ? Number(swapData.swap.toAmount)
-          : fromAmount * 0.0001;
-      }
-    } else if (isTokenInUSDC && !isTokenOutUSDC) {
-      // USDC to CNGN: Multiply by USD/NGN rate
-      if (usdNgnRate) {
-        expectedOutput = fromAmount * usdNgnRate;
-      } else {
-        expectedOutput = swapData.swap?.toAmount
-          ? Number(swapData.swap.toAmount)
-          : fromAmount;
-      }
-    } else {
-      // Same token type or fallback
-      expectedOutput = swapData.swap?.toAmount
-        ? Number(swapData.swap.toAmount)
-        : fromAmount;
-    }
+    // Calculate min amount: expected * (1 - slippage)
+    // e.g., 100 * 0.95 = 95
+    const minAmount = expectedOutput * (1 - slippage);
 
-    // Apply slippage tolerance to get minimum output (use a very low minimum to avoid transaction failures)
-    const minAmount = Math.max(expectedOutput * (1 - slippage), 0.000001); // At least 0.000001 to avoid zero
-    const amountOutMin = parseUnits(
-      minAmount.toFixed(tokenOutDecimals),
+    // Safety check: Ensure we don't pass 0 or negative
+    const safeMinAmount = Math.max(minAmount, 0);
+
+    // Convert to BigInt for the contract
+    // We use toFixed to avoid scientific notation bugs (e.g. 1e-7)
+    const amountOutMinimum = parseUnits(
+      safeMinAmount.toFixed(tokenOutDecimals),
       tokenOutDecimals
     );
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 120);
+
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 120); // 2 mins
 
     try {
-      console.log("executeSwap", {
-        args: [
-          {
-            tokenIn: swapData.swapParams.tokenIn as `0x${string}`,
-            tokenOut: swapData.swapParams.tokenOut as `0x${string}`,
-            tickSpacing: 10,
-            recipient: swapData.swapParams.recipient as `0x${string}`,
-            deadline,
-            amountIn,
-            amountOutMinimum: amountOutMin,
-            sqrtPriceLimitX96: BigInt(0),
-          },
-        ],
+      console.log("Executing Swap with params:", {
+        tokenIn: swapData.swapParams.tokenIn,
+        tokenOut: swapData.swapParams.tokenOut,
+        amountIn: amountIn.toString(),
+        amountOutMinimum: amountOutMinimum.toString(),
+        expectedOutput: expectedOutput,
       });
+
       executeSwap({
         address: SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
         abi: SWAP_ROUTER_ABI,
@@ -784,12 +781,13 @@ export default function HomePage() {
             recipient: swapData.swapParams.recipient as `0x${string}`,
             deadline,
             amountIn,
-            amountOutMinimum: amountOutMin,
+            amountOutMinimum,
             sqrtPriceLimitX96: BigInt(0),
           },
         ],
       });
     } catch (error: any) {
+      console.error("Swap execution error:", error);
       toast({
         title: "Swap Failed",
         description: error.message || "Failed to execute swap",
@@ -852,35 +850,22 @@ export default function HomePage() {
       return;
     }
 
-    // Calculate exchange rate and toAmount based on swap direction
-    let exchangeRate: number;
-    let toAmount: number;
-
-    if (fromCryptoType === "USDC" && toCryptoType === "CNGN") {
-      // USDC to CNGN: Multiply by USD/NGN rate
-      if (usdNgnRate) {
-        exchangeRate = usdNgnRate;
-        toAmount = parsedAmount * usdNgnRate;
-      } else {
-        // Fallback if rate not available
-        exchangeRate = 1;
-        toAmount = parsedAmount;
-      }
-    } else if (fromCryptoType === "CNGN" && toCryptoType === "USDC") {
-      // CNGN to USDC: Divide by USD/NGN rate
-      if (usdNgnRate) {
-        exchangeRate = 1 / usdNgnRate;
-        toAmount = parsedAmount / usdNgnRate;
-      } else {
-        // Fallback if rate not available
-        exchangeRate = 1;
-        toAmount = parsedAmount;
-      }
-    } else {
-      // Same token type (shouldn't happen, but fallback)
-      exchangeRate = 1;
-      toAmount = parsedAmount;
+    if (!quoteAmountOut || quoteAmountOut === 0n) {
+      toast({
+        title: "Quote not ready",
+        description:
+          "Please wait for the exchange rate to load from the blockchain.",
+        variant: "destructive",
+      });
+      return;
     }
+
+    // 4. Calculate Values using ONLY Contract Data
+    const formattedQuote = formatUnits(quoteAmountOut, tokenOutDecimals);
+    const toAmount = parseFloat(formattedQuote);
+
+    // Calculate exchange rate: (Output Amount / Input Amount)
+    const exchangeRate = parsedAmount > 0 ? toAmount / parsedAmount : 0;
 
     const swapResponseData = {
       swap: {
@@ -965,6 +950,45 @@ export default function HomePage() {
       return amountIn > allowance;
     })();
 
+  // Helper to handle percentage clicks
+  // We need to format the raw number (e.g. 1000.5) back to your input format (e.g. "1,000.5")
+  const handlePercentageClick = (rawValue: string) => {
+    // 1. Convert to number string with commas using your existing util
+    const formatted = formatNumber(rawValue);
+
+    // 2. Set the appropriate store value
+    if (activeTab === "buy") {
+      setBuyAmount(formatted);
+    } else {
+      setSellAmount(formatted);
+    }
+  };
+
+  // Helper to get the currently relevant balance
+  let activeBalance: number | undefined = undefined;
+
+  if (activeTab === "sell") {
+    if (cryptoType === "USDC" && usdcBalance) {
+      activeBalance = parseFloat(
+        formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS)
+      );
+    } else if (cryptoType === "CNGN" && cngnBalance) {
+      activeBalance = parseFloat(
+        formatUnits(cngnBalance, SWAP_CONSTANTS.CNGN_DECIMALS)
+      );
+    }
+  } else if (activeTab === "swap") {
+    if (fromCryptoType === "USDC" && usdcBalance) {
+      activeBalance = parseFloat(
+        formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS)
+      );
+    } else if (fromCryptoType === "CNGN" && cngnBalance) {
+      activeBalance = parseFloat(
+        formatUnits(cngnBalance, SWAP_CONSTANTS.CNGN_DECIMALS)
+      );
+    }
+  }
+
   // Render based on step
   const renderContent = () => {
     if (step === "form") {
@@ -1015,6 +1039,8 @@ export default function HomePage() {
                 ? () => setIsFromCryptoModalOpen(true)
                 : () => setIsCryptoModalOpen(true)
             }
+            userBalance={activeBalance}
+            onPercentageClick={handlePercentageClick}
           />
 
           <div className="flex justify-center -my-6">
@@ -1031,7 +1057,11 @@ export default function HomePage() {
                   : undefined
               }
             >
-              <ArrowUpDown size={18} className="text-black" />
+              {activeTab === "buy" || activeTab === "sell" ? (
+                <ArrowDown size={18} className="text-black" />
+              ) : (
+                <ArrowUpDown size={18} className="text-black" />
+              )}
             </button>
           </div>
 
