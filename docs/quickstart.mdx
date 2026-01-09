@@ -1,0 +1,56 @@
+---
+title: Quickstart
+description: "Start integrating AutoRamp in minutes"
+---
+
+This guide will help you perform your first transaction using the AutoRamp API.
+
+## 1. Prerequisites
+
+Before you begin, ensure you have:
+- An active account on AutoRamp.
+- An API key (`x-api-key`).
+
+## 2. Check Service Status
+
+First, verify that the API is up and running:
+
+```bash
+curl https://api.autoramp.com/health
+```
+
+## 3. Create an Onramp Transaction
+
+To allow a user to buy CNGN, you can initiate an onramp transaction:
+
+```bash
+curl -X POST https://api.autoramp.com/stablestack/onramp \
+     -H "x-api-key: your_api_key" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "amount": 1000,
+       "network": "base",
+       "destination": {
+         "address": "0x..."
+       }
+     }'
+```
+
+The response will contain a `reference` and payment details (bank account) for the user to transfer NGN.
+
+## 4. Monitor Transaction Status
+
+You can check the status of a transaction using its reference:
+
+```bash
+curl https://api.autoramp.com/stablestack/transaction/REFERENCE_ID \
+     -H "x-api-key: your_api_key"
+```
+
+## Next Steps
+
+Explore the full API reference to learn more about offramps, swaps, and account management.
+
+<Card title="API Reference" icon="code" href="/api-reference/overview">
+  View all available endpoints
+</Card>

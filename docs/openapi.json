@@ -1,0 +1,932 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/swap/balance/{token}/{address}": {
+      "get": {
+        "operationId": "SwapController_getTokenBalance",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "description": "Token symbol (e.g., USDC, CNGN)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "address",
+            "required": true,
+            "in": "path",
+            "description": "Wallet address",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token balance as string"
+          }
+        },
+        "summary": "Get token balance for an address",
+        "tags": [
+          "Swap"
+        ],
+        "security": [
+          {
+            "API-Key": []
+          }
+        ]
+      }
+    },
+    "/swap/balances": {
+      "get": {
+        "operationId": "SwapController_getTokenBalances",
+        "parameters": [
+          {
+            "name": "address",
+            "required": false,
+            "in": "query",
+            "description": "Wallet address (optional; uses signer if omitted)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record of balances"
+          }
+        },
+        "summary": "Get balances for USDC and CNGN for an address",
+        "tags": [
+          "Swap"
+        ],
+        "security": [
+          {
+            "API-Key": []
+          }
+        ]
+      }
+    },
+    "/swap/usd-ngn-rate": {
+      "get": {
+        "operationId": "SwapController_getUsdNgnRate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "USD/NGN rate"
+          }
+        },
+        "summary": "Get USD/NGN rate from MonieRate API",
+        "tags": [
+          "Swap"
+        ],
+        "security": [
+          {
+            "API-Key": []
+          }
+        ]
+      }
+    },
+    "/swap/estimate-ngn": {
+      "get": {
+        "operationId": "SwapController_estimateNgn",
+        "parameters": [
+          {
+            "name": "cngnAmount",
+            "required": true,
+            "in": "query",
+            "description": "Amount in CNGN",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estimated NGN value with rates"
+          }
+        },
+        "summary": "Calculate estimated NGN value from CNGN amount",
+        "tags": [
+          "Swap"
+        ],
+        "security": [
+          {
+            "API-Key": []
+          }
+        ]
+      }
+    },
+    "/swap/initialize": {
+      "post": {
+        "description": "Initializes offramp first to get recipient wallet address, then creates swap record. Returns recipient address and swap parameters for frontend to execute the swap. Requires authentication.",
+        "operationId": "SwapController_initializeSwap",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitializeSwapDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Swap and offramp initialization response with recipient address"
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication"
+          }
+        },
+        "security": [
+          {
+            "API-Key": []
+          }
+        ],
+        "summary": "Initialize swap transaction (USDC → CNGN → Offramp)",
+        "tags": [
+          "Swap"
+        ]
+      }
+    },
+    "/swap/{reference}/complete": {
+      "post": {
+        "description": "Updates swap transaction status after user executes the swap on blockchain. Requires authentication.",
+        "operationId": "SwapController_updateSwapAfterExecution",
+        "parameters": [
+          {
+            "name": "reference",
+            "required": true,
+            "in": "path",
+            "description": "Swap transaction reference",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "transactionHash": {
+                    "type": "string",
+                    "example": "0x..."
+                  },
+                  "sourceAddress": {
+                    "type": "string",
+                    "example": "0x..."
+                  }
+                },
+                "required": [
+                  "transactionHash",
+                  "sourceAddress"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Swap transaction updated successfully"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "API-Key": []
+          }
+        ],
+        "summary": "Update swap transaction after execution",
+        "tags": [
+          "Swap"
+        ]
+      }
+    },
+    "/swap/create": {
+      "post": {
+        "description": "Creates a swap transaction record in the database. The actual swap execution happens on-chain via the frontend. Requires authentication.",
+        "operationId": "SwapController_createSimpleSwap",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSimpleSwapDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Swap transaction created successfully"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "API-Key": []
+          }
+        ],
+        "summary": "Create a simple swap transaction (store in database)",
+        "tags": [
+          "Swap"
+        ]
+      }
+    },
+    "/swap": {
+      "post": {
+        "description": "DEPRECATED: Use /swap/initialize instead. Executes swap on backend. Requires authentication.",
+        "operationId": "SwapController_swap",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSwapDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Swap transaction response"
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication"
+          }
+        },
+        "security": [
+          {
+            "API-Key": []
+          }
+        ],
+        "summary": "Execute a token swap (USDC ↔ CNGN) - DEPRECATED",
+        "tags": [
+          "Swap"
+        ]
+      }
+    },
+    "/stablestack/banks": {
+      "get": {
+        "operationId": "StablestackController_getBanks",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of banks"
+          }
+        },
+        "summary": "Get list of banks",
+        "tags": [
+          "Stablestack"
+        ],
+        "security": [
+          {
+            "API-Key": []
+          }
+        ]
+      }
+    },
+    "/stablestack/resolve-account": {
+      "get": {
+        "description": "Resolves account name from bank code and account number. Requires authentication (JWT token in Authorization header or API key in x-api-key header).",
+        "operationId": "StablestackController_resolveAccount",
+        "parameters": [
+          {
+            "name": "bankCode",
+            "required": true,
+            "in": "query",
+            "description": "Bank code",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountNumber",
+            "required": true,
+            "in": "query",
+            "description": "Account number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account name resolved successfully"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "API-Key": []
+          }
+        ],
+        "summary": "Resolve account name",
+        "tags": [
+          "Stablestack"
+        ]
+      }
+    },
+    "/stablestack/onramp": {
+      "post": {
+        "description": "Requires authentication (JWT token in Authorization header or API key in x-api-key header)",
+        "operationId": "StablestackController_onRamp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/onRampDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Onramp Initialisation response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "API-Key": []
+          }
+        ],
+        "summary": "Initialise onramp transaction",
+        "tags": [
+          "Stablestack"
+        ]
+      }
+    },
+    "/stablestack/offramp": {
+      "post": {
+        "description": "Requires authentication (JWT token in Authorization header or API key in x-api-key header)",
+        "operationId": "StablestackController_offRamp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/offRampDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Offramp Initialisation response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "API-Key": []
+          }
+        ],
+        "summary": "Initialise offramp transaction",
+        "tags": [
+          "Stablestack"
+        ]
+      }
+    },
+    "/stablestack/transactions": {
+      "get": {
+        "description": "Requires authentication (JWT token in Authorization header or API key in x-api-key header) and verified KYC status. Returns transactions for the authenticated user.",
+        "operationId": "StablestackController_getTransactions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reference",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (default: 1)",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Items per page (default: 10)",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of transactions"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "API-Key": []
+          }
+        ],
+        "summary": "Get ramp transactions",
+        "tags": [
+          "Stablestack"
+        ]
+      }
+    },
+    "/stablestack/webhook": {
+      "post": {
+        "operationId": "WebhookController_handleWebhook",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook processed successfully"
+          },
+          "404": {
+            "description": "Transaction not found"
+          }
+        },
+        "summary": "Receive webhook from Flint API",
+        "tags": [
+          "Stablestack"
+        ],
+        "security": [
+          {
+            "API-Key": []
+          }
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "CNGN Ramp API Service",
+    "description": "API for onramp/offramp transactions, token swaps, and user management",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "Swap",
+      "description": "Token swap operations"
+    },
+    {
+      "name": "Stablestack",
+      "description": "Onramp and offramp transaction endpoints"
+    }
+  ],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "API-Key": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key",
+        "description": "Enter your API key (format: sk_live_...)"
+      }
+    },
+    "schemas": {
+      "SignUpDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "user@example.com",
+            "description": "User email address"
+          },
+          "otpCode": {
+            "type": "string",
+            "example": "123456",
+            "description": "6-digit OTP code for email verification"
+          },
+          "walletAddress": {
+            "type": "string",
+            "example": "0x1234567890abcdef1234567890abcdef12345678",
+            "description": "User wallet address (optional)"
+          }
+        },
+        "required": [
+          "email",
+          "otpCode"
+        ]
+      },
+      "SignInDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "user@example.com",
+            "description": "User email address"
+          },
+          "password": {
+            "type": "string",
+            "example": "SecurePassword123!",
+            "description": "User password"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "AdminLoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "admin@example.com",
+            "description": "Admin email address"
+          },
+          "password": {
+            "type": "string",
+            "example": "AdminPassword123!",
+            "description": "Admin password"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "SendOtpDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "user@example.com",
+            "description": "Email address to send OTP to"
+          },
+          "purpose": {
+            "type": "string",
+            "example": "SIGNUP",
+            "description": "Purpose of OTP (SIGNUP, RESET_PASSWORD, etc.)",
+            "default": "SIGNUP"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "VerifyOtpDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "user@example.com",
+            "description": "Email address"
+          },
+          "code": {
+            "type": "string",
+            "example": "123456",
+            "description": "6-digit OTP code"
+          },
+          "purpose": {
+            "type": "string",
+            "example": "SIGNUP",
+            "description": "Purpose of OTP (SIGNUP, RESET_PASSWORD, etc.)",
+            "default": "SIGNUP"
+          }
+        },
+        "required": [
+          "email",
+          "code"
+        ]
+      },
+      "CreateApiKeyDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Production API Key",
+            "description": "Optional name for the API key (for identification)",
+            "maxLength": 100
+          },
+          "businessName": {
+            "type": "string",
+            "description": "Business name associated with this API key"
+          },
+          "trafficEstimate": {
+            "type": "string",
+            "description": "Expected traffic/volume for this API key"
+          },
+          "requestLimit": {
+            "type": "string",
+            "description": "Request limit for this API key"
+          }
+        }
+      },
+      "OfframpDestinationDto": {
+        "type": "object",
+        "properties": {
+          "bankCode": {
+            "type": "string",
+            "example": "058",
+            "description": "Bank code"
+          },
+          "accountNumber": {
+            "type": "string",
+            "example": "1234567890",
+            "description": "Account number"
+          }
+        },
+        "required": [
+          "bankCode",
+          "accountNumber"
+        ]
+      },
+      "InitializeSwapDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "example": 140196,
+            "description": "NGN amount for offramp (estimated NGN value)"
+          },
+          "usdcAmount": {
+            "type": "number",
+            "example": 100,
+            "description": "USDC amount for swap (amount user wants to swap)"
+          },
+          "slippage": {
+            "type": "number",
+            "example": 0.05,
+            "description": "Slippage tolerance (0-1, e.g., 0.05 = 5%)"
+          },
+          "offrampDestination": {
+            "description": "Offramp destination (bank details)",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OfframpDestinationDto"
+              }
+            ]
+          },
+          "network": {
+            "type": "string",
+            "example": "base",
+            "description": "Network (default: base)"
+          }
+        },
+        "required": [
+          "amount",
+          "usdcAmount",
+          "slippage",
+          "offrampDestination"
+        ]
+      },
+      "CreateSimpleSwapDto": {
+        "type": "object",
+        "properties": {
+          "fromTokenType": {
+            "type": "string",
+            "example": "USDC",
+            "description": "Token type to swap from (USDC or CNGN)",
+            "enum": [
+              "USDC",
+              "CNGN"
+            ]
+          },
+          "toTokenType": {
+            "type": "string",
+            "example": "CNGN",
+            "description": "Token type to swap to (USDC or CNGN)",
+            "enum": [
+              "USDC",
+              "CNGN"
+            ]
+          },
+          "fromAmount": {
+            "type": "number",
+            "example": 100.5,
+            "description": "Amount to swap from"
+          },
+          "toAmount": {
+            "type": "number",
+            "example": 100.5,
+            "description": "Estimated amount to receive"
+          },
+          "exchangeRate": {
+            "type": "number",
+            "example": 1,
+            "description": "Exchange rate (fromAmount/toAmount)"
+          },
+          "sourceAddress": {
+            "type": "string",
+            "example": "0x1234567890abcdef1234567890abcdef12345678",
+            "description": "Source wallet address (user's wallet)"
+          },
+          "destinationAddress": {
+            "type": "string",
+            "example": "0x1234567890abcdef1234567890abcdef12345678",
+            "description": "Destination wallet address (user's wallet, same as source for simple swaps)"
+          },
+          "network": {
+            "type": "string",
+            "example": "base",
+            "description": "Network (defaults to base)"
+          },
+          "slippage": {
+            "type": "number",
+            "example": 0.05,
+            "description": "Slippage tolerance (defaults to 0.05 = 5%)"
+          }
+        },
+        "required": [
+          "fromTokenType",
+          "toTokenType",
+          "fromAmount",
+          "toAmount",
+          "exchangeRate",
+          "sourceAddress",
+          "destinationAddress"
+        ]
+      },
+      "CreateSwapDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "example": 100,
+            "description": "Amount to swap (in token decimals)"
+          },
+          "recipient": {
+            "type": "string",
+            "example": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+            "description": "Recipient wallet address"
+          },
+          "to_cngn": {
+            "type": "boolean",
+            "example": true,
+            "description": "Swap direction: true = USDC to CNGN, false = CNGN to USDC"
+          },
+          "slippage": {
+            "type": "number",
+            "example": 0.05,
+            "description": "Slippage tolerance (0-1, e.g., 0.05 = 5%)"
+          },
+          "offrampDestination": {
+            "description": "Offramp destination (bank details). If provided, offramp will be triggered after swap completes.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OfframpDestinationDto"
+              }
+            ]
+          },
+          "network": {
+            "type": "string",
+            "example": "base",
+            "description": "Network (default: base)"
+          }
+        },
+        "required": [
+          "amount",
+          "recipient",
+          "to_cngn",
+          "slippage"
+        ]
+      },
+      "OnRampDestinationDto": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "example": "string"
+          }
+        },
+        "required": [
+          "address"
+        ]
+      },
+      "onRampDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "example": "on",
+            "default": "on"
+          },
+          "network": {
+            "type": "string",
+            "example": "base"
+          },
+          "amount": {
+            "type": "number",
+            "example": 1
+          },
+          "destination": {
+            "$ref": "#/components/schemas/OnRampDestinationDto"
+          },
+          "notifyUrl": {
+            "type": "string",
+            "example": ""
+          }
+        },
+        "required": [
+          "type",
+          "network",
+          "amount",
+          "destination"
+        ]
+      },
+      "offRampDestinationDto": {
+        "type": "object",
+        "properties": {
+          "bankCode": {
+            "type": "string",
+            "example": "string"
+          },
+          "accountNumber": {
+            "type": "string",
+            "example": "string"
+          }
+        },
+        "required": [
+          "bankCode",
+          "accountNumber"
+        ]
+      },
+      "offRampDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "example": "off",
+            "default": "off"
+          },
+          "network": {
+            "type": "string",
+            "example": "base"
+          },
+          "amount": {
+            "type": "number",
+            "example": 1
+          },
+          "destination": {
+            "$ref": "#/components/schemas/offRampDestinationDto"
+          },
+          "notifyUrl": {
+            "type": "string",
+            "example": ""
+          }
+        },
+        "required": [
+          "type",
+          "network",
+          "amount",
+          "destination"
+        ]
+      },
+      "Object": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  }
+}
