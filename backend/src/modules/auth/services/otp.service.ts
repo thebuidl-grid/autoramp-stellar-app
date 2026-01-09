@@ -85,8 +85,8 @@ export class OtpService {
     // Send email via Resend
     try {
       const subject = purpose === 'SIGNUP' 
-        ? 'Verify your email address - CNGN Ramp'
-        : 'Your verification code - CNGN Ramp';
+        ? 'Verify your email address - AutoRamp'
+        : 'Your verification code - AutoRamp';
 
       const htmlContent = `
         <!DOCTYPE html>
@@ -98,7 +98,7 @@ export class OtpService {
           </head>
           <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="background-color: #000; color: #fff; padding: 20px; text-align: center;">
-              <h1 style="margin: 0; font-size: 24px;">CNGN Ramp</h1>
+              <h1 style="margin: 0; font-size: 24px;">AutoRamp</h1>
             </div>
             <div style="background-color: #f9f9f9; padding: 30px; margin-top: 20px;">
               <h2 style="color: #000; margin-top: 0;">Email Verification</h2>
@@ -110,7 +110,7 @@ export class OtpService {
               <p style="color: #666; font-size: 14px;">If you didn't request this code, please ignore this email.</p>
             </div>
             <div style="text-align: center; margin-top: 20px; color: #666; font-size: 12px;">
-              <p>&copy; ${new Date().getFullYear()} CNGN Ramp. All rights reserved.</p>
+              <p>&copy; ${new Date().getFullYear()} AutoRamp. All rights reserved.</p>
             </div>
           </body>
         </html>
