@@ -29,7 +29,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly otpService: OtpService,
-  ) {}
+  ) { }
 
   /**
    * Sign up or Login (Email-only authentication)
@@ -191,7 +191,10 @@ export class AuthService {
     const { password: _, ...adminWithoutPassword } = admin;
 
     return {
-      admin: adminWithoutPassword,
+      user: {
+        ...adminWithoutPassword,
+        role: 'ADMIN',
+      },
       accessToken: token,
     };
   }

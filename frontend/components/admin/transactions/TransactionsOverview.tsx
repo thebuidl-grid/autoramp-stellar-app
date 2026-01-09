@@ -2,16 +2,15 @@
 
 import { useState } from "react";
 import {
-    Bar,
     BarChart,
-    CartesianGrid,
-    Legend,
-    ResponsiveContainer,
-    Tooltip,
+    Bar,
     XAxis,
     YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    Legend,
 } from "recharts";
-import { format, subDays, subMonths, subWeeks } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
     Select,
@@ -20,42 +19,30 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api";
-
-type Period = "daily" | "weekly" | "monthly";
-
-async function fetchAnalytics(period: Period) {
-    const { data } = await adminApi.getAnalytics(period);
-    return data;
-}
+import { Loader2 } from "lucide-react";
 
 export function TransactionsOverview() {
-    const [period, setPeriod] = useState<Period>("daily");
+    const [period, setPeriod] = useState<"daily" | "weekly" | "monthly">("daily");
 
-    const { data: chartData, isLoading, isError } = useQuery({
-        queryKey: ["admin-transaction-analytics", period],
-        queryFn: () => fetchAnalytics(period),
+    const { data, isLoading } = useQuery({
+        queryKey: ["admin-transactions-analytics", period],
+        queryFn: async () => {
+            const { data } = await adminApi.getTransactionsAnalytics(period);
+            return data;
+        },
     });
-
-    if (isLoading) {
-        return <Skeleton className="w-full h-[400px]" />;
-    }
-
-    if (isError) {
-        return <div className="text-red-500">Failed to load analytics data</div>;
-    }
 
     return (
         <Card className="col-span-4">
             <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Overview</CardTitle>
+                <CardTitle>Transactions Volume</CardTitle>
                 <Select
                     value={period}
-                    onValueChange={(value: Period) => setPeriod(value)}
+                    onValueChange={(value: any) => setPeriod(value)}
                 >
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-[120px]">
                         <SelectValue placeholder="Select period" />
                     </SelectTrigger>
                     <SelectContent>
@@ -65,46 +52,68 @@ export function TransactionsOverview() {
                     </SelectContent>
                 </Select>
             </CardHeader>
-            <CardContent className="pl-2">
-                {(!chartData || chartData.length === 0) ? (
-                    <div className="flex h-[350px] items-center justify-center text-muted-foreground">
-                        No data available for this period
-                    </div>
-                ) : (
-                    <ResponsiveContainer width="100%" height={350}>
-                        <BarChart data={chartData}>
-                            <XAxis
-                                dataKey="date"
-                                stroke="#888888"
-                                fontSize={12}
-                                tickLine={false}
-                                axisLine={false}
-                                tickFormatter={(value) => {
-                                    // Simple formatting suitable for daily. Can be improved.
-                                    return value;
-                                }}
-                            />
-                            <YAxis
-                                stroke="#888888"
-                                fontSize={12}
-                                tickLine={false}
-                                axisLine={false}
-                                tickFormatter={(value) => `₦${value}`}
-                            />
-                            <Tooltip
-                                formatter={(value: number | string | Array<number | string> | undefined) => {
-                                    if (typeof value === 'number') return `₦${value.toLocaleString()}`;
-                                    return value;
-                                }}
-                                labelFormatter={(label) => `Date: ${label}`}
-                            />
-                            <Legend />
-                            <Bar dataKey="onRampVolume" name="On-Ramp Vol" fill="#adfa1d" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="offRampVolume" name="Off-Ramp Vol" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="swapVolume" name="Swap Vol" fill="#e11d48" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                )}
+            <CardContent>
+                <div className="h-[300px] w-full">
+                    {isLoading ? (
+                        <div className="flex h-full w-full items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    ) : data && data.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={data}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis
+                                    dataKey="date"
+                                    stroke="#888888"
+                                    fontSize={12}
+                                    tickLine={false}
+                                    axisLine={false}
+                                />
+                                <YAxis
+                                    stroke="#888888"
+                                    fontSize={12}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    tickFormatter={(value) => `${value}`}
+                                />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: "hsl(var(--background))",
+                                        borderColor: "hsl(var(--border))",
+                                        borderRadius: "8px",
+                                    }}
+                                    itemStyle={{ fontSize: "12px" }}
+                                />
+                                <Legend />
+                                <Bar
+                                    dataKey="onrampCount"
+                                    name="Onramp"
+                                    fill="#3b82f6"
+                                    radius={[4, 4, 0, 0]}
+                                    stackId="a"
+                                />
+                                <Bar
+                                    dataKey="offrampCount"
+                                    name="Offramp"
+                                    fill="#a855f7"
+                                    radius={[4, 4, 0, 0]}
+                                    stackId="a"
+                                />
+                                <Bar
+                                    dataKey="swapCount"
+                                    name="Swap"
+                                    fill="#6366f1"
+                                    radius={[4, 4, 0, 0]}
+                                    stackId="a"
+                                />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                            No transaction data for this period
+                        </div>
+                    )}
+                </div>
             </CardContent>
         </Card>
     );

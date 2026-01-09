@@ -1,230 +1,190 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-    ChevronLeft,
-    ChevronRight,
-    MoreHorizontal,
-    Trash2,
-    Key
-} from "lucide-react";
-import { format } from "date-fns";
-import { adminApi, getErrorMessage } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { useEffect, useState } from "react";
+import { adminApi } from "@/lib/api";
+import { ApiKeysOverview } from "@/components/admin/api-keys/ApiKeysOverview";
+import { ApiKeysTable } from "@/components/admin/api-keys/ApiKeysTable";
+import { GenerateApiKeyDialog } from "@/components/admin/api-keys/GenerateApiKeyDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Key, Activity, ArrowUpRight, CheckCircle2 } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/toast";
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
-export default function ApiKeysPage() {
-    const [page, setPage] = useState(1);
-    const limit = 10;
+export default function AdminApiKeysPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
-    const [apiKeyToRevoke, setApiKeyToRevoke] = useState<string | null>(null);
+    const [page, setPage] = useState(1);
+    const limit = 10;
 
-    const { data, isLoading, error } = useQuery({
-        queryKey: ["adminApiKeys", page],
-        queryFn: () => adminApi.getAllApiKeys(page, limit),
+    // Fetch summary stats
+    const { data: summary, isLoading: isSummaryLoading } = useQuery({
+        queryKey: ["admin-api-keys-summary"],
+        queryFn: async () => {
+            const { data } = await adminApi.getApiKeysSummary();
+            return data;
+        },
     });
 
+    // Fetch all API keys
+    const { data: keysResponse, isLoading: isKeysLoading } = useQuery({
+        queryKey: ["admin-api-keys", page],
+        queryFn: async () => {
+            const { data } = await adminApi.getAllApiKeys(page, limit);
+            return data;
+        },
+    });
+
+    // Revoke key mutation
     const revokeMutation = useMutation({
         mutationFn: (id: string) => adminApi.revokeApiKey(id),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["admin-api-keys"] });
+            queryClient.invalidateQueries({ queryKey: ["admin-api-keys-summary"] });
             toast({
-                title: "API Key Revoked",
+                title: "Key Revoked",
                 description: "The API key has been successfully revoked.",
                 variant: "success",
             });
-            queryClient.invalidateQueries({ queryKey: ["adminApiKeys"] });
-            setApiKeyToRevoke(null);
         },
-        onError: (err) => {
+        onError: () => {
             toast({
                 title: "Error",
-                description: getErrorMessage(err),
+                description: "Failed to revoke API key.",
                 variant: "destructive",
             });
-            setApiKeyToRevoke(null);
         },
     });
 
-    const apiKeys = data?.data.apiKeys || [];
-    const pagination = data?.data.pagination;
+    const handleRevoke = (id: string) => {
+        if (confirm("Are you sure you want to revoke this API key? This action cannot be undone.")) {
+            revokeMutation.mutate(id);
+        }
+    };
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="space-y-8">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight">API Keys</h2>
+                    <h1 className="text-3xl font-bold tracking-tight">API Keys Management</h1>
                     <p className="text-muted-foreground">
-                        Monitor and manage API credentials across the platform.
+                        Generate and manage API keys for regular users.
                     </p>
+                </div>
+                <GenerateApiKeyDialog />
+            </div>
+
+            {/* Summary Cards */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Keys</CardTitle>
+                        <Key className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        {isSummaryLoading ? (
+                            <Skeleton className="h-8 w-20" />
+                        ) : (
+                            <div className="text-2xl font-bold">{summary?.totalKeys || 0}</div>
+                        )}
+                        <p className="text-xs text-muted-foreground">Across all users</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Active Keys</CardTitle>
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    </CardHeader>
+                    <CardContent>
+                        {isSummaryLoading ? (
+                            <Skeleton className="h-8 w-20" />
+                        ) : (
+                            <div className="text-2xl font-bold">{summary?.activeKeys || 0}</div>
+                        )}
+                        <p className="text-xs text-muted-foreground">Currently operational</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
+                        <Activity className="h-4 w-4 text-blue-500" />
+                    </CardHeader>
+                    <CardContent>
+                        {isSummaryLoading ? (
+                            <Skeleton className="h-8 w-20" />
+                        ) : (
+                            <div className="text-2xl font-bold">{summary?.totalRequests?.toLocaleString() || 0}</div>
+                        )}
+                        <p className="text-xs text-muted-foreground">Lifetime usage</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Avg Requests/Key</CardTitle>
+                        <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        {isSummaryLoading ? (
+                            <Skeleton className="h-8 w-20" />
+                        ) : (
+                            <div className="text-2xl font-bold">{summary?.averageRequestsPerKey || 0}</div>
+                        )}
+                        <p className="text-xs text-muted-foreground">Efficiency metric</p>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
+                <div className="md:col-span-2 lg:col-span-7">
+                    <ApiKeysOverview />
                 </div>
             </div>
 
-            <Card>
+            <Card className="col-span-4">
                 <CardHeader>
-                    <CardTitle>All API Keys</CardTitle>
+                    <CardTitle>API Keys List</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    {isLoading ? (
-                        <div className="space-y-2">
-                            {[1, 2, 3].map((i) => (
-                                <div key={i} className="h-12 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
-                            ))}
+                    {isKeysLoading ? (
+                        <div className="space-y-4">
+                            <Skeleton className="h-12 w-full" />
+                            <Skeleton className="h-12 w-full" />
+                            <Skeleton className="h-12 w-full" />
                         </div>
-                    ) : error ? (
-                        <div className="text-red-500">Error loading API keys.</div>
                     ) : (
-                        <>
-                            <div className="relative w-full overflow-auto">
-                                <table className="w-full caption-bottom text-sm">
-                                    <thead className="[&_tr]:border-b">
-                                        <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                                            <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
-                                                Key Prefix
-                                            </th>
-                                            <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
-                                                Owner
-                                            </th>
-                                            <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
-                                                Name
-                                            </th>
-                                            <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
-                                                Status
-                                            </th>
-                                            <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
-                                                Created
-                                            </th>
-                                            <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">
-                                                Actions
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="[&_tr:last-child]:border-0">
-                                        {apiKeys.map((key) => (
-                                            <tr
-                                                key={key.id}
-                                                className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
-                                            >
-                                                <td className="p-4 align-middle font-medium font-mono">
-                                                    {key.keyPrefix}...
-                                                </td>
-                                                <td className="p-4 align-middle">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {key.user?.id.substring(0, 8)}...
-                                                        </span>
-                                                        <span>{key.user?.email || "Unknown"}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="p-4 align-middle">
-                                                    {key.name || "Default Key"}
-                                                </td>
-                                                <td className="p-4 align-middle">
-                                                    <Badge variant={key.isActive ? "success" : "secondary"}>
-                                                        {key.isActive ? "Active" : "Revoked"}
-                                                    </Badge>
-                                                </td>
-                                                <td className="p-4 align-middle">
-                                                    {format(new Date(key.createdAt), "MMM d, yyyy")}
-                                                </td>
-                                                <td className="p-4 align-middle text-right">
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button variant="ghost" className="h-8 w-8 p-0">
-                                                                <span className="sr-only">Open menu</span>
-                                                                <MoreHorizontal className="h-4 w-4" />
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem
-                                                                className="text-red-600 focus:text-red-600 cursor-pointer"
-                                                                onClick={() => setApiKeyToRevoke(key.id)}
-                                                                disabled={!key.isActive}
-                                                            >
-                                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                                Revoke Key
-                                                            </DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                        <ApiKeysTable
+                            apiKeys={keysResponse?.apiKeys || []}
+                            onRevoke={handleRevoke}
+                        />
+                    )}
 
-                            {/* Pagination */}
-                            <div className="flex items-center justify-end space-x-2 py-4">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                    disabled={page === 1}
-                                >
-                                    <ChevronLeft className="h-4 w-4" />
-                                    Previous
-                                </Button>
-                                <div className="text-sm font-medium">
-                                    Page {pagination?.page} of {pagination?.totalPages}
-                                </div>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setPage((p) => Math.min(pagination?.totalPages || 1, p + 1))}
-                                    disabled={page >= (pagination?.totalPages || 1)}
-                                >
-                                    Next
-                                    <ChevronRight className="h-4 w-4" />
-                                </Button>
-                            </div>
-                        </>
+                    {/* Simple Pagination */}
+                    {keysResponse && keysResponse.pagination.totalPages > 1 && (
+                        <div className="flex items-center justify-end space-x-2 py-4">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage(page - 1)}
+                                disabled={page === 1}
+                            >
+                                Previous
+                            </Button>
+                            <span className="text-sm text-muted-foreground">
+                                Page {page} of {keysResponse.pagination.totalPages}
+                            </span>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage(page + 1)}
+                                disabled={page === keysResponse.pagination.totalPages}
+                            >
+                                Next
+                            </Button>
+                        </div>
                     )}
                 </CardContent>
             </Card>
-
-            <AlertDialog open={!!apiKeyToRevoke} onOpenChange={(open) => !open && setApiKeyToRevoke(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action cannot be undone. This will permanently revoke this API key
-                            and prevent any further requests using it.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            className="bg-red-600 hover:bg-red-700"
-                            onClick={() => apiKeyToRevoke && revokeMutation.mutate(apiKeyToRevoke)}
-                        >
-                            Revoke Key
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </div>
     );
 }

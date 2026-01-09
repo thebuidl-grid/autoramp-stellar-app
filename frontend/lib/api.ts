@@ -102,9 +102,11 @@ export interface AuthResponse {
 }
 
 export const authApi = {
-  signUp: (data: SignUpDto) => api.post<AuthResponse>("/auth/signup", data),
+  signUp: (data: SignUpDto) =>
+    api.post<AuthResponse>("/auth/signup", data),
 
-  signIn: (data: SignInDto) => api.post<AuthResponse>("/auth/signin", data),
+  signIn: (data: SignInDto) =>
+    api.post<AuthResponse>("/auth/signin", data),
 
   adminLogin: (data: SignInDto) =>
     api.post<AuthResponse>("/auth/admin/login", data),
@@ -129,7 +131,19 @@ export interface User {
 }
 
 export const userApi = {
-  getProfile: () => api.get<User>("/user/profile"),
+  getProfile: () =>
+    api.get<User>("/user/profile"),
+
+  // User API Keys
+  getUserApiKeys: () => api.get<ApiKey[]>("/user/api-keys"),
+
+  getUserApiKeyStats: () =>
+    api.get<UserApiKeyStatsResponse>("/user/api-keys/stats"),
+
+  getUserApiKeyAnalytics: (period: "daily" | "weekly" | "monthly" = "daily") =>
+    api.get<UserApiKeyAnalyticsDataPoint[]>(
+      `/user/api-keys/analytics?period=${period}`,
+    ),
 };
 
 // ============== API Keys API ==============
@@ -150,11 +164,37 @@ export interface ApiKey {
 
 export interface CreateApiKeyDto {
   name?: string;
+  businessName?: string;
+  trafficEstimate?: string;
+  requestLimit?: string;
 }
 
 export interface CreateApiKeyResponse extends ApiKey {
   key: string;
   message: string;
+}
+
+export interface TransactionsSummaryResponse {
+  totalVolume: number;
+  totalCount: number;
+  successRate: number;
+  averageValue: number;
+  onrampCompletedVolume: number;
+  onrampCompletedCount: number;
+  offrampCompletedVolume: number;
+  offrampCompletedCount: number;
+  swapCompletedVolume: number;
+  swapCompletedCount: number;
+  unsuccessfulVolume: number;
+  unsuccessfulCount: number;
+}
+
+export interface TransactionAnalyticsDataPoint {
+  date: string;
+  onrampCount: number;
+  offrampCount: number;
+  swapCount: number;
+  totalCount: number;
 }
 
 export interface ApiKeysResponse {
@@ -165,6 +205,37 @@ export interface ApiKeysResponse {
     total: number;
     totalPages: number;
   };
+}
+
+export interface ApiKeysSummaryResponse {
+  totalKeys: number;
+  activeKeys: number;
+  totalRequests: number;
+  averageRequestsPerKey: number;
+}
+
+export interface ApiKeyAnalyticsDataPoint {
+  date: string;
+  requestCount: number;
+  uniqueKeys: number;
+  successCount: number;
+  errorCount: number;
+  successRate: number;
+}
+
+export interface UserApiKeyStatsResponse {
+  totalKeys: number;
+  activeKeys: number;
+  totalRequests: number;
+  lastRequestAt: string | null;
+}
+
+export interface UserApiKeyAnalyticsDataPoint {
+  date: string;
+  requestCount: number;
+  successCount: number;
+  errorCount: number;
+  successRate: number;
 }
 
 // ============== Stablestack API ==============
@@ -314,11 +385,14 @@ export interface AdminTransactionsResponse {
 }
 
 export const adminApi = {
+  getMe: () =>
+    api.get<AdminUser>("/admin/me"),
+
   getUsers: (page: number = 1, limit: number = 10) =>
     api.get<UsersResponse>(`/admin/users?page=${page}&limit=${limit}`),
 
-  getUserById: (id: string) => api.get<AdminUser>(`/admin/users/${id}`),
-
+  getUserById: (id: string) =>
+    api.get<AdminUser>(`/admin/users/${id}`),
   // API Key Management
   getAllApiKeys: (page: number = 1, limit: number = 10) =>
     api.get<ApiKeysResponse>(`/admin/api-keys?page=${page}&limit=${limit}`),
@@ -332,35 +406,23 @@ export const adminApi = {
   revokeApiKey: (id: string) =>
     api.delete<{ message: string }>(`/admin/api-keys/${id}`),
 
-  // Admin Transactions
-  getAdminOnRampTransactions: (reference?: string) => {
-    const params = new URLSearchParams();
-    if (reference) params.append("reference", reference);
-    return api.get<AdminTransactionsResponse>(
-      `/admin/transactions/onramps?${params.toString()}`,
-    );
-  },
+  // Admin API Keys Management
+  getApiKeysSummary: () =>
+    api.get<ApiKeysSummaryResponse>("/admin/api-keys/summary"),
 
-  getAdminOffRampTransactions: (reference?: string) => {
-    const params = new URLSearchParams();
-    if (reference) params.append("reference", reference);
-    return api.get<AdminTransactionsResponse>(
-      `/admin/transactions/offramps?${params.toString()}`,
-    );
-  },
+  getApiKeysAnalytics: (period: "daily" | "weekly" | "monthly" = "daily") =>
+    api.get<ApiKeyAnalyticsDataPoint[]>(
+      `/admin/api-keys/analytics?period=${period}`,
+    ),
 
-  getAdminSwapTransactions: (reference?: string) => {
-    const params = new URLSearchParams();
-    if (reference) params.append("reference", reference);
-    return api.get<AdminTransactionsResponse>(
-      `/admin/transactions/swaps?${params.toString()}`,
-    );
-  },
-  getAdminTransactionSummary: () =>
-    api.get<AdminTransactionSummaryResponse>(`/admin/transactions/summary`),
+  getTransactions: (page: number = 1, limit: number = 10, status?: string) =>
+    api.get<TransactionsResponse>(`/admin/platform-transactions?page=${page}&limit=${limit}${status ? `&status=${status}` : ""}`),
 
-  getAnalytics: (period: "daily" | "weekly" | "monthly" = "daily") =>
-    api.get<AnalyticsDataPoint[]>(
+  getTransactionsSummary: () =>
+    api.get<TransactionsSummaryResponse>("/admin/transactions/summary"),
+
+  getTransactionsAnalytics: (period: "daily" | "weekly" | "monthly" = "daily") =>
+    api.get<TransactionAnalyticsDataPoint[]>(
       `/admin/transactions/analytics?period=${period}`,
     ),
 };
@@ -463,7 +525,6 @@ export interface CreateSimpleSwapResponse {
 export const swapApi = {
   initializeSwap: (data: InitializeSwapDto) =>
     api.post<SwapResponse>("/swap/initialize", data),
-
   createSimpleSwap: (data: CreateSimpleSwapDto) =>
     api.post<CreateSimpleSwapResponse>("/swap/create", data),
 
