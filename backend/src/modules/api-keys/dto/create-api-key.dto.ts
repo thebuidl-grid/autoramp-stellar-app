@@ -16,5 +16,26 @@ export class CreateApiKeyDto {
   @IsString()
   @MaxLength(100)
   name?: string;
+
+  @ApiPropertyOptional({
+    description: 'Business name associated with this API key',
+  })
+  @IsOptional()
+  @IsString()
+  businessName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Expected traffic/volume for this API key',
+  })
+  @IsOptional()
+  @IsString()
+  trafficEstimate?: string;
+
+  @ApiPropertyOptional({
+    description: 'Request limit for this API key',
+  })
+  @IsOptional()
+  @IsString()
+  requestLimit?: string;
 }
 

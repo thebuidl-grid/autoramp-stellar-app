@@ -42,6 +42,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         select: {
           id: true,
           email: true,
+          firstName: true,
+          lastName: true,
           isActive: true,
         },
       });
@@ -63,11 +65,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       },
     });
 
-    if (!user) {
-      throw new UnauthorizedException('User not found');
+    if (user) {
+      return {
+        id: user.id,
+        email: user.email,
+        role: user.role || 'USER',
+      };
     }
 
-    return user;
+    throw new UnauthorizedException('User not found');
   }
 }
 

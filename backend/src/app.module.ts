@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, RouterModule } from '@nestjs/core';
 import { validationSchema } from './config/env.validation';
 import { ApiModule } from './modules/api/api.module';
 import { SwapModule } from './modules/swap/swap.module';
@@ -11,6 +11,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { ApiKeysModule } from './modules/api-keys/api-keys.module';
+import { TransactionsModule } from './modules/admin/transactions/transactions.module';
 
 @Module({
   imports: [
@@ -34,6 +35,18 @@ import { ApiKeysModule } from './modules/api-keys/api-keys.module';
         name: 'long',
         ttl: 3600000, // 1 hour
         limit: 1000, // 1000 requests per hour
+      },
+    ]),
+    RouterModule.register([
+      {
+        path: 'admin',
+        module: AdminModule,
+        children: [
+          {
+            path: 'transactions',
+            module: TransactionsModule,
+          },
+        ],
       },
     ]),
     DatabaseModule,
