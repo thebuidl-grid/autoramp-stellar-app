@@ -23,22 +23,34 @@ import { AdminService } from './admin.service';
 import { CreateApiKeyDto } from '../api-keys/dto/create-api-key.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { GetApiKeyStatsDto } from './dto/get-api-key-stats.dto';
 
 /**
  * Admin Controller
- * 
+ *
  * Handles admin-only endpoints including:
  * - User management
  * - API key management
- * 
+ *
  * All endpoints require admin authentication.
  */
 @ApiTags('Admin')
-@Controller('admin')
+@Controller()
 @UseGuards(JwtAuthGuard, AdminGuard)
 @ApiBearerAuth('JWT-auth')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(private readonly adminService: AdminService) { }
+
+  @Get('me')
+  @ApiOperation({ summary: 'Get current admin profile' })
+  @ApiResponse({
+    status: 200,
+    description: 'Admin profile retrieved successfully',
+  })
+  async getMe(@CurrentUser() admin: any) {
+    return admin;
+  }
 
   @Get('users')
   @ApiOperation({ summary: 'Get all users (paginated)' })
@@ -216,6 +228,105 @@ export class AdminController {
   })
   async revokeApiKey(@Param('id') id: string) {
     return this.adminService.revokeApiKey(id);
+  }
+
+  @Get('api-keys/summary')
+  @ApiOperation({ summary: 'Get API keys summary statistics' })
+  @ApiResponse({
+    status: 200,
+    description: 'API keys summary retrieved successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Admin access required',
+  })
+  async getApiKeysSummary() {
+    return this.adminService.getApiKeysSummary();
+  }
+
+  @Get('api-keys/analytics')
+  @ApiOperation({ summary: 'Get API keys usage analytics over time' })
+  @ApiQuery({
+    name: 'period',
+    required: false,
+    enum: ['daily', 'weekly', 'monthly'],
+    description: 'Time period for grouping (default: daily)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'API keys analytics retrieved successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Admin access required',
+  })
+  async getApiKeysAnalytics(@Query() query: GetApiKeyStatsDto) {
+    return this.adminService.getApiKeysAnalytics(query.period);
+  }
+  @Get('platform-transactions')
+  @ApiOperation({ summary: 'Get all platform transactions (admin only)' })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10)',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    description: 'Filter by transaction status (PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Transactions retrieved successfully',
+  })
+  async getTransactions(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('status') status?: string,
+  ) {
+    return this.adminService.getAllTransactions(page, limit, status);
+  }
+
+  @Get('transactions/summary')
+  @ApiOperation({ summary: 'Get transaction summary statistics (admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Transaction summary retrieved successfully',
+  })
+  async getTransactionsSummary() {
+    return this.adminService.getTransactionsSummary();
+  }
+
+  @Get('transactions/analytics')
+  @ApiOperation({ summary: 'Get transaction analytics over time (admin only)' })
+  @ApiQuery({
+    name: 'period',
+    required: false,
+    enum: ['daily', 'weekly', 'monthly'],
+    description: 'Time period for grouping (default: daily)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Transaction analytics retrieved successfully',
+  })
+  async getTransactionsAnalytics(@Query() query: GetApiKeyStatsDto) {
+    return this.adminService.getTransactionsAnalytics(query.period);
   }
 }
 

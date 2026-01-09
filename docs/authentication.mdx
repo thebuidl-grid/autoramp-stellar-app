@@ -1,0 +1,31 @@
+---
+title: Authentication
+description: "How to authenticate your API requests"
+---
+
+All API requests to AutoRamp must be authenticated using an API key. Your API key should be kept secret and never shared or exposed in client-side code.
+
+## API Keys
+
+Authentication is handled via the `x-api-key` header. You can obtain your API key from the AutoRamp Admin Portal.
+
+### Admin-Generated Keys
+Administrators generate API keys for businesses. Once a key is generated, you will be provided with a Secret Key (e.g., `sk_live_...`).
+
+> [!WARNING]
+> Your API key is only shown once during generation. If you lose it, you will need to request a new one and revoke the old key.
+
+## Header Format
+
+Include the `x-api-key` in the header of all your HTTP requests:
+
+```bash
+curl -X GET "https://api.autoramp.com/v1/user/profile" \
+     -H "x-api-key: sk_live_your_api_key_here"
+```
+
+## Security Best Practices
+
+1. **Keep it Secret**: Never commit API keys to version control. Use environment variables.
+2. **Server-Side Only**: Use API keys only in server-to-server communication. Do not use them in frontend applications or mobile apps directly.
+3. **Revocation**: If you suspect your key has been compromised, revoke it immediately via the admin portal or contact support.

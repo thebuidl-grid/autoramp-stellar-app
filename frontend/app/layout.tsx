@@ -31,9 +31,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body
         className={`${jetbrainsMono.variable} ${bricolageGrotesque.variable} antialiased`}
+        suppressHydrationWarning
       >
         <TopLoader />
         <WagmiProviderWrapper>

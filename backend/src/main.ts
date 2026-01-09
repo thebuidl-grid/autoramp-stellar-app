@@ -45,7 +45,10 @@ async function bootstrap() {
       }
 
       // For development, allow localhost with any port
-      if (process.env.NODE_ENV === 'development' && origin.startsWith('http://localhost:')) {
+      if (
+        process.env.NODE_ENV === 'development' &&
+        origin.startsWith('http://localhost:')
+      ) {
         return callback(null, true);
       }
 
@@ -62,7 +65,9 @@ async function bootstrap() {
   // Swagger setup
   const config = new DocumentBuilder()
     .setTitle('CNGN Ramp API Service')
-    .setDescription('API for onramp/offramp transactions, token swaps, and user management')
+    .setDescription(
+      'API for onramp/offramp transactions, token swaps, and user management',
+    )
     .setVersion('1.0')
     .addTag('Authentication', 'User and admin authentication endpoints')
     .addTag('User', 'User profile management')
@@ -94,7 +99,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  await app.listen(3000);
+  await app.listen(3001);
   console.log('API server running on http://localhost:3000');
   console.log('Swagger docs: http://localhost:3000/api');
 }
