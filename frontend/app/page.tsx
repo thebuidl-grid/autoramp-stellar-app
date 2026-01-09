@@ -198,7 +198,16 @@ export default function HomePage() {
     onUpdate: handleWebSocketUpdate,
   });
 
-  // Get USDC balance for connected wallet
+  const { data: cngnBalance } = useReadContract({
+    address: SWAP_CONSTANTS.CNGN as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: address ? [address as `0x${string}`] : undefined,
+    query: {
+      enabled: !!address && isConnected,
+    },
+  });
+
   const { data: usdcBalance } = useReadContract({
     address: SWAP_CONSTANTS.USDC as `0x${string}`,
     abi: ERC20_ABI,
@@ -941,6 +950,45 @@ export default function HomePage() {
       return amountIn > allowance;
     })();
 
+  // Helper to handle percentage clicks
+  // We need to format the raw number (e.g. 1000.5) back to your input format (e.g. "1,000.5")
+  const handlePercentageClick = (rawValue: string) => {
+    // 1. Convert to number string with commas using your existing util
+    const formatted = formatNumber(rawValue);
+
+    // 2. Set the appropriate store value
+    if (activeTab === "buy") {
+      setBuyAmount(formatted);
+    } else {
+      setSellAmount(formatted);
+    }
+  };
+
+  // Helper to get the currently relevant balance
+  let activeBalance: number | undefined = undefined;
+
+  if (activeTab === "sell") {
+    if (cryptoType === "USDC" && usdcBalance) {
+      activeBalance = parseFloat(
+        formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS)
+      );
+    } else if (cryptoType === "CNGN" && cngnBalance) {
+      activeBalance = parseFloat(
+        formatUnits(cngnBalance, SWAP_CONSTANTS.CNGN_DECIMALS)
+      );
+    }
+  } else if (activeTab === "swap") {
+    if (fromCryptoType === "USDC" && usdcBalance) {
+      activeBalance = parseFloat(
+        formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS)
+      );
+    } else if (fromCryptoType === "CNGN" && cngnBalance) {
+      activeBalance = parseFloat(
+        formatUnits(cngnBalance, SWAP_CONSTANTS.CNGN_DECIMALS)
+      );
+    }
+  }
+
   // Render based on step
   const renderContent = () => {
     if (step === "form") {
@@ -991,6 +1039,8 @@ export default function HomePage() {
                 ? () => setIsFromCryptoModalOpen(true)
                 : () => setIsCryptoModalOpen(true)
             }
+            userBalance={activeBalance}
+            onPercentageClick={handlePercentageClick}
           />
 
           <div className="flex justify-center -my-6">
