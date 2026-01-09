@@ -34,6 +34,7 @@ export default function RootLayout({
     <html lang="en" className="dark" suppressHydrationWarning>
       <body
         className={`${jetbrainsMono.variable} ${bricolageGrotesque.variable} antialiased`}
+        suppressHydrationWarning
       >
         <TopLoader />
         <WagmiProviderWrapper>
