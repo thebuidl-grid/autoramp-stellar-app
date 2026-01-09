@@ -1,0 +1,52 @@
+{
+    "name": "AutoRamp Business API",
+    "logo": {
+        "light": "/logo/light.png",
+        "dark": "/logo/dark.png"
+    },
+    "favicon": "/favicon.png",
+    "colors": {
+        "primary": "#2563eb",
+        "light": "#3b82f6",
+        "dark": "#1d4ed8"
+    },
+    "topbarLinks": [
+        {
+            "name": "Support",
+            "url": "mailto:support@autoramp.com"
+        }
+    ],
+    "topbarCtaButton": {
+        "name": "Dashboard",
+        "url": "https://autoramp.com/dashboard"
+    },
+    "navigation": [
+        {
+            "group": "Introduction",
+            "pages": [
+                "introduction",
+                "authentication",
+                "quickstart"
+            ]
+        },
+        {
+            "group": "API Reference",
+            "pages": [
+                "api-reference/overview"
+            ]
+        },
+        {
+            "group": "Endpoints",
+            "pages": [
+                {
+                    "group": "Core API",
+                    "openapi": "/openapi.json"
+                }
+            ]
+        }
+    ],
+    "footerSocials": {
+        "twitter": "https://twitter.com/autoramp",
+        "github": "https://github.com/thebuidl-grid/cngn-ramp"
+    }
+}
