@@ -19,7 +19,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly apiKeysService: ApiKeysService,
-  ) {}
+  ) { }
 
   /**
    * Get all users
@@ -166,6 +166,297 @@ export class AdminService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Get API keys summary statistics (admin only)
+   * 
+   * @returns Summary statistics for all API keys
+   */
+  async getApiKeysSummary() {
+    const [totalKeys, activeKeys, totalRequests] = await Promise.all([
+      this.prisma.apiKey.count(),
+      this.prisma.apiKey.count({
+        where: { isActive: true },
+      }),
+      this.prisma.apiRequestLog.count(),
+    ]);
+
+    const averageRequestsPerKey = totalKeys > 0 ? totalRequests / totalKeys : 0;
+
+    return {
+      totalKeys,
+      activeKeys,
+      totalRequests,
+      averageRequestsPerKey: Math.round(averageRequestsPerKey),
+    };
+  }
+
+  /**
+   * Get API keys analytics over time (admin only)
+   * 
+   * @param period - Time period for grouping (daily, weekly, monthly)
+   * @returns Time-series analytics data
+   */
+  async getApiKeysAnalytics(period: 'daily' | 'weekly' | 'monthly' = 'daily') {
+    // Determine date range based on period
+    const now = new Date();
+    let startDate: Date;
+    let dateFormat: string;
+
+    switch (period) {
+      case 'weekly':
+        startDate = new Date(now.getTime() - 12 * 7 * 24 * 60 * 60 * 1000); // 12 weeks
+        dateFormat = 'YYYY-"W"IW'; // ISO week format
+        break;
+      case 'monthly':
+        startDate = new Date(now.getTime() - 12 * 30 * 24 * 60 * 60 * 1000); // 12 months
+        dateFormat = 'YYYY-MM';
+        break;
+      case 'daily':
+      default:
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days
+        dateFormat = 'YYYY-MM-DD';
+        break;
+    }
+
+    // Query API request logs grouped by date
+    const requestLogs = await this.prisma.$queryRaw<
+      Array<{
+        date: string;
+        request_count: bigint;
+        unique_keys: bigint;
+        success_count: bigint;
+        error_count: bigint;
+      }>
+    >`
+      SELECT 
+        TO_CHAR(created_at, ${dateFormat}) as date,
+        COUNT(*)::bigint as request_count,
+        COUNT(DISTINCT api_key_id)::bigint as unique_keys,
+        COUNT(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 END)::bigint as success_count,
+        COUNT(CASE WHEN status_code >= 400 THEN 1 END)::bigint as error_count
+      FROM api_request_logs
+      WHERE created_at >= ${startDate}
+      GROUP BY 1
+      ORDER BY date ASC
+    `;
+
+    return requestLogs.map((log) => ({
+      date: log.date,
+      requestCount: Number(log.request_count),
+      uniqueKeys: Number(log.unique_keys),
+      successCount: Number(log.success_count),
+      errorCount: Number(log.error_count),
+      successRate:
+        Number(log.request_count) > 0
+          ? Math.round((Number(log.success_count) / Number(log.request_count)) * 100)
+          : 0,
+    }));
+  }
+
+  /**
+   * Get all transactions (admin only)
+   * 
+   * Fetches all onramp, offramp, and swap transactions across the platform.
+   * 
+   * @param page - Page number (default: 1)
+   * @param limit - Items per page (default: 10)
+   * @returns Paginated list of all transactions
+   */
+  async getAllTransactions(page: number = 1, limit: number = 10, status?: string) {
+    const skip = (page - 1) * limit;
+    const where = status ? { status: status as any } : {};
+
+    // Get total counts for pagination
+    const [onrampTotal, offrampTotal, swapTotal] = await Promise.all([
+      this.prisma.onrampTransaction.count({ where }),
+      this.prisma.offrampTransaction.count({ where }),
+      this.prisma.swapTransaction.count({ where }),
+    ]);
+    const total = onrampTotal + offrampTotal + swapTotal;
+
+    // Fetch all transactions (we'll combine and paginate them)
+    const [allOnramp, allOfframp, allSwap] = await Promise.all([
+      this.prisma.onrampTransaction.findMany({
+        where,
+        include: {
+          user: {
+            select: { email: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.offrampTransaction.findMany({
+        where,
+        include: {
+          user: {
+            select: { email: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.swapTransaction.findMany({
+        where,
+        include: {
+          user: {
+            select: { email: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    // Combine and sort all transactions by date descending
+    const allTransactions = [
+      ...allOnramp.map((tx) => ({ ...tx, _type: 'onramp' as const, userEmail: tx.user.email })),
+      ...allOfframp.map((tx) => ({ ...tx, _type: 'offramp' as const, userEmail: tx.user.email })),
+      ...allSwap.map((tx) => ({ ...tx, _type: 'swap' as const, userEmail: tx.user.email })),
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Apply pagination
+    const paginatedTransactions = allTransactions.slice(skip, skip + limit);
+
+    // Separate back into respective types for the frontend to handle if needed
+    const onramp = paginatedTransactions
+      .filter((tx) => tx._type === 'onramp')
+      .map(({ _type, user, ...tx }) => tx);
+    const offramp = paginatedTransactions
+      .filter((tx) => tx._type === 'offramp')
+      .map(({ _type, user, ...tx }) => tx);
+    const swap = paginatedTransactions
+      .filter((tx) => tx._type === 'swap')
+      .map(({ _type, user, ...tx }) => tx);
+
+    return {
+      onramp,
+      offramp,
+      swap,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * Get transaction summary statistics (admin only)
+   * 
+   * Calculates platform-wide volume, success rate, and average value.
+   * 
+   * @returns Summary statistics for all transactions
+   */
+  async getTransactionsSummary() {
+    const [onramp, offramp, swap] = await Promise.all([
+      this.prisma.onrampTransaction.findMany({
+        select: { amount: true, status: true },
+      }),
+      this.prisma.offrampTransaction.findMany({
+        select: { amount: true, status: true },
+      }),
+      this.prisma.swapTransaction.findMany({
+        select: { fromAmount: true, status: true },
+      }),
+    ]);
+
+    const onrampTx = onramp.map(tx => ({ amount: Number(tx.amount), status: tx.status }));
+    const offrampTx = offramp.map(tx => ({ amount: Number(tx.amount), status: tx.status }));
+    const swapTx = swap.map(tx => ({ amount: Number(tx.fromAmount), status: tx.status }));
+
+    const allTx = [...onrampTx, ...offrampTx, ...swapTx];
+
+    const completedOnramp = onrampTx.filter(tx => tx.status === 'COMPLETED');
+    const completedOfframp = offrampTx.filter(tx => tx.status === 'COMPLETED');
+    const completedSwap = swapTx.filter(tx => tx.status === 'COMPLETED');
+
+    const totalCompletedVolume = [...completedOnramp, ...completedOfframp, ...completedSwap].reduce((sum, tx) => sum + tx.amount, 0);
+    const totalCompletedCount = completedOnramp.length + completedOfframp.length + completedSwap.length;
+
+    const notCompleted = allTx.filter(tx => tx.status !== 'COMPLETED');
+    const unsuccessfulVolume = notCompleted.reduce((sum, tx) => sum + tx.amount, 0);
+
+    return {
+      totalVolume: totalCompletedVolume,
+      totalCount: allTx.length,
+      successRate: allTx.length > 0 ? Math.round((totalCompletedCount / allTx.length) * 100) : 0,
+      averageValue: totalCompletedCount > 0 ? Math.round(totalCompletedVolume / totalCompletedCount) : 0,
+
+      // Breakdown by type (completed only)
+      onrampCompletedVolume: completedOnramp.reduce((sum, tx) => sum + tx.amount, 0),
+      onrampCompletedCount: completedOnramp.length,
+      offrampCompletedVolume: completedOfframp.reduce((sum, tx) => sum + tx.amount, 0),
+      offrampCompletedCount: completedOfframp.length,
+      swapCompletedVolume: completedSwap.reduce((sum, tx) => sum + tx.amount, 0),
+      swapCompletedCount: completedSwap.length,
+
+      // Unsuccessful summary
+      unsuccessfulVolume,
+      unsuccessfulCount: notCompleted.length,
+    };
+  }
+
+  /**
+   * Get transaction analytics over time (admin only)
+   * 
+   * @param period - Time period for grouping (daily, weekly, monthly)
+   * @returns Time-series analytics data
+   */
+  async getTransactionsAnalytics(period: 'daily' | 'weekly' | 'monthly' = 'daily') {
+    const now = new Date();
+    let startDate: Date;
+    let dateFormat: string;
+
+    switch (period) {
+      case 'weekly':
+        startDate = new Date(now.getTime() - 12 * 7 * 24 * 60 * 60 * 1000);
+        dateFormat = 'YYYY-"W"IW';
+        break;
+      case 'monthly':
+        startDate = new Date(now.getTime() - 12 * 30 * 24 * 60 * 60 * 1000);
+        dateFormat = 'YYYY-MM';
+        break;
+      case 'daily':
+      default:
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        dateFormat = 'YYYY-MM-DD';
+        break;
+    }
+
+    // Since we have three tables, we use a UNION to combine them before grouping
+    // This is more performant than fetching everything into memory
+    const analytics = await this.prisma.$queryRaw<
+      Array<{
+        date: string;
+        onramp_count: bigint;
+        offramp_count: bigint;
+        swap_count: bigint;
+        total_count: bigint;
+      }>
+    >`
+      SELECT 
+        date,
+        COUNT(CASE WHEN type = 'onramp' THEN 1 END)::bigint as onramp_count,
+        COUNT(CASE WHEN type = 'offramp' THEN 1 END)::bigint as offramp_count,
+        COUNT(CASE WHEN type = 'swap' THEN 1 END)::bigint as swap_count,
+        COUNT(*)::bigint as total_count
+      FROM (
+        SELECT TO_CHAR(created_at, ${dateFormat}) as date, 'onramp' as type FROM onramp_transactions WHERE created_at >= ${startDate}
+        UNION ALL
+        SELECT TO_CHAR(created_at, ${dateFormat}) as date, 'offramp' as type FROM offramp_transactions WHERE created_at >= ${startDate}
+        UNION ALL
+        SELECT TO_CHAR(created_at, ${dateFormat}) as date, 'swap' as type FROM swap_transactions WHERE created_at >= ${startDate}
+      ) as combined_tx
+      GROUP BY 1
+      ORDER BY date ASC
+    `;
+
+    return analytics.map((log) => ({
+      date: log.date,
+      onrampCount: Number(log.onramp_count),
+      offrampCount: Number(log.offramp_count),
+      swapCount: Number(log.swap_count),
+      totalCount: Number(log.total_count),
+    }));
   }
 }
 
