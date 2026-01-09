@@ -39,9 +39,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               id: response.data.id,
               email: response.data.email,
               role: response.data.role,
-              phoneNumber: response.data.phoneNumber,
-              walletAddress: response.data.walletAddress,
-            },
+              phoneNumber: (response.data as any).phoneNumber,
+              walletAddress: (response.data as any).walletAddress,
+            } as any,
             token
           );
         })
@@ -52,8 +52,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             router.push("/");
           }
         });
-    } else if (!token && !pathname?.startsWith("/auth") && pathname !== "/") {
-      // No token and not on auth page, redirect to home
+    } else if (!token && !pathname?.startsWith("/auth") && !pathname?.startsWith("/admin") && pathname !== "/") {
+      // No token and not on auth page or admin page, redirect to home
+      // Note: AdminProtected handles admin page redirection
       router.push("/");
     }
   }, [token, user, _hasHydrated, setAuth, logout, router, pathname]);
