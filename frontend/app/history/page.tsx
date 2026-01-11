@@ -86,7 +86,11 @@ export default function HistoryPage() {
     }
   }, [isAuthenticated, _hasHydrated, router]);
 
-  const { data: transactionsData, isLoading, refetch } = useQuery({
+  const {
+    data: transactionsData,
+    isLoading,
+    refetch,
+  } = useQuery({
     queryKey: ["transactions", page],
     queryFn: async () => {
       const response = await stablestackApi.getTransactions(
@@ -102,10 +106,21 @@ export default function HistoryPage() {
 
   // Combine onramp, offramp, and swap transactions and add type
   const transactions: AllTransaction[] = [
-    ...(transactionsData?.onramp?.map((tx) => ({ ...tx, type: "onramp" as const })) || []),
-    ...(transactionsData?.offramp?.map((tx) => ({ ...tx, type: "offramp" as const })) || []),
-    ...(transactionsData?.swap?.map((tx) => ({ ...tx, type: "swap" as const })) || []),
-  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    ...(transactionsData?.onramp?.map((tx) => ({
+      ...tx,
+      type: "onramp" as const,
+    })) || []),
+    ...(transactionsData?.offramp?.map((tx) => ({
+      ...tx,
+      type: "offramp" as const,
+    })) || []),
+    ...(transactionsData?.swap?.map((tx) => ({
+      ...tx,
+      type: "swap" as const,
+    })) || []),
+  ].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 
   const totalPages = transactionsData?.totalPages || 1;
   const total = transactionsData?.total || 0;
@@ -121,9 +136,13 @@ export default function HistoryPage() {
         <div className="max-w-4xl mx-auto">
           <div className="flex flex-col md:flex-row gap-2 justify-between mb-4 md:mb-8">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Transaction History</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
+                Transaction History
+              </h1>
               <p className="text-white/60">
-                {total > 0 ? `${total} total transaction${total !== 1 ? "s" : ""}` : "View all your onramp and offramp transactions"}
+                {total > 0
+                  ? `${total} total transaction${total !== 1 ? "s" : ""}`
+                  : "View all your onramp and offramp transactions"}
               </p>
             </div>
             <Button
@@ -149,27 +168,37 @@ export default function HistoryPage() {
             </div>
           ) : transactions.length === 0 ? (
             <div className="text-center py-20">
-              <p className="text-white/60 text-lg mb-4">No transactions found</p>
-              <p className="text-white/40 text-sm">Your transaction history will appear here</p>
+              <p className="text-white/60 text-lg mb-4">
+                No transactions found
+              </p>
+              <p className="text-white/40 text-sm">
+                Your transaction history will appear here
+              </p>
             </div>
           ) : (
             <>
-              <Accordion type="single" collapsible className="w-full space-y-3 md:space-y-4">
+              <Accordion
+                type="single"
+                collapsible
+                className="w-full space-y-3 md:space-y-4"
+              >
                 {transactions.map((tx) => {
                   const isOnramp = tx.type === "onramp";
                   const isSwap = tx.type === "swap";
                   const isOfframp = tx.type === "offramp";
-                  
+
                   let displayAmount: string;
                   if (isSwap) {
                     const swapTx = tx as SwapTransactionWithType;
                     displayAmount = `${swapTx.fromAmount} ${swapTx.fromTokenType} → ${swapTx.toAmount} ${swapTx.toTokenType}`;
                   } else if (isOnramp) {
                     const onrampTx = tx as TransactionWithType;
-                    displayAmount = `${onrampTx.tokenAmount || ""} ${onrampTx.tokenType || ""}`;
+                    displayAmount = `${onrampTx.tokenAmount || ""} CNGN`;
                   } else {
                     const offrampTx = tx as TransactionWithType;
-                    displayAmount = `${offrampTx.amount || offrampTx.fiatAmount || ""} ${offrampTx.currency || "NGN"}`;
+                    displayAmount = `${
+                      offrampTx.amount || offrampTx.fiatAmount || ""
+                    } ${offrampTx.currency || "NGN"}`;
                   }
 
                   return (
@@ -183,37 +212,63 @@ export default function HistoryPage() {
                         <div className="flex items-start gap-3 md:gap-4 flex-1 text-left w-full">
                           <div className="mt-0.5 shrink-0">
                             {isOnramp ? (
-                              <ArrowDownLeft className="text-green-400" size={20} />
+                              <ArrowDownLeft
+                                className="text-green-400"
+                                size={20}
+                              />
                             ) : isSwap ? (
-                              <ArrowLeftRight className="text-purple-400" size={20} />
+                              <ArrowLeftRight
+                                className="text-purple-400"
+                                size={20}
+                              />
                             ) : (
-                              <ArrowUpRight className="text-blue-400" size={20} />
+                              <ArrowUpRight
+                                className="text-blue-400"
+                                size={20}
+                              />
                             )}
                           </div>
                           <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                             <div className="min-w-0">
                               <div className="text-white font-semibold text-sm md:text-base">
-                                {isOnramp ? "Onramp" : isSwap ? "Swap" : "Offramp"}
+                                {isOnramp
+                                  ? "Onramp"
+                                  : isSwap
+                                  ? "Swap"
+                                  : "Offramp"}
                               </div>
                               <div className="text-white/60 text-xs md:text-sm mt-0.5">
                                 {formatDate(tx.createdAt)}
                               </div>
                             </div>
                             <div className="min-w-0">
-                              <div className="text-white/60 text-xs md:text-sm">Amount</div>
-                              <div className="text-white font-semibold text-sm md:text-base break-words">{displayAmount}</div>
+                              <div className="text-white/60 text-xs md:text-sm">
+                                Amount
+                              </div>
+                              <div className="text-white font-semibold text-sm md:text-base break-words">
+                                {displayAmount}
+                              </div>
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
                                 {getStatusIcon(tx.status)}
-                                <span className={`text-xs md:text-sm font-medium ${getStatusColor(tx.status)}`}>
+                                <span
+                                  className={`text-xs md:text-sm font-medium ${getStatusColor(
+                                    tx.status
+                                  )}`}
+                                >
                                   {tx.status}
                                 </span>
                               </div>
                             </div>
                             <div className="min-w-0 sm:col-span-2 md:col-span-1">
-                              <div className="text-white/60 text-xs md:text-sm">Reference</div>
-                              <div className="text-white font-mono text-xs truncate" title={tx.reference}>
+                              <div className="text-white/60 text-xs md:text-sm">
+                                Reference
+                              </div>
+                              <div
+                                className="text-white font-mono text-xs truncate"
+                                title={tx.reference}
+                              >
                                 {tx.reference}
                               </div>
                             </div>
@@ -226,7 +281,9 @@ export default function HistoryPage() {
                         <div className="pb-4 pt-2 space-y-4 border-t border-white/10 mt-2">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                             <div>
-                              <span className="text-white/60">Transaction ID:</span>
+                              <span className="text-white/60">
+                                Transaction ID:
+                              </span>
                               <div className="text-white font-mono text-xs mt-1 break-all">
                                 {tx.id}
                               </div>
@@ -242,99 +299,185 @@ export default function HistoryPage() {
                                 <div>
                                   <span className="text-white/60">From:</span>
                                   <div className="text-white mt-1">
-                                    {(tx as SwapTransactionWithType).fromAmount} {(tx as SwapTransactionWithType).fromTokenType}
+                                    {(tx as SwapTransactionWithType).fromAmount}{" "}
+                                    {
+                                      (tx as SwapTransactionWithType)
+                                        .fromTokenType
+                                    }
                                   </div>
                                 </div>
                                 <div>
                                   <span className="text-white/60">To:</span>
                                   <div className="text-white mt-1">
-                                    {(tx as SwapTransactionWithType).toAmount} {(tx as SwapTransactionWithType).toTokenType}
+                                    {(tx as SwapTransactionWithType).toAmount}{" "}
+                                    {
+                                      (tx as SwapTransactionWithType)
+                                        .toTokenType
+                                    }
                                   </div>
                                 </div>
                                 <div>
-                                  <span className="text-white/60">Exchange Rate:</span>
+                                  <span className="text-white/60">
+                                    Exchange Rate:
+                                  </span>
                                   <div className="text-white mt-1">
-                                    1 {(tx as SwapTransactionWithType).fromTokenType} = {(tx as SwapTransactionWithType).exchangeRate} {(tx as SwapTransactionWithType).toTokenType}
+                                    1{" "}
+                                    {
+                                      (tx as SwapTransactionWithType)
+                                        .fromTokenType
+                                    }{" "}
+                                    ={" "}
+                                    {
+                                      (tx as SwapTransactionWithType)
+                                        .exchangeRate
+                                    }{" "}
+                                    {
+                                      (tx as SwapTransactionWithType)
+                                        .toTokenType
+                                    }
                                   </div>
                                 </div>
-                                {(tx as SwapTransactionWithType).transactionHash && (
+                                {(tx as SwapTransactionWithType)
+                                  .transactionHash && (
                                   <div className="md:col-span-2">
-                                    <span className="text-white/60">Transaction Hash:</span>
+                                    <span className="text-white/60">
+                                      Transaction Hash:
+                                    </span>
                                     <div className="text-white font-mono text-xs mt-1 break-all">
-                                      {(tx as SwapTransactionWithType).transactionHash}
+                                      {
+                                        (tx as SwapTransactionWithType)
+                                          .transactionHash
+                                      }
                                     </div>
                                   </div>
                                 )}
-                                {(tx as SwapTransactionWithType).sourceAddress && (
+                                {(tx as SwapTransactionWithType)
+                                  .sourceAddress && (
                                   <div className="md:col-span-2">
-                                    <span className="text-white/60">Source Address:</span>
+                                    <span className="text-white/60">
+                                      Source Address:
+                                    </span>
                                     <div className="text-white font-mono text-xs mt-1 break-all">
-                                      {(tx as SwapTransactionWithType).sourceAddress}
+                                      {
+                                        (tx as SwapTransactionWithType)
+                                          .sourceAddress
+                                      }
                                     </div>
                                   </div>
                                 )}
-                                {(tx as SwapTransactionWithType).destinationAddress && (
+                                {(tx as SwapTransactionWithType)
+                                  .destinationAddress && (
                                   <div className="md:col-span-2">
-                                    <span className="text-white/60">Destination Address:</span>
+                                    <span className="text-white/60">
+                                      Destination Address:
+                                    </span>
                                     <div className="text-white font-mono text-xs mt-1 break-all">
-                                      {(tx as SwapTransactionWithType).destinationAddress}
+                                      {
+                                        (tx as SwapTransactionWithType)
+                                          .destinationAddress
+                                      }
                                     </div>
                                   </div>
                                 )}
-                                {(tx as SwapTransactionWithType).fromNetwork && (
+                                {(tx as SwapTransactionWithType)
+                                  .fromNetwork && (
                                   <div>
-                                    <span className="text-white/60">Network:</span>
-                                    <div className="text-white mt-1">{(tx as SwapTransactionWithType).fromNetwork}</div>
+                                    <span className="text-white/60">
+                                      Network:
+                                    </span>
+                                    <div className="text-white mt-1">
+                                      {
+                                        (tx as SwapTransactionWithType)
+                                          .fromNetwork
+                                      }
+                                    </div>
                                   </div>
                                 )}
                               </>
                             ) : (
                               <>
-                                {(tx as TransactionWithType).destinationAddress && (
+                                {(tx as TransactionWithType)
+                                  .destinationAddress && (
                                   <div className="md:col-span-2">
                                     <span className="text-white/60">
-                                      {isOnramp ? "Destination Address:" : "Wallet Address:"}
+                                      {isOnramp
+                                        ? "Destination Address:"
+                                        : "Wallet Address:"}
                                     </span>
                                     <div className="text-white font-mono text-xs mt-1 break-all">
-                                      {(tx as TransactionWithType).destinationAddress}
+                                      {
+                                        (tx as TransactionWithType)
+                                          .destinationAddress
+                                      }
                                     </div>
                                   </div>
                                 )}
                                 {(tx as TransactionWithType).network && (
                                   <div>
-                                    <span className="text-white/60">Network:</span>
-                                    <div className="text-white mt-1">{(tx as TransactionWithType).network}</div>
+                                    <span className="text-white/60">
+                                      Network:
+                                    </span>
+                                    <div className="text-white mt-1">
+                                      {(tx as TransactionWithType).network}
+                                    </div>
                                   </div>
                                 )}
-                                {isOfframp && (tx as TransactionWithType).bankName && (
-                                  <div>
-                                    <span className="text-white/60">Bank Name:</span>
-                                    <div className="text-white mt-1">{(tx as TransactionWithType).bankName}</div>
-                                  </div>
-                                )}
-                                {isOfframp && (tx as TransactionWithType).accountNumber && (
-                                  <div>
-                                    <span className="text-white/60">Account Number:</span>
-                                    <div className="text-white font-mono mt-1">{(tx as TransactionWithType).accountNumber}</div>
-                                  </div>
-                                )}
-                                {isOfframp && (tx as TransactionWithType).accountName && (
-                                  <div>
-                                    <span className="text-white/60">Account Name:</span>
-                                    <div className="text-white mt-1">{(tx as TransactionWithType).accountName}</div>
-                                  </div>
-                                )}
+                                {isOfframp &&
+                                  (tx as TransactionWithType).bankName && (
+                                    <div>
+                                      <span className="text-white/60">
+                                        Bank Name:
+                                      </span>
+                                      <div className="text-white mt-1">
+                                        {(tx as TransactionWithType).bankName}
+                                      </div>
+                                    </div>
+                                  )}
+                                {isOfframp &&
+                                  (tx as TransactionWithType).accountNumber && (
+                                    <div>
+                                      <span className="text-white/60">
+                                        Account Number:
+                                      </span>
+                                      <div className="text-white font-mono mt-1">
+                                        {
+                                          (tx as TransactionWithType)
+                                            .accountNumber
+                                        }
+                                      </div>
+                                    </div>
+                                  )}
+                                {isOfframp &&
+                                  (tx as TransactionWithType).accountName && (
+                                    <div>
+                                      <span className="text-white/60">
+                                        Account Name:
+                                      </span>
+                                      <div className="text-white mt-1">
+                                        {
+                                          (tx as TransactionWithType)
+                                            .accountName
+                                        }
+                                      </div>
+                                    </div>
+                                  )}
                               </>
                             )}
                             {tx.completedAt && (
                               <div>
-                                <span className="text-white/60">Completed At:</span>
-                                <div className="text-white mt-1">{formatDate(tx.completedAt)}</div>
+                                <span className="text-white/60">
+                                  Completed At:
+                                </span>
+                                <div className="text-white mt-1">
+                                  {formatDate(tx.completedAt)}
+                                </div>
                               </div>
                             )}
                             <div>
                               <span className="text-white/60">Created At:</span>
-                              <div className="text-white mt-1">{formatDate(tx.createdAt)}</div>
+                              <div className="text-white mt-1">
+                                {formatDate(tx.createdAt)}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -364,7 +507,9 @@ export default function HistoryPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      onClick={() =>
+                        setPage((p) => Math.min(totalPages, p + 1))
+                      }
                       disabled={page === totalPages || isLoading}
                       className="border-white/10 text-white hover:bg-white/10 flex-1 sm:flex-initial"
                     >
