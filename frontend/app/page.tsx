@@ -607,22 +607,7 @@ export default function HomePage() {
     }
 
     const parsedAmount = parseFormattedNumber(sellAmount);
-    if (cryptoType === "CNGN" && parsedAmount < 100) {
-      toast({
-        title: "Invalid amount",
-        description: "Minimum amount for CNGN is 100",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (cryptoType === "USDC" && quoteAmountOut < 100n) {
-      toast({
-        title: "Invalid amount",
-        description: "Minimum withdrawal is 100 NGN",
-        variant: "destructive",
-      });
-      return;
-    }
+
     if (parsedAmount <= 0) {
       toast({
         title: "Invalid amount",
@@ -633,7 +618,15 @@ export default function HomePage() {
     }
 
     if (cryptoType === "CNGN") {
-      // CNGN to NGN: Direct offramp
+      if (parsedAmount < 100) {
+        toast({
+          title: "Invalid amount",
+          description: "Minimum amount for CNGN is 100",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const amountToSend = Math.round(parsedAmount);
       offRamp.mutate(
         {
@@ -649,7 +642,6 @@ export default function HomePage() {
         }
       );
     } else if (cryptoType === "USDC") {
-      // USDC to NGN: Swap flow
       if (!isConnected || !address) {
         toast({
           title: "Wallet not connected",
@@ -659,19 +651,35 @@ export default function HomePage() {
         return;
       }
 
-      if (!ngnEstimate?.estimatedNgn) {
+      if (!quoteAmountOut || quoteAmountOut === 0n) {
         toast({
-          title: "Rate calculation in progress",
-          description: "Please wait for the estimated NGN value",
+          title: "Quote not ready",
+          description: "Please wait for the exchange rate to load.",
           variant: "destructive",
         });
         return;
       }
 
-      const ngnAmount = Math.round(ngnEstimate.estimatedNgn);
+      const projectedNgnAmount = parseFloat(
+        formatUnits(quoteAmountOut, SWAP_CONSTANTS.CNGN_DECIMALS)
+      );
+
+      console.log(projectedNgnAmount, "projected");
+
+      if (projectedNgnAmount < 100) {
+        toast({
+          title: "Amount too low",
+          description: `Minimum withdrawal is 100 NGN. Estimated output: ${projectedNgnAmount.toFixed(
+            2
+          )} NGN`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       initializeSwap.mutate(
         {
-          amount: ngnAmount,
+          amount: projectedNgnAmount,
           usdcAmount: parsedAmount,
           slippage: 0.05,
           network: "base",
@@ -679,6 +687,7 @@ export default function HomePage() {
         },
         {
           onSuccess: (response) => {
+            console.log(response, "response from init");
             setSwapData(response.data);
             setStep("execute");
           },
@@ -1273,27 +1282,46 @@ export default function HomePage() {
             </div>
           )}
 
-          {(activeTab === "sell" && cryptoType === "USDC") ||
-          activeTab === "swap" ? (
+          {activeTab === "sell" || activeTab === "swap" ? (
             <div className="p-4 rounded-xl bg-black/50 border border-white/10">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-white/70">Wallet Connection</span>
                 <ConnectButton showBalance={false} />
               </div>
-              {isConnected && usdcBalance !== undefined && (
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-xs text-white/50">USDC Balance</span>
-                  <span className="text-sm font-medium text-white">
-                    {parseFloat(
-                      formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS)
-                    ).toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 6,
-                    })}{" "}
-                    USDC
-                  </span>
-                </div>
-              )}
+              {isConnected &&
+                usdcBalance !== undefined &&
+                cngnBalance !== undefined && (
+                  <>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-xs text-white/50">
+                        USDC Balance
+                      </span>
+                      <span className="text-sm font-medium text-white">
+                        {parseFloat(
+                          formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS)
+                        ).toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 6,
+                        })}{" "}
+                        USDC
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-xs text-white/50">
+                        CNGN Balance
+                      </span>
+                      <span className="text-sm font-medium text-white">
+                        {parseFloat(
+                          formatUnits(cngnBalance, SWAP_CONSTANTS.CNGN_DECIMALS)
+                        ).toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 6,
+                        })}{" "}
+                        CNGN
+                      </span>
+                    </div>
+                  </>
+                )}
               {!isConnected && (
                 <p className="text-xs text-white/50 mt-2">
                   Connect your wallet to continue
