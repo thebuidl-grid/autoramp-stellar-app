@@ -653,15 +653,30 @@ export default function HomePage() {
       return;
     }
 
-    const parsedAmount = parseFloat(buyAmount);
-    if (isNaN(parsedAmount) || parsedAmount < 100) {
-      toast({
-        title: "Invalid amount",
-        description: "Minimum amount is 100 NGN",
-        variant: "destructive",
-      });
-      return;
-    }
+  
+
+
+    // const parsedAmount = parseFloat(buyAmount);
+    // if (isNaN(parsedAmount) || parsedAmount < 100) {
+    //   toast({
+    //     title: "Invalid amount",
+    //     description: "Minimum amount is 100 NGN",
+    //     variant: "destructive",
+    //   });
+    //   return;
+    // }
+const sanitizedAmount = buyAmount
+  .replace(/[^0-9.]/g, ""); // removes commas, currency symbols, spaces
+const parsedAmount = Number(sanitizedAmount);
+
+if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
+  toast({
+    title: "Invalid amount",
+    description: "Minimum amount is 100 NGN",
+    variant: "destructive",
+  });
+  return;
+}
 
     onRamp.mutate(
       {
