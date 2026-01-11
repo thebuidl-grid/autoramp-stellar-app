@@ -126,6 +126,7 @@ export default function HomePage() {
 
   // Local UI state
   const [copied, setCopied] = useState(false);
+  const [isAutoSwapping, setIsAutoSwapping] = useState(false);
 
   const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
   const parsedBuyAmount = buyAmount ? parseFormattedNumber(buyAmount) : null;
@@ -231,7 +232,11 @@ export default function HomePage() {
       : SWAP_CONSTANTS.CNGN
     : SWAP_CONSTANTS.USDC; // Default to USDC
 
-  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+  const {
+    data: allowance,
+    refetch: refetchAllowance,
+    isLoading: isCheckingAllowance,
+  } = useReadContract({
     address: tokenAddressForAllowance as `0x${string}`,
     abi: ERC20_ABI,
     functionName: "allowance",
@@ -322,9 +327,18 @@ export default function HomePage() {
     if (isApproved) refetchAllowance();
   }, [isApproved, refetchAllowance]);
 
+  // Daisy-chain: Automatically trigger swap after approval is confirmed
+  useEffect(() => {
+    if (isApproved && isAutoSwapping) {
+      console.log("Approval confirmed, auto-triggering swap...");
+      handleExecuteSwap();
+      setIsAutoSwapping(false);
+    }
+  }, [isApproved, isAutoSwapping]);
+
   const tabs = [
-    { id: "buy" as const, label: "Buy crypto" },
-    { id: "sell" as const, label: "Sell crypto" },
+    { id: "buy" as const, label: "Buy" },
+    { id: "sell" as const, label: "Sell" },
     { id: "swap" as const, label: "Swap" },
   ];
 
@@ -345,6 +359,8 @@ export default function HomePage() {
       return;
     }
     const formatted = formatNumber(value);
+    console.log(formatted, "formatted ");
+    console.log(parseFloat(buyAmount).toLocaleString(), "style form");
     setBuyAmount(formatted);
   };
 
@@ -482,54 +498,88 @@ export default function HomePage() {
     };
   }, [accountNumber, bankCode, activeTab, resolveAccount.mutate]);
 
-  const isFromUSDC = fromCryptoType === "USDC";
-  const tokenInAddress = isFromUSDC ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN;
-  const tokenOutAddress = isFromUSDC
-    ? SWAP_CONSTANTS.CNGN
-    : SWAP_CONSTANTS.USDC;
+  // 1. Determine if we need a quote
+  const isSwapMode = activeTab === "swap";
+  const isSellUsdcMode = activeTab === "sell" && cryptoType === "USDC";
+  const shouldFetchQuote = (isSwapMode || isSellUsdcMode) && !!sellAmount;
 
-  const tokenInDecimals = isFromUSDC
-    ? SWAP_CONSTANTS.USDC_DECIMALS
-    : SWAP_CONSTANTS.CNGN_DECIMALS;
+  // 2. Determine Tokens for the Quote
+  let quoteTokenIn: string | undefined;
+  let quoteTokenOut: string | undefined;
+  let quoteDecimalsIn = 18; // Default
+  let quoteDecimalsOut = 18; // Default
 
-  const tokenOutDecimals = isFromUSDC
-    ? SWAP_CONSTANTS.CNGN_DECIMALS
-    : SWAP_CONSTANTS.USDC_DECIMALS;
+  if (isSwapMode) {
+    const isFromUSDC = fromCryptoType === "USDC";
+    quoteTokenIn = isFromUSDC ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN;
+    quoteTokenOut = isFromUSDC ? SWAP_CONSTANTS.CNGN : SWAP_CONSTANTS.USDC;
+    quoteDecimalsIn = isFromUSDC
+      ? SWAP_CONSTANTS.USDC_DECIMALS
+      : SWAP_CONSTANTS.CNGN_DECIMALS;
+    quoteDecimalsOut = isFromUSDC
+      ? SWAP_CONSTANTS.CNGN_DECIMALS
+      : SWAP_CONSTANTS.USDC_DECIMALS;
+  } else if (isSellUsdcMode) {
+    // Sell Mode: Always USDC -> CNGN
+    quoteTokenIn = SWAP_CONSTANTS.USDC;
+    quoteTokenOut = SWAP_CONSTANTS.CNGN;
+    quoteDecimalsIn = SWAP_CONSTANTS.USDC_DECIMALS;
+    quoteDecimalsOut = SWAP_CONSTANTS.CNGN_DECIMALS;
+  }
 
-  const parsedSellAmountBigInt = sellAmount
-    ? parseUnits(parseFormattedNumber(sellAmount).toString(), tokenInDecimals)
+  // 3. Parse the amount
+  const parsedQuoteAmount = sellAmount
+    ? parseUnits(parseFormattedNumber(sellAmount).toString(), quoteDecimalsIn)
     : 0n;
 
-  const {
-    data: quoteResult,
-    isLoading: isQuoteLoading,
-    error: quoteError,
-  } = useReadContract({
+  // 4. Update the Hook
+  const { data: quoteResult, isLoading: isQuoteLoading } = useReadContract({
     address: QUOTER_ADDRESS,
     abi: QUOTER_ABI,
     functionName: "quoteExactInputSingle",
-    args: [
-      {
-        tokenIn: tokenInAddress as `0x${string}`,
-        tokenOut: tokenOutAddress as `0x${string}`,
-        amountIn: parsedSellAmountBigInt,
-        tickSpacing: 10,
-        sqrtPriceLimitX96: 0n,
-      },
-    ],
+    args:
+      quoteTokenIn && quoteTokenOut
+        ? [
+            {
+              tokenIn: quoteTokenIn as `0x${string}`,
+              tokenOut: quoteTokenOut as `0x${string}`,
+              amountIn: parsedQuoteAmount,
+              tickSpacing: 10,
+              sqrtPriceLimitX96: 0n,
+            },
+          ]
+        : undefined,
     query: {
-      enabled:
-        activeTab === "swap" &&
-        parsedSellAmountBigInt > 0n &&
-        !!tokenInAddress &&
-        !!tokenOutAddress,
+      enabled: shouldFetchQuote && parsedQuoteAmount > 0n && !!quoteTokenIn,
       staleTime: 10_000,
     },
   });
 
-  console.log(quoteResult, "quote result");
+  // 5. Extract Result
+  // Cast strictly to tuple [amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate]
+  const quoteAmountOut = quoteResult
+    ? (quoteResult as [bigint, bigint, number, bigint])[0]
+    : 0n;
 
-  const quoteAmountOut = quoteResult ? (quoteResult as any)[0] : 0n;
+  // Helper to calculate rate from raw contract data
+  const calculateExchangeRate = (
+    amountIn: number,
+    amountOutBigInt: bigint,
+    decimalsOut: number
+  ) => {
+    if (amountIn <= 0 || amountOutBigInt === 0n) {
+      return { toAmount: 0, exchangeRate: 0 };
+    }
+
+    // Format the BigInt result to a number (e.g., 5000000n -> 5.0)
+    const formattedQuote = formatUnits(amountOutBigInt, decimalsOut);
+    const toAmount = parseFloat(formattedQuote);
+
+    // Calculate rate: Output / Input
+    const exchangeRate = toAmount / amountIn;
+
+    return { toAmount, exchangeRate };
+  };
 
   // Handle sell: CNGN to NGN (offramp) or USDC to NGN (swap)
   const handleSell = async () => {
@@ -565,10 +615,10 @@ export default function HomePage() {
       });
       return;
     }
-    if (cryptoType === "USDC" && parsedAmount < 1) {
+    if (cryptoType === "USDC" && quoteAmountOut < 100n) {
       toast({
         title: "Invalid amount",
-        description: "Minimum amount for USDC is 1",
+        description: "Minimum withdrawal is 100 NGN",
         variant: "destructive",
       });
       return;
@@ -653,9 +703,6 @@ export default function HomePage() {
       return;
     }
 
-  
-
-
     // const parsedAmount = parseFloat(buyAmount);
     // if (isNaN(parsedAmount) || parsedAmount < 100) {
     //   toast({
@@ -665,18 +712,18 @@ export default function HomePage() {
     //   });
     //   return;
     // }
-const sanitizedAmount = buyAmount
-  .replace(/[^0-9.]/g, ""); // removes commas, currency symbols, spaces
-const parsedAmount = Number(sanitizedAmount);
+    const sanitizedAmount = buyAmount.replace(/[^0-9.]/g, ""); // removes commas, currency symbols, spaces
+    const parsedAmount = parseFloat(sanitizedAmount);
+    console.log(parsedAmount, "santi amount");
 
-if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
-  toast({
-    title: "Invalid amount",
-    description: "Minimum amount is 100 NGN",
-    variant: "destructive",
-  });
-  return;
-}
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
+      toast({
+        title: "Invalid amount",
+        description: "Minimum amount is 100 NGN",
+        variant: "destructive",
+      });
+      return;
+    }
 
     onRamp.mutate(
       {
@@ -813,6 +860,7 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
 
   // Handle swap: USDC ↔ CNGN (simple swap, no offramp)
   const handleSwap = async () => {
+    // 1. Validation
     if (!isConnected || !address) {
       toast({
         title: "Wallet not connected",
@@ -832,6 +880,8 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
     }
 
     const parsedAmount = parseFormattedNumber(sellAmount);
+
+    // Amount Limits
     if (
       fromCryptoType === "CNGN" &&
       toCryptoType === "USDC" &&
@@ -839,7 +889,7 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
     ) {
       toast({
         title: "Invalid amount",
-        description: "Minimum amount for CNGN to USDC swap is 100 CNGN",
+        description: "Minimum amount is 100 CNGN",
         variant: "destructive",
       });
       return;
@@ -851,7 +901,7 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
     ) {
       toast({
         title: "Invalid amount",
-        description: "Minimum amount for USDC to CNGN swap is 1 USDC",
+        description: "Minimum amount is 1 USDC",
         variant: "destructive",
       });
       return;
@@ -865,6 +915,7 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
       return;
     }
 
+    // Quote Check
     if (!quoteAmountOut || quoteAmountOut === 0n) {
       toast({
         title: "Quote not ready",
@@ -875,24 +926,29 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
       return;
     }
 
-    // 4. Calculate Values using ONLY Contract Data
-    const formattedQuote = formatUnits(quoteAmountOut, tokenOutDecimals);
-    const toAmount = parseFloat(formattedQuote);
+    // 2. Preparation
+    const isToUSDC = toCryptoType === "USDC";
+    const tokenOutDecimals = isToUSDC
+      ? SWAP_CONSTANTS.USDC_DECIMALS
+      : SWAP_CONSTANTS.CNGN_DECIMALS;
 
-    // Calculate exchange rate: (Output Amount / Input Amount)
-    const exchangeRate = parsedAmount > 0 ? toAmount / parsedAmount : 0;
+    const { toAmount, exchangeRate } = calculateExchangeRate(
+      parsedAmount,
+      quoteAmountOut,
+      tokenOutDecimals
+    );
 
     const swapResponseData = {
       swap: {
         id: "",
         reference: "",
         fromAmount: parsedAmount,
-        toAmount: toAmount,
-        exchangeRate: exchangeRate,
+        toAmount: quoteAmountOut,
+        exchangeRate,
         status: "PENDING",
         createdAt: new Date().toISOString(),
       },
-      recipientAddress: address, // User's wallet address (they receive the swapped tokens)
+      recipientAddress: address,
       swapParams: {
         tokenIn:
           fromCryptoType === "USDC" ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN,
@@ -904,14 +960,14 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
       },
     };
 
-    // Store swap in database
+    // 3. Execution
     createSimpleSwap.mutate(
       {
         fromTokenType: fromCryptoType,
         toTokenType: toCryptoType,
         fromAmount: parsedAmount,
-        toAmount: toAmount,
-        exchangeRate: exchangeRate,
+        toAmount,
+        exchangeRate,
         sourceAddress: address,
         destinationAddress: address,
         network: "base",
@@ -1089,33 +1145,39 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
                     const parsed = parseFormattedNumber(buyAmount);
                     return parsed.toLocaleString("en-NG");
                   })()
-                : activeTab === "swap"
+                : activeTab === "swap" ||
+                  (activeTab === "sell" && cryptoType === "USDC")
                 ? (() => {
+                    // --- SHARED LOGIC FOR SWAP AND SELL (USDC) ---
                     if (!sellAmount) return "";
+
+                    if (isQuoteLoading) return "..."; // Optional: Show loading state
+
                     if (quoteAmountOut > 0n) {
+                      // Use the decimals determined in Step 1
                       const formatted = formatUnits(
                         quoteAmountOut,
-                        tokenOutDecimals
+                        quoteDecimalsOut
                       );
+
+                      // For Sell tab (CNGN/NGN), we usually want 0 decimals (NGN is fiat-like here)
+                      // For Swap tab (USDC/CNGN), we might want decimals.
+                      // Adjust formatting based on context if needed.
 
                       return parseFloat(formatted).toLocaleString("en-US", {
                         minimumFractionDigits: 2,
-                        maximumFractionDigits: 3,
+                        maximumFractionDigits: 2,
                       });
                     }
                     return "0.00";
+                    // ---------------------------------------------
                   })()
                 : (() => {
+                    // --- LOGIC FOR SELL (CNGN ONLY) ---
+                    // CNGN to NGN is 1:1, no swap needed
                     if (!sellAmount) return "";
                     const parsed = parseFormattedNumber(sellAmount);
-                    if (cryptoType === "USDC" && ngnEstimate?.estimatedNgn) {
-                      return Math.round(
-                        ngnEstimate.estimatedNgn
-                      ).toLocaleString("en-NG");
-                    } else if (cryptoType === "CNGN") {
-                      return parsed.toLocaleString("en-NG");
-                    }
-                    return "";
+                    return parsed.toLocaleString("en-NG");
                   })()
             }
             onAmountChange={() => {}}
@@ -1257,9 +1319,9 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
             }
           >
             {activeTab === "buy"
-              ? "BUY CRYPTO"
+              ? "BUY"
               : activeTab === "sell"
-              ? "SELL CRYPTO"
+              ? "SELL"
               : "SWAP"}
           </Button>
         </form>
@@ -1267,128 +1329,64 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
     }
 
     if (step === "execute" && swapData) {
+      const handleUnifiedSwap = () => {
+        if (needsApproval && !isApproved) {
+          // Start the chain: Approve -> Wait -> Auto-Swap
+          setIsAutoSwapping(true);
+          handleApprove();
+        } else {
+          // Direct Swap (Already approved)
+          handleExecuteSwap();
+        }
+      };
+      // 1. EXTRACT DATA FROM THE SNAPSHOT
+      // We rely strictly on swapData because this is the transaction
+      // the user clicked to create. We do NOT use live hooks here.
       const fromAmount = Number(swapData.swap.fromAmount);
-      const fromToken =
-        swapData.swap.fromTokenType ||
-        (swapData.swapParams?.tokenIn?.toLowerCase() ===
-        SWAP_CONSTANTS.USDC.toLowerCase()
-          ? "USDC"
-          : "CNGN");
-      const toToken =
-        swapData.swap.toTokenType ||
-        (swapData.swapParams?.tokenOut?.toLowerCase() ===
-        SWAP_CONSTANTS.USDC.toLowerCase()
-          ? "USDC"
-          : "CNGN");
+      const toAmount = Number(swapData.swap.toAmount);
+      const exchangeRate = swapData.swap.exchangeRate;
 
-      // For sell tab (USDC to NGN), calculate NGN amount using USD/NGN rate
-      // For swap tab, use the toAmount directly
-      let displayAmount: number;
-      let displayCurrency: string;
+      // 2. IDENTIFY TOKENS
+      const isFromUSDC =
+        swapData.swapParams?.tokenIn?.toLowerCase() ===
+        SWAP_CONSTANTS.USDC.toLowerCase();
+      const isToUSDC =
+        swapData.swapParams?.tokenOut?.toLowerCase() ===
+        SWAP_CONSTANTS.USDC.toLowerCase();
+
+      const fromToken = isFromUSDC ? "USDC" : "CNGN";
+      const toToken = isToUSDC ? "USDC" : "CNGN";
+
+      // 3. DETERMINE DISPLAY CONTEXT
+      // If we are in the "Sell" tab (USDC -> CNGN), the user expects to see "NGN"
+      // If we are in the "Swap" tab, the user expects to see the Token Name
+      const isSellFlow = activeTab === "sell";
+      const displayCurrency = isSellFlow ? "NGN" : toToken;
+
+      // 4. PREPARE EXCHANGE RATE LABEL
       let exchangeRateDisplay: React.ReactNode = null;
 
-      if (
-        swapData.swapParams?.tokenOut?.toLowerCase() ===
-          SWAP_CONSTANTS.CNGN.toLowerCase() &&
-        swapData.swapParams?.tokenIn?.toLowerCase() ===
-          SWAP_CONSTANTS.USDC.toLowerCase()
-      ) {
-        // This is USDC to NGN (sell flow) - use USD/NGN rate
-        const usdNgnRate =
-          ngnEstimate?.usdNgnRate ||
-          (swapData.swap.exchangeRate && swapData.swap.exchangeRate > 1
-            ? swapData.swap.exchangeRate
-            : null);
-        displayAmount = usdNgnRate
-          ? fromAmount * usdNgnRate
-          : swapData.swap.toAmount
-          ? Number(swapData.swap.toAmount)
-          : 0;
-        displayCurrency = "NGN";
-        if (usdNgnRate) {
-          exchangeRateDisplay = (
-            <div className="flex justify-between">
-              <span className="text-white/70">Exchange Rate</span>
-              <span className="text-white font-bold">
-                1 USDC ={" "}
-                {usdNgnRate.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}{" "}
-                NGN
-              </span>
-            </div>
-          );
-        }
-      } else {
-        // This is a swap (USDC ↔ CNGN)
-        if (fromToken === "CNGN" && toToken === "USDC" && usdNgnRate) {
-          // CNGN to USDC: Divide by USD/NGN rate
-          displayAmount = fromAmount / usdNgnRate;
-          displayCurrency = toToken;
-          exchangeRateDisplay = (
-            <div className="flex justify-between">
-              <span className="text-white/70">Exchange Rate</span>
-              <span className="text-white font-bold">
-                1 CNGN ={" "}
-                {(1 / usdNgnRate).toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}{" "}
-                USDC
-              </span>
-            </div>
-          );
-        } else if (
-          fromToken === "USDC" &&
-          toToken === "CNGN" &&
-          ngnEstimate?.usdNgnRate
-        ) {
-          // USDC to CNGN: Multiply by USD/NGN rate
-          displayAmount = fromAmount * ngnEstimate.usdNgnRate;
-          displayCurrency = toToken;
-          exchangeRateDisplay = (
-            <div className="flex justify-between">
-              <span className="text-white/70">Exchange Rate</span>
-              <span className="text-white font-bold">
-                1 USDC ={" "}
-                {ngnEstimate.usdNgnRate.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}{" "}
-                CNGN
-              </span>
-            </div>
-          );
-        } else {
-          // Fallback to toAmount if rates not available
-          displayAmount = swapData.swap.toAmount
-            ? Number(swapData.swap.toAmount)
-            : fromAmount;
-          displayCurrency = toToken;
-          if (swapData.swap.exchangeRate) {
-            exchangeRateDisplay = (
-              <div className="flex justify-between">
-                <span className="text-white/70">Exchange Rate</span>
-                <span className="text-white font-bold">
-                  1 {fromToken} ={" "}
-                  {swapData.swap.exchangeRate.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 6,
-                  })}{" "}
-                  {toToken}
-                </span>
-              </div>
-            );
-          }
-        }
+      if (exchangeRate) {
+        // If selling, we show e.g. "1 USDC = 1600 NGN"
+        // If swapping, we show e.g. "1 CNGN = 0.0006 USDC"
+        const targetCurrencyLabel = isSellFlow ? "NGN" : toToken;
+
+        exchangeRateDisplay = (
+          <div className="flex justify-between">
+            <span className="text-white/70">Exchange Rate</span>
+            <span className="text-white font-bold">
+              1 {fromToken} ={" "}
+              {exchangeRate.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 6,
+              })}{" "}
+              {targetCurrencyLabel}
+            </span>
+          </div>
+        );
       }
 
-      const tokenToApprove =
-        swapData.swapParams?.tokenIn?.toLowerCase() ===
-        SWAP_CONSTANTS.USDC.toLowerCase()
-          ? "USDC"
-          : "CNGN";
+      const tokenToApprove = isFromUSDC ? "USDC" : "CNGN";
 
       return (
         <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl p-4 lg:p-6 space-y-4">
@@ -1398,28 +1396,32 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
           </div>
 
           <div className="space-y-4 p-4 bg-black/50 rounded-xl">
+            {/* FROM SECTION */}
             <div className="flex justify-between">
               <span className="text-white/70">From</span>
               <span className="text-white font-bold">
-                {fromAmount} {fromToken}
+                {fromAmount.toLocaleString("en-US", {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 6,
+                })}{" "}
+                {fromToken}
               </span>
             </div>
+
+            {/* TO SECTION (Use stored toAmount, not live quote) */}
             <div className="flex justify-between">
               <span className="text-white/70">To (estimated)</span>
               <span className="text-white font-bold">
-                {displayCurrency === "USDC"
-                  ? displayAmount.toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })
-                  : displayAmount.toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 6,
-                    })}{" "}
+                {toAmount.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: displayCurrency === "USDC" ? 2 : 2,
+                })}{" "}
                 {displayCurrency}
               </span>
             </div>
+
             {exchangeRateDisplay}
+
             <div className="flex justify-between">
               <span className="text-white/70">Recipient</span>
               <span className="text-white font-mono text-sm">
@@ -1427,39 +1429,53 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
               </span>
             </div>
           </div>
+          <Button
+            onClick={handleUnifiedSwap}
+            className="w-full h-14"
+            disabled={
+              isCheckingAllowance ||
+              isApproving ||
+              isWaitingApproval ||
+              isExecuting ||
+              isWaitingSwap ||
+              isSwapSuccess
+            }
+          >
+            {isCheckingAllowance ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Checking Allowance...
+              </>
+            ) : isApproving || isWaitingApproval ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                {isWaitingApproval
+                  ? "Finalizing Approval..."
+                  : "Approving Token..."}
+              </>
+            ) : isExecuting || isWaitingSwap ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                {isWaitingSwap ? "Finalizing Swap..." : "Executing Swap..."}
+              </>
+            ) : isSwapSuccess ? (
+              <>
+                <CheckCircle className="w-5 h-5 mr-2" />
+                Swap Successful!
+              </>
+            ) : needsApproval && !isApproved ? (
+              `Approve & Swap ${tokenToApprove}`
+            ) : (
+              "Confirm Swap"
+            )}
+          </Button>
 
-          {needsApproval && !isApproved && (
-            <Button
-              onClick={handleApprove}
-              className="w-full h-14"
-              disabled={isApproving || isWaitingApproval}
-            >
-              {isApproving || isWaitingApproval ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Approving...
-                </>
-              ) : (
-                `Approve ${tokenToApprove}`
-              )}
-            </Button>
-          )}
-
-          {(!needsApproval || isApproved) && (
-            <Button
-              onClick={handleExecuteSwap}
-              className="w-full h-14"
-              disabled={isExecuting || isWaitingSwap}
-            >
-              {isExecuting || isWaitingSwap ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Executing...
-                </>
-              ) : (
-                "Execute Swap"
-              )}
-            </Button>
+          {/* Optional: Informational text during the "gap" */}
+          {isAutoSwapping && isWaitingApproval && (
+            <p className="text-xs text-center text-white/50 mt-2">
+              Please wait. The swap transaction will prompt automatically after
+              approval.
+            </p>
           )}
 
           {swapHash && (
@@ -1513,9 +1529,7 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
             <>
               <div className="p-4 bg-black/50 rounded-xl">
                 <p className="text-white/70 mb-2">Amount to Pay</p>
-                <p className="text-3xl font-bold text-white">
-                  ₦{parseFloat(buyAmount).toLocaleString()}
-                </p>
+                <p className="text-3xl font-bold text-white">₦{buyAmount}</p>
               </div>
 
               <div className="space-y-4 p-4 bg-black/50 rounded-xl">
@@ -1566,7 +1580,7 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
             </>
           )}
 
-          {activeTab === "sell" &&
+          {/* {activeTab === "sell" &&
             cryptoType === "CNGN" &&
             transactionData?.data?.depositAddress && (
               <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
@@ -1603,6 +1617,66 @@ if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
                 <p className="text-xs text-white/70 mt-2">
                   Send your crypto to this address
                 </p>
+              </div>
+            )} */}
+          {activeTab === "sell" &&
+            cryptoType === "CNGN" &&
+            transactionData?.data?.depositAddress && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-4">
+                {/* 1. Amount Section */}
+                <div>
+                  <span className="text-amber-400/80 text-xs font-bold uppercase tracking-wider mb-1 block">
+                    Amount to Send
+                  </span>
+                  <p className="text-2xl font-bold text-white tracking-tight">
+                    {sellAmount}{" "}
+                    <span className="text-lg font-medium text-amber-400">
+                      CNGN
+                    </span>
+                  </p>
+                </div>
+
+                {/* Divider */}
+                <div className="h-px bg-amber-500/20 w-full" />
+
+                {/* 2. Address Section */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="text-amber-400" size={16} />
+                    <span className="text-amber-400/80 text-xs font-bold uppercase tracking-wider">
+                      Deposit Address
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-black/20 p-2 rounded-lg border border-amber-500/10">
+                    <code className="text-xs text-white flex-1 break-all font-mono">
+                      {transactionData.data.depositAddress}
+                    </code>
+                    <button
+                      onClick={async () => {
+                        const success = await copyToClipboard(
+                          transactionData.data.depositAddress
+                        );
+                        if (success) {
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                          toast({ title: "Copied!", variant: "success" });
+                        }
+                      }}
+                      className="p-2 hover:bg-white/10 rounded-md transition-colors"
+                    >
+                      {copied ? (
+                        <CheckCircle size={16} className="text-green-400" />
+                      ) : (
+                        <Copy size={16} className="text-amber-400/50" />
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-xs text-white/50 mt-2">
+                    Please send exactly <strong>{sellAmount} CNGN</strong> to
+                    the address above.
+                  </p>
+                </div>
               </div>
             )}
         </div>

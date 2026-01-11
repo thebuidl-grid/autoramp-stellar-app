@@ -26,6 +26,7 @@ import {
   ChevronRight,
   ArrowLeftRight,
 } from "lucide-react";
+import { formatNumber } from "@/lib/utils";
 
 interface TransactionWithType extends Transaction {
   type?: "onramp" | "offramp";
@@ -193,11 +194,15 @@ export default function HistoryPage() {
                     displayAmount = `${swapTx.fromAmount} ${swapTx.fromTokenType} → ${swapTx.toAmount} ${swapTx.toTokenType}`;
                   } else if (isOnramp) {
                     const onrampTx = tx as TransactionWithType;
-                    displayAmount = `${onrampTx.tokenAmount || ""} CNGN`;
+                    displayAmount = `${
+                      formatNumber(onrampTx.amount?.toString() || "0") || ""
+                    } CNGN`;
                   } else {
                     const offrampTx = tx as TransactionWithType;
                     displayAmount = `${
-                      offrampTx.amount || offrampTx.fiatAmount || ""
+                      formatNumber(offrampTx.amount?.toString() || "0") ||
+                      formatNumber(offrampTx.fiatAmount?.toString() || "0") ||
+                      ""
                     } ${offrampTx.currency || "NGN"}`;
                   }
 
