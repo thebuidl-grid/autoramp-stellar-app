@@ -64,6 +64,17 @@ export default function MerchantLoginPage() {
             // Reusing signUp for login as per auth implementation
             const response = await authApi.signUp({ email, otpCode });
 
+            // Check if merchant has approved API access
+            const user = response.data.user as any;
+            if (!user.isApiAccessApproved) {
+                toast({
+                    title: "Access Pending",
+                    description: "Your API access is pending approval. Please contact admin.",
+                    variant: "destructive",
+                });
+                return;
+            }
+
             // Store auth data
             if (typeof window !== "undefined") {
                 localStorage.setItem("token", response.data.accessToken);
