@@ -97,7 +97,12 @@ body {
   font-family: var(--font-bricolage-grotesque) !important;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-weight: 600;
   font-family: var(--font-bricolage-grotesque) !important;
 }
@@ -127,24 +132,37 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Animations */
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  from { 
+  from {
     opacity: 0;
     transform: translateY(10px);
   }
-  to { 
+
+  to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .animate-fade-in {
@@ -181,10 +199,13 @@ button {
 }
 
 @keyframes pulse-slow {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 0.15;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.25;
     transform: scale(1.05);
@@ -200,6 +221,7 @@ button {
     opacity: 0;
     transform: translate(-50%, -48%) scale(0.9);
   }
+
   100% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
@@ -211,6 +233,7 @@ button {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
+
   100% {
     opacity: 0;
     transform: translate(-50%, -48%) scale(0.9);
@@ -229,6 +252,7 @@ button {
   from {
     height: 0;
   }
+
   to {
     height: var(--radix-accordion-content-height);
   }
@@ -238,6 +262,7 @@ button {
   from {
     height: var(--radix-accordion-content-height);
   }
+
   to {
     height: 0;
   }
@@ -249,4 +274,10 @@ button {
 
 .animate-accordion-up {
   animation: accordion-up 0.2s ease-out;
+}
+
+.left-sidebar {
+  background: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.8)), url('/bg-right.png');
+  background-size: cover;
+  background-position: center;
 }

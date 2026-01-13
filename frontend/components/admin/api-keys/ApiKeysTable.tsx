@@ -83,7 +83,7 @@ export function ApiKeysTable({ apiKeys, onRevoke }: ApiKeysTableProps) {
                                     </div>
                                 </td>
                                 <td className="p-4 align-middle">
-                                    <Badge variant={key.isActive ? "success" : "secondary"}>
+                                    <Badge variant={key.isActive ? "success" : "default"}>
                                         {key.isActive ? "Active" : "Revoked"}
                                     </Badge>
                                 </td>

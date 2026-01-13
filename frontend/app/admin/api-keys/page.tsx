@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/api";
 import { ApiKeysOverview } from "@/components/admin/api-keys/ApiKeysOverview";
 import { ApiKeysTable } from "@/components/admin/api-keys/ApiKeysTable";
-import { GenerateApiKeyDialog } from "@/components/admin/api-keys/GenerateApiKeyDialog";
+import { ApproveAccessDialog } from "@/components/admin/api-keys/GenerateApiKeyDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -72,7 +72,7 @@ export default function AdminApiKeysPage() {
                         Generate and manage API keys for regular users.
                     </p>
                 </div>
-                <GenerateApiKeyDialog />
+                <ApproveAccessDialog />
             </div>
 
             {/* Summary Cards */}

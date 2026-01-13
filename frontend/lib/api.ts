@@ -137,6 +137,9 @@ export const userApi = {
   // User API Keys
   getUserApiKeys: () => api.get<ApiKey[]>("/user/api-keys"),
 
+  createApiKey: (data: CreateApiKeyDto) =>
+    api.post<CreateApiKeyResponse>("/user/api-keys", data),
+
   getUserApiKeyStats: () =>
     api.get<UserApiKeyStatsResponse>("/user/api-keys/stats"),
 
@@ -384,6 +387,22 @@ export interface AdminTransactionsResponse {
   transactions: Transaction[]; // Unified transactions
 }
 
+
+export interface CreateMerchantDto {
+  email: string;
+  name: string;
+  businessName: string;
+  websiteUrl: string;
+  trafficEstimate?: string;
+  requestLimit?: string;
+}
+
+// Response from backend ApproveMerchant
+export interface ApproveMerchantResponse {
+  user: User;
+  message: string;
+}
+
 export const adminApi = {
   getMe: () =>
     api.get<AdminUser>("/admin/me"),
@@ -393,9 +412,14 @@ export const adminApi = {
 
   getUserById: (id: string) =>
     api.get<AdminUser>(`/admin/users/${id}`),
+
+  approveMerchantAccess: (data: CreateMerchantDto) =>
+    api.post<ApproveMerchantResponse>("/admin/approve-access", data),
+
   // API Key Management
   getAllApiKeys: (page: number = 1, limit: number = 10) =>
     api.get<ApiKeysResponse>(`/admin/api-keys?page=${page}&limit=${limit}`),
+
 
   getUserApiKeys: (userId: string) =>
     api.get<ApiKey[]>(`/admin/users/${userId}/api-keys`),
