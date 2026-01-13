@@ -137,6 +137,9 @@ export const userApi = {
   // User API Keys
   getUserApiKeys: () => api.get<ApiKey[]>("/user/api-keys"),
 
+  createApiKey: (data: CreateApiKeyDto) =>
+    api.post<CreateApiKeyResponse>("/user/api-keys", data),
+
   getUserApiKeyStats: () =>
     api.get<UserApiKeyStatsResponse>("/user/api-keys/stats"),
 
@@ -394,11 +397,10 @@ export interface CreateMerchantDto {
   requestLimit?: string;
 }
 
-// Response from backend CreateMerchant
-export interface CreateMerchantResponse {
+// Response from backend ApproveMerchant
+export interface ApproveMerchantResponse {
   user: User;
-  apiKey: string;
-  keyId: string;
+  message: string;
 }
 
 export const adminApi = {
@@ -411,8 +413,8 @@ export const adminApi = {
   getUserById: (id: string) =>
     api.get<AdminUser>(`/admin/users/${id}`),
 
-  createMerchant: (data: CreateMerchantDto) =>
-    api.post<CreateMerchantResponse>("/admin/merchants", data),
+  approveMerchantAccess: (data: CreateMerchantDto) =>
+    api.post<ApproveMerchantResponse>("/admin/approve-access", data),
 
   // API Key Management
   getAllApiKeys: (page: number = 1, limit: number = 10) =>

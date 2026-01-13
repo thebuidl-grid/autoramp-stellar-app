@@ -58,6 +58,7 @@ export class AuthService {
         walletAddress: true,
         role: true,
         createdAt: true,
+        isApiAccessApproved: true,
       },
     });
 
@@ -75,6 +76,7 @@ export class AuthService {
             walletAddress: true,
             role: true,
             createdAt: true,
+            isApiAccessApproved: true,
           },
         });
       }
@@ -93,6 +95,7 @@ export class AuthService {
           walletAddress: true,
           role: true,
           createdAt: true,
+          isApiAccessApproved: true,
         },
       });
     }

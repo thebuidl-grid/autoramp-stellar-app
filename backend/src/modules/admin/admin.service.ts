@@ -35,12 +35,12 @@ export class AdminService {
   // ... (existing methods until getUserById)
 
   /**
-   * Create Merchant and API Key (Admin only)
+   * Approve Merchant API Access (Admin only)
    * 
-   * Creates or updates a user with merchant details, generates an API key,
-   * and sends an approval email with login link.
+   * Creates or updates a user with merchant details, sets isApiAccessApproved = true,
+   * and sends an approval email with login link (no API key created).
    */
-  async createMerchant(dto: CreateMerchantDto) {
+  async approveMerchant(dto: CreateMerchantDto) {
     // 1. Find or create user
     let user = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -50,41 +50,34 @@ export class AdminService {
       user = await this.prisma.user.create({
         data: {
           email: dto.email,
-          role: 'USER', // Merchant is just a user with extra fields for now
+          role: 'USER',
           businessName: dto.businessName,
           websiteUrl: dto.websiteUrl,
           contactName: dto.name,
+          isApiAccessApproved: true,
         },
       });
     } else {
-      // Update existing user with merchant details
+      // Update existing user with merchant details and approve access
       user = await this.prisma.user.update({
         where: { id: user.id },
         data: {
           businessName: dto.businessName,
           websiteUrl: dto.websiteUrl,
           contactName: dto.name,
+          isApiAccessApproved: true,
         },
       });
     }
 
-    // 2. Create API Key
-    const apiKeyDto: CreateApiKeyDto = {
-      name: `${dto.businessName} API Key`,
-      businessName: dto.businessName,
-      trafficEstimate: dto.trafficEstimate,
-      requestLimit: dto.requestLimit,
-    };
-    const apiKey = await this.apiKeysService.createApiKey(user.id, apiKeyDto);
-
-    // 3. Send "Merchant Approved" Email
+    // 2. Send "API Access Approved" Email
     try {
       const loginUrl = `${this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001'}/merchant/login`;
 
       await this.resend.emails.send({
         from: this.fromEmail,
         to: dto.email,
-        subject: 'Your Business Account is Approved - AutoRamp',
+        subject: 'Your API Access is Approved - AutoRamp',
         html: `
           <!DOCTYPE html>
           <html>
@@ -95,12 +88,7 @@ export class AdminService {
               <div style="background-color: #f9f9f9; padding: 30px; margin-top: 20px;">
                 <h2 style="color: #000; margin-top: 0;">Welcome, ${dto.name}!</h2>
                 <p>Your business <strong>${dto.businessName}</strong> has been approved for AutoRamp API access.</p>
-                <p>An API key has been generated for you:</p>
-                <div style="background-color: #eee; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 16px; margin: 20px 0; word-break: break-all;">
-                  ${apiKey.key}
-                </div>
-                <p><strong>keep this safe!</strong> You won't be able to see the full key again.</p>
-                <p>You can manage your integration and view transaction logs via your Merchant Dashboard.</p>
+                <p>You can now log in to your Merchant Dashboard to create and manage your API keys.</p>
                 
                 <div style="text-align: center; margin: 30px 0;">
                   <a href="${loginUrl}" style="background-color: #000; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: bold;">Access Dashboard</a>
@@ -114,13 +102,11 @@ export class AdminService {
       });
     } catch (error) {
       console.error('Failed to send merchant approval email:', error);
-      // We don't throw here to avoid rolling back the API key creation
     }
 
     return {
       user,
-      apiKey: apiKey.key, // Return the key so admin can see it once if needed, though mostly for email
-      keyId: apiKey.id
+      message: 'API access approved successfully',
     };
   }
 

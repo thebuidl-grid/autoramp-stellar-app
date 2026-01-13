@@ -21,6 +21,7 @@ model User {
   businessName  String?  @map("business_name")
   websiteUrl    String?  @map("website_url")
   contactName   String?  @map("contact_name")
+  isApiAccessApproved Boolean @default(false) @map("is_api_access_approved")
 
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamp

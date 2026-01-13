@@ -1,15 +1,20 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { ApiKeysService } from '../api-keys/api-keys.service';
 
 /**
  * User Service
  * 
  * Handles user-related operations including:
  * - User profile management
+ * - API key creation for approved merchants
  */
 @Injectable()
 export class UserService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly apiKeysService: ApiKeysService,
+  ) { }
 
   /**
    * Get user profile
@@ -101,6 +106,34 @@ export class UserService {
         createdAt: 'desc',
       },
     });
+  }
+
+  /**
+   * Create API key for user
+   * 
+   * Only allowed if user has isApiAccessApproved = true
+   * 
+   * @param userId - User ID
+   * @param dto - API key creation data
+   * @returns Created API key (key shown only once)
+   */
+  async createApiKey(userId: string, dto: any) {
+    // Check if user has API access approved
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isApiAccessApproved: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.isApiAccessApproved) {
+      throw new ForbiddenException('API access not approved. Please contact admin for approval.');
+    }
+
+    // Create API key using ApiKeysService
+    return this.apiKeysService.createApiKey(userId, dto);
   }
 
   /**

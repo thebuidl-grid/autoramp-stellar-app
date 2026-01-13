@@ -146,12 +146,12 @@ export class AdminController {
     return this.adminService.createApiKeyForUser(userId, dto);
   }
 
-  @Post('merchants')
-  @ApiOperation({ summary: 'Create a merchant account and API key' })
+  @Post('approve-access')
+  @ApiOperation({ summary: 'Approve merchant API access' })
   @ApiBody({ type: CreateMerchantDto })
   @ApiResponse({
     status: 201,
-    description: 'Merchant created successfully',
+    description: 'Merchant API access approved successfully',
   })
   @ApiResponse({
     status: 401,
@@ -161,8 +161,8 @@ export class AdminController {
     status: 403,
     description: 'Admin access required',
   })
-  async createMerchant(@Body() dto: CreateMerchantDto) {
-    return this.adminService.createMerchant(dto);
+  async approveMerchant(@Body() dto: CreateMerchantDto) {
+    return this.adminService.approveMerchant(dto);
   }
 
   @Get('users/:userId/api-keys')
