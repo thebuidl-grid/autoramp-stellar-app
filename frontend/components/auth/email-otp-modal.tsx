@@ -140,7 +140,7 @@ export function EmailOtpModal({
   return (
     <div className="mx-2">
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="bg-black/30 backdrop-blur-xl border-white/10 text-white max-w-md data-[state=open]:animate-modal-open data-[state=closed]:animate-modal-close">
+        <DialogContent className="bg-black/30 backdrop-blur-xl rounded-xl border-white/10 text-white w-[calc(100%-2rem)] max-w-md data-[state=open]:animate-modal-open data-[state=closed]:animate-modal-close">
           <DialogHeader>
             <DialogTitle className="text-white text-xl">
               {step === "email" ? "Sign in to continue" : "Verify your email"}

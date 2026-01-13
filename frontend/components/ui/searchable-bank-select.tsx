@@ -86,11 +86,11 @@ export function SearchableBankSelect({
           setSearchQuery("");
         }
       }}>
-        <DialogContent className="bg-black/30 backdrop-blur-xl border-white/10 text-white max-w-md data-[state=open]:animate-modal-open data-[state=closed]:animate-modal-close">
+        <DialogContent className="bg-black/30 backdrop-blur-xl rounded-xl border-white/10 text-white w-[calc(100%-2rem)] max-w-xl data-[state=open]:animate-modal-open data-[state=closed]:animate-modal-close">
           <DialogHeader>
             <DialogTitle className="text-white">Select Bank</DialogTitle>
           </DialogHeader>
-          
+
           {/* Search Input */}
           <div className="pt-4">
             <div className="relative">

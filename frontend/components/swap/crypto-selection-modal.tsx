@@ -42,7 +42,7 @@ export function CryptoSelectionModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-black/30 backdrop-blur-xl border-white/10 text-white">
+      <DialogContent className="bg-black/30 backdrop-blur-xl rounded-xl border-white/10 text-white w-[calc(100%-2rem)] max-w-md">
         <DialogHeader>
           <DialogTitle className="text-white">Select Crypto</DialogTitle>
         </DialogHeader>

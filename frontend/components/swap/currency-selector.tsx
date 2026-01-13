@@ -42,11 +42,10 @@ export function CurrencySelector({
       type="button"
       onClick={onClick}
       disabled={!isClickable}
-      className={`flex items-center gap-3 px-3 py-1.5 md:px-4 md:py-2.5 rounded-xl border border-white/10 bg-white/5 transition-colors ${
-        isClickable
+      className={`flex items-center gap-3 px-3 py-1.5 md:px-4 md:py-2.5 rounded-xl border border-white/10 bg-white/5 transition-colors ${isClickable
           ? "hover:bg-white/10 cursor-pointer"
           : "cursor-default"
-      }`}
+        }`}
     >
       <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
         <img

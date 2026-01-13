@@ -11,6 +11,7 @@ import { UserService } from './user.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { GetApiKeyStatsDto } from '../admin/dto/get-api-key-stats.dto';
+import { CreateApiKeyDto } from '../api-keys/dto/create-api-key.dto';
 
 /**
  * User Controller
@@ -57,6 +58,28 @@ export class UserController {
   })
   async getUserApiKeys(@CurrentUser() user: any) {
     return this.userService.getUserApiKeys(user.id);
+  }
+
+  @Post('api-keys')
+  @ApiOperation({ summary: 'Create a new API key' })
+  @ApiBody({ type: CreateApiKeyDto })
+  @ApiResponse({
+    status: 201,
+    description: 'API key created successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'API access not approved',
+  })
+  async createApiKey(
+    @CurrentUser() user: any,
+    @Body() dto: CreateApiKeyDto,
+  ) {
+    return this.userService.createApiKey(user.id, dto);
   }
 
   @Get('api-keys/stats')
