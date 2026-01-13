@@ -21,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { CreateApiKeyDto } from '../api-keys/dto/create-api-key.dto';
+import { CreateMerchantDto } from './dto/create-merchant.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -143,6 +144,25 @@ export class AdminController {
     @Body() dto: CreateApiKeyDto,
   ) {
     return this.adminService.createApiKeyForUser(userId, dto);
+  }
+
+  @Post('merchants')
+  @ApiOperation({ summary: 'Create a merchant account and API key' })
+  @ApiBody({ type: CreateMerchantDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Merchant created successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Admin access required',
+  })
+  async createMerchant(@Body() dto: CreateMerchantDto) {
+    return this.adminService.createMerchant(dto);
   }
 
   @Get('users/:userId/api-keys')

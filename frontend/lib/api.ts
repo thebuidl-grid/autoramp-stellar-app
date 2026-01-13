@@ -384,6 +384,23 @@ export interface AdminTransactionsResponse {
   transactions: Transaction[]; // Unified transactions
 }
 
+
+export interface CreateMerchantDto {
+  email: string;
+  name: string;
+  businessName: string;
+  websiteUrl: string;
+  trafficEstimate?: string;
+  requestLimit?: string;
+}
+
+// Response from backend CreateMerchant
+export interface CreateMerchantResponse {
+  user: User;
+  apiKey: string;
+  keyId: string;
+}
+
 export const adminApi = {
   getMe: () =>
     api.get<AdminUser>("/admin/me"),
@@ -393,9 +410,14 @@ export const adminApi = {
 
   getUserById: (id: string) =>
     api.get<AdminUser>(`/admin/users/${id}`),
+
+  createMerchant: (data: CreateMerchantDto) =>
+    api.post<CreateMerchantResponse>("/admin/merchants", data),
+
   // API Key Management
   getAllApiKeys: (page: number = 1, limit: number = 10) =>
     api.get<ApiKeysResponse>(`/admin/api-keys?page=${page}&limit=${limit}`),
+
 
   getUserApiKeys: (userId: string) =>
     api.get<ApiKey[]>(`/admin/users/${userId}/api-keys`),

@@ -29,6 +29,13 @@ export function GenerateApiKeyDialog() {
     const [isLoading, setIsLoading] = useState(false);
     const [users, setUsers] = useState<any[]>([]);
     const [selectedUserId, setSelectedUserId] = useState("");
+
+    // Merchant / New User fields
+    const [isNewMerchant, setIsNewMerchant] = useState(false);
+    const [email, setEmail] = useState("");
+    const [merchantName, setMerchantName] = useState("");
+    const [websiteUrl, setWebsiteUrl] = useState("");
+
     const [name, setName] = useState("");
     const [businessName, setBusinessName] = useState("");
     const [trafficEstimate, setTrafficEstimate] = useState("");
@@ -57,7 +64,7 @@ export function GenerateApiKeyDialog() {
     };
 
     const handleGenerate = async () => {
-        if (!selectedUserId) {
+        if (!isNewMerchant && !selectedUserId) {
             toast({
                 title: "Error",
                 description: "Please select a user",
@@ -66,15 +73,39 @@ export function GenerateApiKeyDialog() {
             return;
         }
 
+        if (isNewMerchant && (!email || !merchantName || !businessName || !websiteUrl)) {
+            toast({
+                title: "Error",
+                description: "All merchant fields are required",
+                variant: "destructive",
+            });
+            return;
+        }
+
         setIsLoading(true);
         try {
-            const response = await adminApi.createApiKeyForUser(selectedUserId, {
-                name,
-                businessName,
-                trafficEstimate,
-                requestLimit,
-            });
-            setGeneratedKey(response.data.key);
+            let keyToDisplay = "";
+            if (isNewMerchant) {
+                const response = await adminApi.createMerchant({
+                    email,
+                    name: merchantName,
+                    businessName,
+                    websiteUrl,
+                    trafficEstimate,
+                    requestLimit,
+                });
+                keyToDisplay = response.data.apiKey;
+            } else {
+                const response = await adminApi.createApiKeyForUser(selectedUserId, {
+                    name,
+                    businessName,
+                    trafficEstimate,
+                    requestLimit,
+                });
+                keyToDisplay = response.data.key;
+            }
+
+            setGeneratedKey(keyToDisplay);
             toast({
                 title: "Success",
                 description: "API Key generated successfully",
@@ -101,6 +132,10 @@ export function GenerateApiKeyDialog() {
 
     const resetForm = () => {
         setSelectedUserId("");
+        setIsNewMerchant(false);
+        setEmail("");
+        setMerchantName("");
+        setWebsiteUrl("");
         setName("");
         setBusinessName("");
         setTrafficEstimate("");
@@ -120,40 +155,96 @@ export function GenerateApiKeyDialog() {
                     Generate API Key
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[425px] overflow-y-auto max-h-[90vh]">
                 <DialogHeader>
                     <DialogTitle>Generate API Key</DialogTitle>
                     <DialogDescription>
-                        Create a new API key for a regular user. Enter details about their business and expected usage.
+                        Create a new API key. You can select an existing user or onboard a new merchant.
                     </DialogDescription>
                 </DialogHeader>
 
                 {!generatedKey ? (
                     <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="user">User</Label>
-                            <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select a user" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {users.map((user) => (
-                                        <SelectItem key={user.id} value={user.id}>
-                                            {user.email}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                        <div className="flex items-center gap-4 mb-2">
+                            <Button
+                                variant={!isNewMerchant ? "default" : "outline"}
+                                onClick={() => setIsNewMerchant(false)}
+                                size="sm"
+                                className="flex-1"
+                            >
+                                Existing User
+                            </Button>
+                            <Button
+                                variant={isNewMerchant ? "default" : "outline"}
+                                onClick={() => setIsNewMerchant(true)}
+                                size="sm"
+                                className="flex-1"
+                            >
+                                New Merchant
+                            </Button>
                         </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="name">Key Name (Purpose)</Label>
-                            <Input
-                                id="name"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="e.g. My Business API"
-                            />
-                        </div>
+
+                        {!isNewMerchant ? (
+                            <div className="grid gap-2">
+                                <Label htmlFor="user">User</Label>
+                                <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select a user" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {users.map((user) => (
+                                            <SelectItem key={user.id} value={user.id}>
+                                                {user.email}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="email">Merchant Email</Label>
+                                    <Input
+                                        id="email"
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        placeholder="merchant@company.com"
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="merchantName">Contact Name</Label>
+                                    <Input
+                                        id="merchantName"
+                                        value={merchantName}
+                                        onChange={(e) => setMerchantName(e.target.value)}
+                                        placeholder="John Doe"
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="websiteUrl">Website URL</Label>
+                                    <Input
+                                        id="websiteUrl"
+                                        value={websiteUrl}
+                                        onChange={(e) => setWebsiteUrl(e.target.value)}
+                                        placeholder="https://company.com"
+                                    />
+                                </div>
+                            </>
+                        )}
+
+                        {!isNewMerchant && (
+                            <div className="grid gap-2">
+                                <Label htmlFor="name">Key Name (Purpose)</Label>
+                                <Input
+                                    id="name"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder="e.g. My Business API"
+                                />
+                            </div>
+                        )}
+
                         <div className="grid gap-2">
                             <Label htmlFor="business">Business Name</Label>
                             <Input
@@ -206,7 +297,7 @@ export function GenerateApiKeyDialog() {
 
                 <DialogFooter>
                     {!generatedKey ? (
-                        <Button onClick={handleGenerate} disabled={isLoading || !selectedUserId}>
+                        <Button onClick={handleGenerate} disabled={isLoading || (!isNewMerchant && !selectedUserId)}>
                             {isLoading ? "Generating..." : "Generate Key"}
                         </Button>
                     ) : (
