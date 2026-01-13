@@ -29,7 +29,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @ApiTags('Swap')
 @Controller('swap')
 export class SwapController {
-  constructor(private readonly swapService: SwapService) {}
+  constructor(private readonly swapService: SwapService) { }
 
   @Get('balance/:token/:address')
   @ApiOperation({ summary: 'Get token balance for an address' })
@@ -91,7 +91,7 @@ export class SwapController {
     if (isNaN(amount) || amount <= 0) {
       throw new BadRequestException('Valid CNGN amount is required');
     }
-    
+
     return await this.swapService.calculateEstimatedNgn(amount);
   }
 
@@ -99,7 +99,7 @@ export class SwapController {
   @UseGuards(AuthOrApiKeyGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiSecurity('API-Key')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Initialize swap transaction (USDC → CNGN → Offramp)',
     description: 'Initializes offramp first to get recipient wallet address, then creates swap record. Returns recipient address and swap parameters for frontend to execute the swap. Requires authentication.',
   })
@@ -113,6 +113,11 @@ export class SwapController {
   ): Promise<any> {
     if (dto.amount <= 0) {
       throw new BadRequestException('Amount must be positive');
+    }
+    // Check minimum amount in NGN (must be at least 100 NGN)
+    // We strictly enforce 100 NGN minimum regardless of the USDC equivalent
+    if (dto.amount < 100) {
+      throw new BadRequestException('Minimum amount is 100 NGN');
     }
     if (dto.slippage < 0 || dto.slippage > 1) {
       throw new BadRequestException('Slippage must be between 0 and 1');
@@ -129,7 +134,7 @@ export class SwapController {
   @UseGuards(AuthOrApiKeyGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiSecurity('API-Key')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Update swap transaction after execution',
     description: 'Updates swap transaction status after user executes the swap on blockchain. Requires authentication.',
   })
@@ -166,7 +171,7 @@ export class SwapController {
   @UseGuards(AuthOrApiKeyGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiSecurity('API-Key')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Create a simple swap transaction (store in database)',
     description: 'Creates a swap transaction record in the database. The actual swap execution happens on-chain via the frontend. Requires authentication.',
   })
@@ -189,7 +194,7 @@ export class SwapController {
   @UseGuards(AuthOrApiKeyGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiSecurity('API-Key')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Execute a token swap (USDC ↔ CNGN) - DEPRECATED',
     description: 'DEPRECATED: Use /swap/initialize instead. Executes swap on backend. Requires authentication.',
   })

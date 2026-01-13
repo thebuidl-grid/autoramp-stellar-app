@@ -18,6 +18,9 @@ model User {
   phoneNumber   String?  @map("phone_number")
   walletAddress String?  @map("wallet_address")
   role          UserRole @default(USER)
+  businessName  String?  @map("business_name")
+  websiteUrl    String?  @map("website_url")
+  contactName   String?  @map("contact_name")
 
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamp

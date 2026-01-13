@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Resend } from 'resend';
 import { PrismaService } from '../../database/prisma.service';
 import { ApiKeysService } from '../api-keys/api-keys.service';
 import { CreateApiKeyDto } from '../api-keys/dto/create-api-key.dto';
+import { CreateMerchantDto } from './dto/create-merchant.dto';
 
 /**
  * Admin Service
@@ -13,10 +16,116 @@ import { CreateApiKeyDto } from '../api-keys/dto/create-api-key.dto';
  */
 @Injectable()
 export class AdminService {
+  private readonly resend: Resend;
+  private readonly fromEmail: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly apiKeysService: ApiKeysService,
-  ) { }
+    private readonly configService: ConfigService,
+  ) {
+    const apiKey = this.configService.get<string>('RESEND_API_KEY');
+    if (!apiKey) {
+      throw new Error('RESEND_API_KEY is required in environment variables');
+    }
+    this.resend = new Resend(apiKey);
+    this.fromEmail = this.configService.get<string>('RESEND_FROM_EMAIL') || 'onboarding@resend.dev';
+  }
+
+  // ... (existing methods until getUserById)
+
+  /**
+   * Create Merchant and API Key (Admin only)
+   * 
+   * Creates or updates a user with merchant details, generates an API key,
+   * and sends an approval email with login link.
+   */
+  async createMerchant(dto: CreateMerchantDto) {
+    // 1. Find or create user
+    let user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          role: 'USER', // Merchant is just a user with extra fields for now
+          businessName: dto.businessName,
+          websiteUrl: dto.websiteUrl,
+          contactName: dto.name,
+        },
+      });
+    } else {
+      // Update existing user with merchant details
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          businessName: dto.businessName,
+          websiteUrl: dto.websiteUrl,
+          contactName: dto.name,
+        },
+      });
+    }
+
+    // 2. Create API Key
+    const apiKeyDto: CreateApiKeyDto = {
+      name: `${dto.businessName} API Key`,
+      businessName: dto.businessName,
+      trafficEstimate: dto.trafficEstimate,
+      requestLimit: dto.requestLimit,
+    };
+    const apiKey = await this.apiKeysService.createApiKey(user.id, apiKeyDto);
+
+    // 3. Send "Merchant Approved" Email
+    try {
+      const loginUrl = `${this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001'}/merchant/login`;
+
+      await this.resend.emails.send({
+        from: this.fromEmail,
+        to: dto.email,
+        subject: 'Your Business Account is Approved - AutoRamp',
+        html: `
+          <!DOCTYPE html>
+          <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="background-color: #000; color: #fff; padding: 20px; text-align: center;">
+                <h1 style="margin: 0; font-size: 24px;">AutoRamp</h1>
+              </div>
+              <div style="background-color: #f9f9f9; padding: 30px; margin-top: 20px;">
+                <h2 style="color: #000; margin-top: 0;">Welcome, ${dto.name}!</h2>
+                <p>Your business <strong>${dto.businessName}</strong> has been approved for AutoRamp API access.</p>
+                <p>An API key has been generated for you:</p>
+                <div style="background-color: #eee; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 16px; margin: 20px 0; word-break: break-all;">
+                  ${apiKey.key}
+                </div>
+                <p><strong>keep this safe!</strong> You won't be able to see the full key again.</p>
+                <p>You can manage your integration and view transaction logs via your Merchant Dashboard.</p>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${loginUrl}" style="background-color: #000; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: bold;">Access Dashboard</a>
+                </div>
+                
+                <p style="color: #666; font-size: 14px;">Or paste this link in your browser: <br>${loginUrl}</p>
+              </div>
+            </body>
+          </html>
+        `,
+      });
+    } catch (error) {
+      console.error('Failed to send merchant approval email:', error);
+      // We don't throw here to avoid rolling back the API key creation
+    }
+
+    return {
+      user,
+      apiKey: apiKey.key, // Return the key so admin can see it once if needed, though mostly for email
+      keyId: apiKey.id
+    };
+  }
+
+  // ... (rest of the file)
+
 
   /**
    * Get all users
