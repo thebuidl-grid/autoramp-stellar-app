@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Resend } from 'resend';
 import { PrismaService } from '../../database/prisma.service';
 import { ApiKeysService } from '../api-keys/api-keys.service';
 import { CreateApiKeyDto } from '../api-keys/dto/create-api-key.dto';
+import { CreateMerchantDto } from './dto/create-merchant.dto';
 
 /**
  * Admin Service
@@ -13,10 +16,102 @@ import { CreateApiKeyDto } from '../api-keys/dto/create-api-key.dto';
  */
 @Injectable()
 export class AdminService {
+  private readonly resend: Resend;
+  private readonly fromEmail: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly apiKeysService: ApiKeysService,
-  ) { }
+    private readonly configService: ConfigService,
+  ) {
+    const apiKey = this.configService.get<string>('RESEND_API_KEY');
+    if (!apiKey) {
+      throw new Error('RESEND_API_KEY is required in environment variables');
+    }
+    this.resend = new Resend(apiKey);
+    this.fromEmail = this.configService.get<string>('RESEND_FROM_EMAIL') || 'onboarding@resend.dev';
+  }
+
+  // ... (existing methods until getUserById)
+
+  /**
+   * Approve Merchant API Access (Admin only)
+   * 
+   * Creates or updates a user with merchant details, sets isApiAccessApproved = true,
+   * and sends an approval email with login link (no API key created).
+   */
+  async approveMerchant(dto: CreateMerchantDto) {
+    // 1. Find or create user
+    let user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          role: 'USER',
+          businessName: dto.businessName,
+          websiteUrl: dto.websiteUrl,
+          contactName: dto.name,
+          isApiAccessApproved: true,
+        },
+      });
+    } else {
+      // Update existing user with merchant details and approve access
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          businessName: dto.businessName,
+          websiteUrl: dto.websiteUrl,
+          contactName: dto.name,
+          isApiAccessApproved: true,
+        },
+      });
+    }
+
+    // 2. Send "API Access Approved" Email
+    try {
+      const loginUrl = `${this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001'}/merchant/login`;
+
+      await this.resend.emails.send({
+        from: this.fromEmail,
+        to: dto.email,
+        subject: 'Your API Access is Approved - AutoRamp',
+        html: `
+          <!DOCTYPE html>
+          <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="background-color: #000; color: #fff; padding: 20px; text-align: center;">
+                <h1 style="margin: 0; font-size: 24px;">AutoRamp</h1>
+              </div>
+              <div style="background-color: #f9f9f9; padding: 30px; margin-top: 20px;">
+                <h2 style="color: #000; margin-top: 0;">Welcome, ${dto.name}!</h2>
+                <p>Your business <strong>${dto.businessName}</strong> has been approved for AutoRamp API access.</p>
+                <p>You can now log in to your Merchant Dashboard to create and manage your API keys.</p>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${loginUrl}" style="background-color: #000; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: bold;">Access Dashboard</a>
+                </div>
+                
+                <p style="color: #666; font-size: 14px;">Or paste this link in your browser: <br>${loginUrl}</p>
+              </div>
+            </body>
+          </html>
+        `,
+      });
+    } catch (error) {
+      console.error('Failed to send merchant approval email:', error);
+    }
+
+    return {
+      user,
+      message: 'API access approved successfully',
+    };
+  }
+
+  // ... (rest of the file)
+
 
   /**
    * Get all users
