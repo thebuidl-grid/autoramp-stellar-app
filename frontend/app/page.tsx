@@ -243,9 +243,9 @@ export default function HomePage() {
     args:
       address && SWAP_CONSTANTS.SWAP_ROUTER
         ? ([
-            address as `0x${string}`,
-            SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
-          ] as const)
+          address as `0x${string}`,
+          SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
+        ] as const)
         : undefined,
     query: {
       enabled:
@@ -540,14 +540,14 @@ export default function HomePage() {
     args:
       quoteTokenIn && quoteTokenOut
         ? [
-            {
-              tokenIn: quoteTokenIn as `0x${string}`,
-              tokenOut: quoteTokenOut as `0x${string}`,
-              amountIn: parsedQuoteAmount,
-              tickSpacing: 10,
-              sqrtPriceLimitX96: 0n,
-            },
-          ]
+          {
+            tokenIn: quoteTokenIn as `0x${string}`,
+            tokenOut: quoteTokenOut as `0x${string}`,
+            amountIn: parsedQuoteAmount,
+            tickSpacing: 10,
+            sqrtPriceLimitX96: 0n,
+          },
+        ]
         : undefined,
     query: {
       enabled: shouldFetchQuote && parsedQuoteAmount > 0n && !!quoteTokenIn,
@@ -905,15 +905,22 @@ export default function HomePage() {
     }
     if (
       fromCryptoType === "USDC" &&
-      toCryptoType === "CNGN" &&
-      parsedAmount < 1
+      toCryptoType === "CNGN"
     ) {
-      toast({
-        title: "Invalid amount",
-        description: "Minimum amount is 1 USDC",
-        variant: "destructive",
-      });
-      return;
+      // Calculate estimated CNGN amount from quote
+      const estimatedCngn = quoteAmountOut
+        ? parseFloat(formatUnits(quoteAmountOut, SWAP_CONSTANTS.CNGN_DECIMALS))
+        : 0;
+
+      // Minimum 100 CNGN equivalent
+      if (estimatedCngn < 100) {
+        toast({
+          title: "Amount too low",
+          description: `Minimum amount is 100 CNGN equivalent (approx. ${(100 / (estimatedCngn / parsedAmount)).toFixed(4)} USDC)`,
+          variant: "destructive",
+        });
+        return;
+      }
     }
     if (parsedAmount <= 0) {
       toast({
@@ -1097,8 +1104,8 @@ export default function HomePage() {
               activeTab === "buy"
                 ? buyAmount
                 : activeTab === "swap"
-                ? sellAmount
-                : sellAmount
+                  ? sellAmount
+                  : sellAmount
             }
             onAmountChange={
               activeTab === "buy"
@@ -1109,15 +1116,15 @@ export default function HomePage() {
               activeTab === "buy"
                 ? "NGN"
                 : activeTab === "swap"
-                ? (fromCryptoType as "CNGN" | "USDC")
-                : (cryptoType as "CNGN" | "USDC")
+                  ? (fromCryptoType as "CNGN" | "USDC")
+                  : (cryptoType as "CNGN" | "USDC")
             }
             onCurrencyClick={
               activeTab === "buy"
                 ? undefined
                 : activeTab === "swap"
-                ? () => setIsFromCryptoModalOpen(true)
-                : () => setIsCryptoModalOpen(true)
+                  ? () => setIsFromCryptoModalOpen(true)
+                  : () => setIsCryptoModalOpen(true)
             }
             userBalance={activeBalance}
             onPercentageClick={handlePercentageClick}
@@ -1130,10 +1137,10 @@ export default function HomePage() {
               onClick={
                 activeTab === "swap"
                   ? () => {
-                      const temp = fromCryptoType;
-                      setFromCryptoType(toCryptoType);
-                      setToCryptoType(temp);
-                    }
+                    const temp = fromCryptoType;
+                    setFromCryptoType(toCryptoType);
+                    setToCryptoType(temp);
+                  }
                   : undefined
               }
             >
@@ -1150,13 +1157,13 @@ export default function HomePage() {
             amount={
               activeTab === "buy"
                 ? (() => {
-                    if (!buyAmount) return "";
-                    const parsed = parseFormattedNumber(buyAmount);
-                    return parsed.toLocaleString("en-NG");
-                  })()
+                  if (!buyAmount) return "";
+                  const parsed = parseFormattedNumber(buyAmount);
+                  return parsed.toLocaleString("en-NG");
+                })()
                 : activeTab === "swap" ||
                   (activeTab === "sell" && cryptoType === "USDC")
-                ? (() => {
+                  ? (() => {
                     // --- SHARED LOGIC FOR SWAP AND SELL (USDC) ---
                     if (!sellAmount) return "";
 
@@ -1181,7 +1188,7 @@ export default function HomePage() {
                     return "0.00";
                     // ---------------------------------------------
                   })()
-                : (() => {
+                  : (() => {
                     // --- LOGIC FOR SELL (CNGN ONLY) ---
                     // CNGN to NGN is 1:1, no swap needed
                     if (!sellAmount) return "";
@@ -1189,13 +1196,13 @@ export default function HomePage() {
                     return parsed.toLocaleString("en-NG");
                   })()
             }
-            onAmountChange={() => {}}
+            onAmountChange={() => { }}
             currencyType={
               activeTab === "buy"
                 ? "CNGN"
                 : activeTab === "swap"
-                ? (toCryptoType as "CNGN" | "USDC")
-                : "NGN"
+                  ? (toCryptoType as "CNGN" | "USDC")
+                  : "NGN"
             }
             onCurrencyClick={
               activeTab === "swap"
@@ -1349,8 +1356,8 @@ export default function HomePage() {
             {activeTab === "buy"
               ? "BUY"
               : activeTab === "sell"
-              ? "SELL"
-              : "SWAP"}
+                ? "SELL"
+                : "SWAP"}
           </Button>
         </form>
       );
@@ -1767,7 +1774,7 @@ export default function HomePage() {
           open={isCryptoModalOpen}
           onOpenChange={setIsCryptoModalOpen}
           selectedCrypto="CNGN"
-          onSelect={() => {}}
+          onSelect={() => { }}
           showComingSoon={true}
         />
       ) : (

@@ -66,7 +66,7 @@ export class SwapService {
   async getUsdNgnRate(): Promise<number> {
     try {
       const now = Date.now();
-      
+
       // Check if we have a valid cached rate (within 1 minute)
       if (
         this.usdNgnRateCache &&
@@ -137,14 +137,14 @@ export class SwapService {
     try {
       // Get USD/NGN rate from MonieRate API (e.g., 1619.01 means 1 USD = 1619.01 NGN)
       const usdNgnRate = await this.getUsdNgnRate();
-      
+
       // Since CNGN = NGN (1:1), multiply CNGN amount by USD/NGN rate
       // Example: 100 CNGN * 1619.01 = 161,901 NGN
       const estimatedNgn = cngnAmount * usdNgnRate;
-      
+
       // Calculate USD value: NGN / (USD/NGN rate)
       const usdValue = cngnAmount;
-      
+
       return {
         estimatedNgn,
         usdNgnRate,
@@ -200,7 +200,7 @@ export class SwapService {
       // Extract recipient address from offramp response
       // The address is at data.depositAddress, not data.depositAccount.address
       const recipientAddress = offrampResult?.data?.depositAddress || offrampResult?.data?.depositAccount?.address;
-      
+
       if (!recipientAddress) {
         this.logger.error('Offramp response structure:', JSON.stringify(offrampResult, null, 2));
         throw new BadRequestException('Recipient address not found in offramp response');
@@ -211,11 +211,13 @@ export class SwapService {
       const fromTokenType = 'USDC';
       const toTokenType = 'CNGN';
       const fromAmountDecimal = dto.usdcAmount;
-      
-      // Placeholder values - will be updated when swap is completed
-      // Using 1:1 exchange rate as placeholder (actual rate determined on-chain)
-      const toAmountDecimal = fromAmountDecimal; // Placeholder - actual CNGN amount determined on-chain
-      const exchangeRate = 1; // Placeholder - actual rate determined on-chain
+
+      // Use estimated NGN amount from frontend as the expected output amount
+      const toAmountDecimal = dto.amount;
+
+      // Calculate estimated exchange rate (NGN / USDC)
+      // explicit check to avoid division by zero, though DTO validation should prevent it
+      const exchangeRate = dto.usdcAmount > 0 ? dto.amount / dto.usdcAmount : 0;
 
       // Step 3: Create swap transaction record with same reference as offramp
       const swapTransaction = await this.prisma.swapTransaction.create({
@@ -491,7 +493,7 @@ export class SwapService {
       // If offramp destination is provided, trigger offramp
       if (dto.offrampDestination && dto.to_cngn) {
         this.logger.log(`Triggering offramp for swap ${reference}`);
-        
+
         try {
           const offrampResult = await this.stablestackService.offRamp(
             userId,
@@ -600,9 +602,9 @@ export class SwapService {
           throw new BadRequestException('Minimum amount for CNGN to USDC swap is 100 CNGN');
         }
       } else if (dto.fromTokenType.toUpperCase() === 'USDC' && dto.toTokenType.toUpperCase() === 'CNGN') {
-        // USDC to CNGN: minimum 1
-        if (dto.fromAmount < 1) {
-          throw new BadRequestException('Minimum amount for USDC to CNGN swap is 1 USDC');
+        // USDC to CNGN: minimum 100 CNGN equivalent
+        if (dto.toAmount < 100) {
+          throw new BadRequestException('Minimum amount for USDC to CNGN swap is 100 CNGN');
         }
       }
 
