@@ -12,6 +12,7 @@ import { UserModule } from './modules/user/user.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { ApiKeysModule } from './modules/api-keys/api-keys.module';
 import { TransactionsModule } from './modules/admin/transactions/transactions.module';
+import { MerchantApiModule } from './modules/merchant-api/merchant-api.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { TransactionsModule } from './modules/admin/transactions/transactions.mo
     ApiModule,
     SwapModule,
     StablestackModule,
+    MerchantApiModule,
   ],
   providers: [
     {
@@ -65,4 +67,4 @@ import { TransactionsModule } from './modules/admin/transactions/transactions.mo
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }
