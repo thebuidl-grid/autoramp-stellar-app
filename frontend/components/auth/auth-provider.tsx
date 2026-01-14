@@ -52,8 +52,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             router.push("/");
           }
         });
-    } else if (!token && !pathname?.startsWith("/auth") && !pathname?.startsWith("/admin") && !pathname?.startsWith("/merchant") && pathname !== "/") {
-      // No token and not on auth page or admin page or merchant page, redirect to home
+    } else if (!token && !pathname?.startsWith("/auth") && !pathname?.startsWith("/admin") && !pathname?.startsWith("/merchant") && !pathname?.startsWith("/docs") && pathname !== "/") {
+      // No token and not on auth page or admin page or merchant page or docs, redirect to home
       // Note: AdminProtected handles admin page redirection
       router.push("/");
     }
