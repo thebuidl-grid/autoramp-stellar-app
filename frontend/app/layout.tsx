@@ -23,6 +23,9 @@ export const metadata: Metadata = {
   title: "AutoRamp | Onramp & Offramp",
   description:
     "Convert fiat to crypto and crypto to fiat seamlessly with AutoRamp",
+  other: {
+    'base:app_id': '6967e0780c770beef04862ab',
+  },
 };
 
 export default function RootLayout({
