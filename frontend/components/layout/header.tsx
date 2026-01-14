@@ -57,14 +57,14 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                   History
                 </Link>
               )}
-              <a
-                href="#how-it-works"
+              <Link
+                href="/docs"
                 className="text-sm text-white/60 hover:text-secondary transition-colors duration-300"
               >
                 API Docs
-              </a>
+              </Link>
               <a
-                href="#api"
+                href="mailto:dev@thebuidlgrid.org"
                 className="text-sm text-white/60 hover:text-secondary transition-colors duration-300"
               >
                 Support
@@ -79,7 +79,7 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-40">
-                  <DropdownMenuItem asChild>
+                    <DropdownMenuItem asChild>
                       <Link href="/history" className="cursor-pointer">
                         History
                       </Link>
