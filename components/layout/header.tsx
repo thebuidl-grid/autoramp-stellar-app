@@ -1,0 +1,117 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { useAuthStore, useIsAuthenticated } from "@/lib/store";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { User } from "lucide-react";
+
+interface HeaderProps {
+  onOpenAuthModal?: () => void;
+}
+
+export function Header({ onOpenAuthModal }: HeaderProps) {
+  const isAuthenticated = useIsAuthenticated();
+  const { user, logout } = useAuthStore();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    logout();
+    router.push("/");
+  };
+
+  const handleGetStarted = (e: React.MouseEvent) => {
+    if (onOpenAuthModal) {
+      e.preventDefault();
+      onOpenAuthModal();
+    }
+  };
+
+  return (
+    <header className="fixed top-0 left-0 right-0 z-50">
+      <div className="mx-6 mt-2 lg:mt-6">
+        <div className="max-w-4xl mx-auto py-4">
+          <div className="flex items-center justify-between">
+            <a href="/">
+              <div className="flex items-center gap-3">
+                <Image src="/logo.png" alt="AutoRamp" width={32} height={32} />
+                <span className="font-bold text-xl tracking-tight">
+                  Auto<span className="text-secondary">Ramp</span>
+                </span>
+              </div>
+            </a>
+            <nav className="hidden md:flex items-center gap-8 border border-white/10 backdrop-blur-lg py-4 px-6 rounded-full">
+              {isAuthenticated && (
+                <Link
+                  href="/history"
+                  className="text-sm text-white/60 hover:text-secondary transition-colors duration-300"
+                >
+                  History
+                </Link>
+              )}
+              <Link
+                href="/docs"
+                className="text-sm text-white/60 hover:text-secondary transition-colors duration-300"
+              >
+                API Docs
+              </Link>
+              <a
+                href="mailto:dev@thebuidlgrid.org"
+                className="text-sm text-white/60 hover:text-secondary transition-colors duration-300"
+              >
+                Support
+              </a>
+            </nav>
+            <div className="flex items-center gap-3">
+              {isAuthenticated ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex items-center justify-center w-10 h-10 rounded-full bg-black/5 hover:bg-white/20 border border-white/10 transition-colors">
+                      <User size={18} className="text-white" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem asChild>
+                      <Link href="/history" className="cursor-pointer">
+                        History
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/profile" className="cursor-pointer">
+                        Profile
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={handleLogout}
+                      className="cursor-pointer text-red-400 focus:text-red-400"
+                    >
+                      Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Link href="/auth/signup" onClick={handleGetStarted}>
+                  <Button
+                    size="sm"
+                    className="py-6 px-6 text-base font-light rounded-full"
+                  >
+                    Login/Sign up
+                  </Button>
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
