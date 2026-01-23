@@ -38,10 +38,6 @@ api.interceptors.response.use(
       if (typeof window !== "undefined") {
         localStorage.removeItem("token");
         localStorage.removeItem("auth-storage");
-        // Only redirect if not already on auth page
-        if (!window.location.pathname.startsWith("/auth") && window.location.pathname !== "/") {
-          window.location.href = "/";
-        }
       }
     }
     return Promise.reject(error);
@@ -92,12 +88,22 @@ export interface SignInDto {
   password: string;
 }
 
+// ============== User API ==============
+
+export interface User {
+  id: string;
+  email: string;
+  phoneNumber?: string;
+  walletAddress?: string;
+  role: string;
+  isMerchant?: boolean;
+  isApiAccessApproved?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuthResponse {
-  user: {
-    id: string;
-    email: string;
-    role: string;
-  };
+  user: User;
   accessToken: string;
 }
 
@@ -118,16 +124,68 @@ export const authApi = {
     api.post<{ success: boolean; message: string }>("/auth/otp/verify", data),
 };
 
-// ============== User API ==============
+// ============== Saved Accounts & Wallets Types ==============
 
-export interface User {
+export interface SavedAccountNumber {
   id: string;
-  email: string;
-  phoneNumber?: string;
-  walletAddress?: string;
-  role: string;
+  userId: string;
+  accountNumber: string;
+  bankCode: string;
+  bankName: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CreateSavedAccountDto {
+  accountNumber: string;
+  bankCode: string;
+  bankName: string;
+}
+
+export interface UpdateSavedAccountDto {
+  bankName?: string;
+}
+
+export interface UserWallet {
+  id: string;
+  userId: string;
+  walletAddress: string;
+  network: string;
+  name?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateUserWalletDto {
+  walletAddress: string;
+  network: string;
+  name?: string;
+}
+
+export interface UpdateUserWalletDto {
+  name?: string;
+}
+
+// OTP verification for adding saved accounts
+export interface InitiateAddAccountDto {
+  accountNumber: string;
+  bankCode: string;
+}
+
+export interface InitiateAddAccountResponse {
+  success: boolean;
+  message: string;
+  accountName: string;
+  accountNumber: string;
+  bankCode: string;
+  bankName: string;
+}
+
+export interface VerifyAndAddAccountDto {
+  accountNumber: string;
+  bankCode: string;
+  bankName: string;
+  otpCode: string;
 }
 
 export const userApi = {
@@ -147,6 +205,41 @@ export const userApi = {
     api.get<UserApiKeyAnalyticsDataPoint[]>(
       `/user/api-keys/analytics?period=${period}`,
     ),
+
+  // Saved Bank Accounts with OTP verification
+  initiateAddAccount: (data: InitiateAddAccountDto) =>
+    api.post<InitiateAddAccountResponse>("/user/saved-accounts/initiate", data),
+
+  verifyAndAddAccount: (data: VerifyAndAddAccountDto) =>
+    api.post<SavedAccountNumber>("/user/saved-accounts/verify-and-add", data),
+
+  getSavedAccounts: () =>
+    api.get<SavedAccountNumber[]>("/user/saved-accounts"),
+
+  getSavedAccountById: (id: string) =>
+    api.get<SavedAccountNumber>(`/user/saved-accounts/${id}`),
+
+  updateSavedAccount: (id: string, data: UpdateSavedAccountDto) =>
+    api.patch<SavedAccountNumber>(`/user/saved-accounts/${id}`, data),
+
+  deleteSavedAccount: (id: string) =>
+    api.delete(`/user/saved-accounts/${id}`),
+
+  // User Wallets
+  createUserWallet: (data: CreateUserWalletDto) =>
+    api.post<UserWallet>("/user/wallets", data),
+
+  getUserWallets: () =>
+    api.get<UserWallet[]>("/user/wallets"),
+
+  getUserWalletById: (id: string) =>
+    api.get<UserWallet>(`/user/wallets/${id}`),
+
+  updateUserWallet: (id: string, data: UpdateUserWalletDto) =>
+    api.patch<UserWallet>(`/user/wallets/${id}`, data),
+
+  deleteUserWallet: (id: string) =>
+    api.delete(`/user/wallets/${id}`),
 };
 
 // ============== API Keys API ==============
@@ -403,6 +496,48 @@ export interface ApproveMerchantResponse {
   message: string;
 }
 
+export interface MerchantKYB {
+  id: string;
+  businessName: string;
+  email: string;
+  websiteUrl: string;
+  natureOfBusiness: string;
+  tradingName: string;
+  contactPerson: string;
+  contactPhone: string;
+  bvn: string;
+  tin: string;
+  capitalSource: string;
+  numberOfDirectors: string;
+  companyDirectors: string;
+  idType: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  createdAt: string;
+  updatedAt: string;
+  cacCertificate?: string;
+  cacEStatus?: string;
+  memart?: string;
+  memorandum?: string;
+  proofOfAddress?: string;
+  proofOfFunds?: string;
+  directorProofOfAddress?: string;
+  idDocument?: string;
+}
+
+export interface MerchantUser extends AdminUser {
+  kyb?: MerchantKYB;
+}
+
+export interface MerchantsResponse {
+  merchants: MerchantUser[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 export const adminApi = {
   getMe: () =>
     api.get<AdminUser>("/admin/me"),
@@ -449,6 +584,16 @@ export const adminApi = {
     api.get<TransactionAnalyticsDataPoint[]>(
       `/admin/transactions/analytics?period=${period}`,
     ),
+
+  // Merchant Management
+  getMerchants: (page: number = 1, limit: number = 10, status?: string) =>
+    api.get<MerchantsResponse>(`/admin/merchants?page=${page}&limit=${limit}${status ? `&status=${status}` : ""}`),
+
+  getMerchantById: (id: string) =>
+    api.get<MerchantUser>(`/admin/merchants/${id}`),
+
+  updateMerchantKYBStatus: (merchantId: string, status: "APPROVED" | "REJECTED", reason?: string) =>
+    api.post<{ message: string }>(`/admin/merchants/${merchantId}/kyb-status`, { status, reason }),
 };
 
 export interface AdminTransactionSummaryResponse {
