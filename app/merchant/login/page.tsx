@@ -65,13 +65,15 @@ export default function MerchantLoginPage() {
             const response = await authApi.signUp({ email, otpCode });
 
             // Check if merchant has approved API access
-            const user = response.data.user as any;
+            const user = response.data.user;
             if (!user.isApiAccessApproved) {
                 toast({
                     title: "Access Pending",
-                    description: "Your API access is pending approval. Please contact admin.",
+                    description: "Your API access is pending approval. Please ensure you have completed the KYB onboarding.",
                     variant: "destructive",
                 });
+                // Optionally redirect to KYB after a short delay
+                setTimeout(() => router.push("/merchant/kyb"), 2000);
                 return;
             }
 
