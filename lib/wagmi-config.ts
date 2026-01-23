@@ -4,24 +4,45 @@
  * Configures wagmi and RainbowKit for wallet connection
  */
 
-import { getDefaultConfig } from '@rainbow-me/rainbowkit';
+import { connectorsForWallets } from '@rainbow-me/rainbowkit';
+import {
+  rainbowWallet,
+  walletConnectWallet,
+  coinbaseWallet,
+  metaMaskWallet,
+} from '@rainbow-me/rainbowkit/wallets';
+import { createConfig, http } from 'wagmi';
 import { base } from 'wagmi/chains';
 
 // Get project ID from environment
-const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '';
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'default-project-id';
 
-if (!projectId) {
-  console.warn('NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is not set. Wallet connection may not work.');
-}
+const connectors = connectorsForWallets(
+  [
+    {
+      groupName: 'Recommended',
+      wallets: [
+        rainbowWallet,
+        walletConnectWallet,
+        coinbaseWallet,
+      ],
+    },
+  ],
+  {
+    appName: 'AutoRamp',
+    projectId,
+  }
+);
 
 /**
- * Wagmi config for RainbowKit
- * Configured for Base network (mainnet)
+ * Wagmi config using createConfig directly to avoid MetaMask SDK
  */
-export const wagmiConfig = getDefaultConfig({
-  appName: 'CNGN Ramp',
-  projectId: projectId || 'default-project-id', // Replace with your WalletConnect project ID
-  chains: [base], // Base network
-  ssr: true, // Enable server-side rendering support
+export const wagmiConfig = createConfig({
+  connectors,
+  chains: [base],
+  transports: {
+    [base.id]: http(),
+  },
+  ssr: false, // Disabled for client-only hydration via RootProvider
 });
 
