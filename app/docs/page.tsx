@@ -1,12 +1,38 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { HeroBackground } from "@/components/hero/hero-background";
 import { Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/lib/store";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.autoramp.com";
+
+function RequestAPIAccessButton() {
+    const router = useRouter();
+    const { user } = useAuthStore();
+
+    const handleClick = () => {
+        // If user is already a merchant, go to dashboard
+        // Otherwise, go to KYB page to complete merchant onboarding
+        if (user?.isMerchant) {
+            router.push("/merchant/dashboard");
+        } else {
+            router.push("/merchant/kyb");
+        }
+    };
+
+    return (
+        <button
+            onClick={handleClick}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-secondary text-black text-sm font-medium rounded-lg hover:bg-secondary/90 transition-colors"
+        >
+            Request API Access
+        </button>
+    );
+}
 
 function CodeBlock({ code, language = "json" }: { code: string; language?: string }) {
     const [copied, setCopied] = useState(false);
@@ -130,16 +156,9 @@ export default function DocsPage() {
                         <div>
                             <h3 className="text-white font-medium mb-2">1. Request API Access</h3>
                             <p className="text-white/60 text-sm mb-3">
-                                Fill out our application form to request merchant API access.
+                                Complete the merchant KYB process to request API access.
                             </p>
-                            <a
-                                href="https://forms.gle/kKufhZvsFpYAVwLz5"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-secondary text-black text-sm font-medium rounded-lg transition-colors"
-                            >
-                                Request API Access
-                            </a>
+                            <RequestAPIAccessButton />
                         </div>
                         <div>
                             <h3 className="text-white font-medium mb-2">2. Get your API Key</h3>
