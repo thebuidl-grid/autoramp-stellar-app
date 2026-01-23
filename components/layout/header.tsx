@@ -57,6 +57,14 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                   History
                 </Link>
               )}
+              {isAuthenticated && user?.isMerchant && (
+                <Link
+                  href="/merchant/dashboard"
+                  className="text-sm text-white/60 hover:text-secondary transition-colors duration-300"
+                >
+                  Merchant Dashboard
+                </Link>
+              )}
               <Link
                 href="/docs"
                 className="text-sm text-white/60 hover:text-secondary transition-colors duration-300"
@@ -89,6 +97,13 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                         Profile
                       </Link>
                     </DropdownMenuItem>
+                    {user?.isMerchant && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/merchant/dashboard" className="cursor-pointer">
+                          Merchant Dashboard
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={handleLogout}
