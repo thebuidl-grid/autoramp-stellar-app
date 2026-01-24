@@ -22,32 +22,48 @@ export default function AdminMerchantsPage() {
     const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
     const limit = 10;
 
-    const { data: merchantsResponse, isLoading } = useQuery({
-        queryKey: ["admin-merchants", page, statusFilter],
+    const [searchTerm, setSearchTerm] = useState("");
+
+    const { data: merchants = [], isLoading } = useQuery({
+        queryKey: ["admin-merchants", statusFilter],
         queryFn: async () => {
-            const { data } = await adminApi.getMerchants(page, limit, statusFilter);
+            // Fetch all merchants
+            const { data } = await adminApi.getMerchants(statusFilter);
             return data;
         },
     });
 
+    // Client-side filtering
+    const filteredMerchants = merchants.filter(merchant =>
+        (statusFilter ? merchant.kyb?.status === statusFilter : true) &&
+        (searchTerm ?
+            merchant.kyb?.businessName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            merchant.email?.toLowerCase().includes(searchTerm.toLowerCase())
+            : true)
+    );
+
+    // Client-side pagination
+    const totalPages = Math.ceil(filteredMerchants.length / limit);
+    const paginatedMerchants = filteredMerchants.slice((page - 1) * limit, page * limit);
+
     const stats = [
         {
             title: "Total Merchants",
-            value: merchantsResponse?.pagination.total || 0,
+            value: merchants.length,
             icon: Users,
             color: "text-blue-500",
             bg: "bg-blue-500/10"
         },
         {
             title: "Pending KYB",
-            value: merchantsResponse?.merchants.filter(m => m.kyb?.status === "PENDING").length || 0,
+            value: merchants.filter(m => m.kyb?.status === "PENDING").length,
             icon: Clock,
             color: "text-amber-500",
             bg: "bg-amber-500/10"
         },
         {
             title: "Approved",
-            value: merchantsResponse?.merchants.filter(m => m.kyb?.status === "APPROVED").length || 0,
+            value: merchants.filter(m => m.kyb?.status === "APPROVED").length,
             icon: CheckCircle2,
             color: "text-green-500",
             bg: "bg-green-500/10"
@@ -97,6 +113,11 @@ export default function AdminMerchantsPage() {
                                     type="search"
                                     placeholder="Search business..."
                                     className="w-[200px] lg:w-[300px] pl-8 h-9 bg-black/20 border-white/10 text-white"
+                                    value={searchTerm}
+                                    onChange={(e) => {
+                                        setSearchTerm(e.target.value);
+                                        setPage(1);
+                                    }}
                                 />
                             </div>
                             <Button variant="outline" size="sm" className="h-9 gap-2 border-white/10 text-zinc-400 hover:text-white">
@@ -108,14 +129,14 @@ export default function AdminMerchantsPage() {
                 </CardHeader>
                 <CardContent>
                     <MerchantTable
-                        merchants={merchantsResponse?.merchants || []}
+                        merchants={paginatedMerchants}
                         isLoading={isLoading}
                     />
 
                     {/* Simple Pagination */}
                     <div className="flex items-center justify-between mt-6">
                         <p className="text-sm text-zinc-500">
-                            Showing page {page} of {merchantsResponse?.pagination.totalPages || 1}
+                            Showing page {page} of {totalPages || 1}
                         </p>
                         <div className="flex gap-2">
                             <Button
@@ -130,8 +151,8 @@ export default function AdminMerchantsPage() {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setPage(p => p + 1)}
-                                disabled={page === merchantsResponse?.pagination.totalPages || isLoading}
+                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                disabled={page === totalPages || totalPages === 0 || isLoading}
                                 className="border-white/10 text-zinc-400 hover:text-white disabled:opacity-30"
                             >
                                 Next
@@ -140,6 +161,6 @@ export default function AdminMerchantsPage() {
                     </div>
                 </CardContent>
             </Card>
-        </div>
+        </div >
     );
 }
