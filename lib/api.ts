@@ -586,14 +586,51 @@ export const adminApi = {
     ),
 
   // Merchant Management
-  getMerchants: (page: number = 1, limit: number = 10, status?: string) =>
-    api.get<MerchantsResponse>(`/admin/merchants?page=${page}&limit=${limit}${status ? `&status=${status}` : ""}`),
+  getMerchants: (status?: string) =>
+    api.get<MerchantUser[]>(`/merchants/onboarding${status ? `?status=${status}` : ""}`),
 
   getMerchantById: (id: string) =>
     api.get<MerchantUser>(`/admin/merchants/${id}`),
 
   updateMerchantKYBStatus: (merchantId: string, status: "APPROVED" | "REJECTED", reason?: string) =>
     api.post<{ message: string }>(`/admin/merchants/${merchantId}/kyb-status`, { status, reason }),
+};
+
+// Response from /merchants/onboarding
+export interface MerchantOnboardingResponse {
+  id: string;
+  userId: string;
+  name: string;
+  status: string;
+  // ... other fields as needed
+}
+
+export interface CreateDirectorDto {
+  merchantId: string;
+  firstName: string;
+  lastName: string;
+  nationality: string;
+  bvn: string;
+  proofOfAddress: string;
+  idType: string;
+  idUrl: string;
+  metadata: {
+    role: string;
+  }
+}
+
+export const publicMerchantApi = {
+  // Stage 1: Create Merchant
+  createMerchant: (data: any) =>
+    api.post<MerchantOnboardingResponse>(`/merchants/onboarding`, data),
+
+  // Stage 2: Upload Documents & Complete Info
+  completeMerchantKYB: (data: any) =>
+    api.post<{ message: string }>(`/merchants/documentations`, data),
+
+  // Stage 3: Add Merchant Director
+  addMerchantDirector: (data: CreateDirectorDto) =>
+    api.post<{ message: string }>(`/merchants/directors`, data),
 };
 
 export interface AdminTransactionSummaryResponse {
