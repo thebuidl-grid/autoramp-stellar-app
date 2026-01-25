@@ -590,10 +590,10 @@ export const adminApi = {
     api.get<MerchantUser[]>(`/merchants/onboarding${status ? `?status=${status}` : ""}`),
 
   getMerchantById: (id: string) =>
-    api.get<MerchantUser>(`/admin/merchants/${id}`),
+    api.get<MerchantUser>(`/merchants/onboarding/${id}`),
 
   updateMerchantKYBStatus: (merchantId: string, status: "APPROVED" | "REJECTED", reason?: string) =>
-    api.post<{ message: string }>(`/admin/merchants/${merchantId}/kyb-status`, { status, reason }),
+    api.post<{ message: string }>(`/merchants/${merchantId}/kyb-status`, { status, reason }),
 };
 
 // Response from /merchants/onboarding
