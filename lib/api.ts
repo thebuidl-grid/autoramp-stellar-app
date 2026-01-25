@@ -548,9 +548,6 @@ export const adminApi = {
   getUserById: (id: string) =>
     api.get<AdminUser>(`/admin/users/${id}`),
 
-  approveMerchantAccess: (data: CreateMerchantDto) =>
-    api.post<ApproveMerchantResponse>("/admin/approve-access", data),
-
   // API Key Management
   getAllApiKeys: (page: number = 1, limit: number = 10) =>
     api.get<ApiKeysResponse>(`/admin/api-keys?page=${page}&limit=${limit}`),
@@ -586,14 +583,20 @@ export const adminApi = {
     ),
 
   // Merchant Management
-  getMerchants: (status?: string) =>
-    api.get<MerchantUser[]>(`/merchants/onboarding${status ? `?status=${status}` : ""}`),
+  getMerchants: () =>
+    api.get<MerchantUser[]>("/merchants/onboarding"),
 
   getMerchantById: (id: string) =>
     api.get<MerchantUser>(`/merchants/onboarding/${id}`),
 
-  updateMerchantKYBStatus: (merchantId: string, status: "APPROVED" | "REJECTED", reason?: string) =>
-    api.post<{ message: string }>(`/merchants/${merchantId}/kyb-status`, { status, reason }),
+  updateMerchant: (id: string, data: any) =>
+    api.patch<MerchantUser>(`/merchants/onboarding/${id}`, data),
+
+  deleteMerchant: (id: string) =>
+    api.delete(`/merchants/onboarding/${id}`),
+
+  approveMerchantAccess: (data: CreateMerchantDto) =>
+    api.post<ApproveMerchantResponse>("/admin/approve-access", data),
 };
 
 // Response from /merchants/onboarding
@@ -819,29 +822,26 @@ export interface MerchantBankAccountDto {
 
 export const merchantApi = {
   submitBusinessDetails: (data: MerchantBusinessDetailsDto) =>
-    api.post("/merchant/onboarding", data),
+    api.post("/merchants/onboarding", data),
 
   submitDocumentation: (data: MerchantDocumentationDto) =>
-    api.post("/merchant/documentations", data),
+    api.post("/merchants/documentations", data),
 
   submitDirector: (data: MerchantDirectorDto) =>
-    api.post("/merchant/directors", data),
+    api.post("/merchants/directors", data),
 
   submitShareholder: (data: MerchantShareholderDto) =>
-    api.post("/merchant/shareholders", data),
+    api.post("/merchants/shareholders", data),
 
   submitBankAccount: (data: MerchantBankAccountDto) =>
-    api.post("/merchant/bank-accounts", data),
-
-  getOnboardingStatus: () =>
-    api.get<{ isOnboarded: boolean; step: string }>("/merchant/onboarding/status"),
-
-  getMerchantProfile: () =>
-    api.get<any>("/merchant/profile"),
+    api.post("/merchants/bank-accounts", data),
 
   getMerchantStatus: () =>
     api.get<{ isMerchant: boolean }>("/merchants/status"),
 
   getIsOnboarded: () =>
     api.get<{ isOnboarded: boolean }>("/merchants/onboarded"),
+
+  getMerchantProfile: () =>
+    api.get<any>("/merchants/onboarding/profile"), // Adjust if profile endpoint is different in spec
 };

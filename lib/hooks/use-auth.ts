@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { authApi, SignInDto, SignUpDto, getErrorMessage } from "@/lib/api";
+import { authApi, SignInDto, SignUpDto, getErrorMessage, merchantApi } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
 
@@ -93,6 +93,32 @@ export function useAdminLogin() {
         variant: "destructive",
       });
     },
+  });
+}
+
+/**
+ * Merchant Status Hook
+ */
+export function useMerchantStatus() {
+  const user = useAuthStore((state) => state.user);
+
+  return useQuery({
+    queryKey: ["merchantStatus", user?.id],
+    queryFn: () => merchantApi.getMerchantStatus(),
+    enabled: !!user,
+  });
+}
+
+/**
+ * Merchant Onboarding Check Hook
+ */
+export function useIsOnboarded() {
+  const user = useAuthStore((state) => state.user);
+
+  return useQuery({
+    queryKey: ["merchantOnboarded", user?.id],
+    queryFn: () => merchantApi.getIsOnboarded(),
+    enabled: !!user,
   });
 }
 
