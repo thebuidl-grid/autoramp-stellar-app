@@ -24,6 +24,7 @@ import { publicMerchantApi } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
 import { Badge } from "@/components/ui/badge";
 import { TagInput } from "@/components/ui/tag-input";
+import { uploadFile } from "@/lib/cloudinary"
 
 const kybSchema = z.object({
     // Step 1: Business Profile
@@ -82,6 +83,7 @@ export function KYBForm() {
     const [currentStep, setCurrentStep] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [merchantId, setMerchantId] = useState<string | null>(null);
+    const [uploadingFields, setUploadingFields] = useState<Record<string, boolean>>({});
     const { toast } = useToast();
     const { user } = useAuthStore();
 
@@ -113,22 +115,32 @@ export function KYBForm() {
         name: "directors",
     });
 
-    const handleCloudinaryUpload = async (file: File, folder?: string) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        if (folder) {
-            formData.append("folder", folder);
+    const handleAutoUpload = async (file: File, fieldName: string, folder?: string) => {
+        if (!file) return;
+
+        setUploadingFields(prev => ({ ...prev, [fieldName]: true }));
+        try {
+            const url = await uploadFile(file, folder);
+            form.setValue(fieldName as any, url);
+            toast({
+                title: "Upload Successful",
+                description: "File has been uploaded and saved.",
+                variant: "success",
+            });
+        } catch (error) {
+            console.error(`Upload error for ${fieldName}:`, error);
+            toast({
+                title: "Upload Failed",
+                description: "There was an error uploading your file. Please try again.",
+                variant: "destructive",
+            });
+        } finally {
+            setUploadingFields(prev => ({ ...prev, [fieldName]: false }));
         }
+    };
 
-        // Use our internal API route which handles the Cloudinary upload server-side
-        const response = await axios.post("/api/upload", formData, {
-            headers: {
-                "Content-Type": "multipart/form-data",
-            },
-        });
-
-        // The API returns the Cloudinary result object, we need the secure_url
-        return response.data.secure_url || response.data.url;
+    const handleCloudinaryUpload = async (file: File, folder?: string) => {
+        return await uploadFile(file, folder);
     };
 
     const handleCreateMerchant = async (data: KYBFormValues) => {
@@ -191,13 +203,18 @@ export function KYBForm() {
         try {
             const uploadPromises = [
                 "cacCertificate", "cacEStatus", "memart", "memorandum",
-                "proofOfAddress", "proofOfFunds", "directorProofOfAddress", "idDocument"
+                "proofOfAddress", "proofOfFunds"
             ].map(async (key) => {
-                const file = (data as any)[key];
-                if (file instanceof File) {
+                const value = (data as any)[key];
+                // If it's already a URL (from auto-upload), use it
+                if (typeof value === "string" && value.startsWith("http")) {
+                    return { [key]: value };
+                }
+                // If it's a File (backup), upload it
+                if (value instanceof File) {
                     try {
                         const folder = `merchant/${merchantId}/documentation`;
-                        const url = await handleCloudinaryUpload(file, folder);
+                        const url = await handleCloudinaryUpload(value, folder);
                         return { [key]: url };
                     } catch (err) {
                         console.error(`Failed to upload ${key}`, err);
@@ -260,10 +277,15 @@ export function KYBForm() {
 
                 const directorFolder = `merchant/${merchantId}/directors`;
 
-                if (director.proofOfAddress instanceof File) {
+                if (typeof director.proofOfAddress === "string" && director.proofOfAddress.startsWith("http")) {
+                    directorPoAUrl = director.proofOfAddress;
+                } else if (director.proofOfAddress instanceof File) {
                     directorPoAUrl = await handleCloudinaryUpload(director.proofOfAddress, directorFolder);
                 }
-                if (director.idUrl instanceof File) {
+
+                if (typeof director.idUrl === "string" && director.idUrl.startsWith("http")) {
+                    directorIdUrl = director.idUrl;
+                } else if (director.idUrl instanceof File) {
                     directorIdUrl = await handleCloudinaryUpload(director.idUrl, directorFolder);
                 }
 
@@ -652,7 +674,7 @@ export function KYBForm() {
                                                 key={doc.name}
                                                 control={form.control}
                                                 name={doc.name as any}
-                                                render={({ field: { onChange, ...field } }) => (
+                                                render={({ field: { onChange, value, ...field } }) => (
                                                     <FormItem>
                                                         <FormLabel className="text-zinc-200">{doc.label}</FormLabel>
                                                         <FormControl>
@@ -660,7 +682,10 @@ export function KYBForm() {
                                                                 <input
                                                                     type="file"
                                                                     accept=".pdf"
-                                                                    onChange={(e) => onChange(e.target.files?.[0])}
+                                                                    onChange={(e) => {
+                                                                        const file = e.target.files?.[0];
+                                                                        if (file) handleAutoUpload(file, doc.name, `merchant/${merchantId || 'temp'}/documentation`);
+                                                                    }}
                                                                     className="hidden"
                                                                     id={`file-${doc.name}`}
                                                                     {...field}
@@ -668,11 +693,23 @@ export function KYBForm() {
                                                                 />
                                                                 <label
                                                                     htmlFor={`file-${doc.name}`}
-                                                                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-zinc-700 rounded-lg cursor-pointer bg-zinc-900/30 group-hover:bg-zinc-900/50 group-hover:border-primary/50 transition-all duration-300"
+                                                                    className={cn(
+                                                                        "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-zinc-900/30 transition-all duration-300",
+                                                                        uploadingFields[doc.name] ? "border-primary/50 bg-primary/5" :
+                                                                            value ? "border-green-500/50 bg-green-500/5" : "border-zinc-700 group-hover:bg-zinc-900/50 group-hover:border-primary/50"
+                                                                    )}
                                                                 >
-                                                                    <Upload className="w-8 h-8 text-zinc-500 group-hover:text-primary transition-colors" />
+                                                                    {uploadingFields[doc.name] ? (
+                                                                        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                                                                    ) : value ? (
+                                                                        <CheckCircle2 className="w-8 h-8 text-green-500" />
+                                                                    ) : (
+                                                                        <Upload className="w-8 h-8 text-zinc-500 group-hover:text-primary transition-colors" />
+                                                                    )}
                                                                     <span className="mt-2 text-sm text-zinc-400 group-hover:text-zinc-200 text-center px-4 overflow-hidden text-ellipsis whitespace-nowrap max-w-full">
-                                                                        {form.watch(doc.name as any)?.name || "Upload PDF (Max 1MB)"}
+                                                                        {uploadingFields[doc.name] ? "Uploading..." :
+                                                                            typeof value === "string" ? "Uploaded Successfully" :
+                                                                                (value as any)?.name || "Upload PDF (Max 1MB)"}
                                                                     </span>
                                                                 </label>
                                                             </div>
@@ -817,64 +854,100 @@ export function KYBForm() {
                                                 <FormField
                                                     control={form.control}
                                                     name={`directors.${index}.idUrl`}
-                                                    render={({ field: { onChange, ...field } }) => (
-                                                        <FormItem>
-                                                            <FormLabel className="text-zinc-200">ID Image/PDF</FormLabel>
-                                                            <FormControl>
-                                                                <div className="relative group/file">
-                                                                    <input
-                                                                        type="file"
-                                                                        onChange={(e) => onChange(e.target.files?.[0])}
-                                                                        className="hidden"
-                                                                        id={`director-id-${index}`}
-                                                                        {...field}
-                                                                        value=""
-                                                                    />
-                                                                    <label
-                                                                        htmlFor={`director-id-${index}`}
-                                                                        className="flex flex-col items-center justify-center w-full h-24 border border-dashed border-zinc-700 rounded-lg cursor-pointer bg-zinc-900/10 group-hover/file:bg-zinc-900/30 group-hover/file:border-primary/30 transition-all"
-                                                                    >
-                                                                        <Upload className="w-5 h-5 text-zinc-500 group-hover/file:text-primary transition-colors" />
-                                                                        <span className="mt-2 text-[10px] text-zinc-400 text-center px-4 overflow-hidden text-ellipsis whitespace-nowrap max-w-full italic">
-                                                                            {form.watch(`directors.${index}.idUrl` as any)?.name || "Upload ID Document"}
-                                                                        </span>
-                                                                    </label>
-                                                                </div>
-                                                            </FormControl>
-                                                            <FormMessage />
-                                                        </FormItem>
-                                                    )}
+                                                    render={({ field: { onChange, value, ...field } }) => {
+                                                        const fieldKey = `directors.${index}.idUrl`;
+                                                        return (
+                                                            <FormItem>
+                                                                <FormLabel className="text-zinc-200">ID Image/PDF</FormLabel>
+                                                                <FormControl>
+                                                                    <div className="relative group/file">
+                                                                        <input
+                                                                            type="file"
+                                                                            onChange={(e) => {
+                                                                                const file = e.target.files?.[0];
+                                                                                if (file) handleAutoUpload(file, fieldKey, `merchant/${merchantId || 'temp'}/directors`);
+                                                                            }}
+                                                                            className="hidden"
+                                                                            id={`director-id-${index}`}
+                                                                            {...field}
+                                                                            value=""
+                                                                        />
+                                                                        <label
+                                                                            htmlFor={`director-id-${index}`}
+                                                                            className={cn(
+                                                                                "flex flex-col items-center justify-center w-full h-24 border border-dashed rounded-lg cursor-pointer bg-zinc-900/10 transition-all",
+                                                                                uploadingFields[fieldKey] ? "border-primary/50 bg-primary/5" :
+                                                                                    value ? "border-green-500/50 bg-green-500/5" : "border-zinc-700 group-hover/file:bg-zinc-900/30 group-hover/file:border-primary/30"
+                                                                            )}
+                                                                        >
+                                                                            {uploadingFields[fieldKey] ? (
+                                                                                <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                                                                            ) : value ? (
+                                                                                <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                                                            ) : (
+                                                                                <Upload className="w-5 h-5 text-zinc-500 group-hover/file:text-primary transition-colors" />
+                                                                            )}
+                                                                            <span className="mt-2 text-[10px] text-zinc-400 text-center px-4 overflow-hidden text-ellipsis whitespace-nowrap max-w-full italic">
+                                                                                {uploadingFields[fieldKey] ? "Uploading..." :
+                                                                                    typeof value === "string" ? "Uploaded" :
+                                                                                        (value as any)?.name || "Upload ID Document"}
+                                                                            </span>
+                                                                        </label>
+                                                                    </div>
+                                                                </FormControl>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )
+                                                    }}
                                                 />
                                                 <FormField
                                                     control={form.control}
                                                     name={`directors.${index}.proofOfAddress`}
-                                                    render={({ field: { onChange, ...field } }) => (
-                                                        <FormItem>
-                                                            <FormLabel className="text-zinc-200">Proof of Address</FormLabel>
-                                                            <FormControl>
-                                                                <div className="relative group/file">
-                                                                    <input
-                                                                        type="file"
-                                                                        onChange={(e) => onChange(e.target.files?.[0])}
-                                                                        className="hidden"
-                                                                        id={`director-poa-${index}`}
-                                                                        {...field}
-                                                                        value=""
-                                                                    />
-                                                                    <label
-                                                                        htmlFor={`director-poa-${index}`}
-                                                                        className="flex flex-col items-center justify-center w-full h-24 border border-dashed border-zinc-700 rounded-lg cursor-pointer bg-zinc-900/10 group-hover/file:bg-zinc-900/30 group-hover/file:border-primary/30 transition-all"
-                                                                    >
-                                                                        <Upload className="w-5 h-5 text-zinc-500 group-hover/file:text-primary transition-colors" />
-                                                                        <span className="mt-2 text-[10px] text-zinc-400 text-center px-4 overflow-hidden text-ellipsis whitespace-nowrap max-w-full italic">
-                                                                            {form.watch(`directors.${index}.proofOfAddress` as any)?.name || "Upload Utility Bill"}
-                                                                        </span>
-                                                                    </label>
-                                                                </div>
-                                                            </FormControl>
-                                                            <FormMessage />
-                                                        </FormItem>
-                                                    )}
+                                                    render={({ field: { onChange, value, ...field } }) => {
+                                                        const fieldKey = `directors.${index}.proofOfAddress`;
+                                                        return (
+                                                            <FormItem>
+                                                                <FormLabel className="text-zinc-200">Proof of Address</FormLabel>
+                                                                <FormControl>
+                                                                    <div className="relative group/file">
+                                                                        <input
+                                                                            type="file"
+                                                                            onChange={(e) => {
+                                                                                const file = e.target.files?.[0];
+                                                                                if (file) handleAutoUpload(file, fieldKey, `merchant/${merchantId || 'temp'}/directors`);
+                                                                            }}
+                                                                            className="hidden"
+                                                                            id={`director-poa-${index}`}
+                                                                            {...field}
+                                                                            value=""
+                                                                        />
+                                                                        <label
+                                                                            htmlFor={`director-poa-${index}`}
+                                                                            className={cn(
+                                                                                "flex flex-col items-center justify-center w-full h-24 border border-dashed rounded-lg cursor-pointer bg-zinc-900/10 transition-all",
+                                                                                uploadingFields[fieldKey] ? "border-primary/50 bg-primary/5" :
+                                                                                    value ? "border-green-500/50 bg-green-500/5" : "border-zinc-700 group-hover/file:bg-zinc-900/30 group-hover/file:border-primary/30"
+                                                                            )}
+                                                                        >
+                                                                            {uploadingFields[fieldKey] ? (
+                                                                                <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                                                                            ) : value ? (
+                                                                                <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                                                            ) : (
+                                                                                <Upload className="w-5 h-5 text-zinc-500 group-hover/file:text-primary transition-colors" />
+                                                                            )}
+                                                                            <span className="mt-2 text-[10px] text-zinc-400 text-center px-4 overflow-hidden text-ellipsis whitespace-nowrap max-w-full italic">
+                                                                                {uploadingFields[fieldKey] ? "Uploading..." :
+                                                                                    typeof value === "string" ? "Uploaded" :
+                                                                                        (value as any)?.name || "Upload Utility Bill"}
+                                                                            </span>
+                                                                        </label>
+                                                                    </div>
+                                                                </FormControl>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )
+                                                    }}
                                                 />
                                             </div>
                                         </div>
@@ -896,22 +969,39 @@ export function KYBForm() {
                         Back
                     </Button>
 
+                    {currentStep === 2 && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setCurrentStep((prev) => prev + 1)}
+                            className="mr-2 border-white/10 text-white/60 hover:text-white"
+                        >
+                            Skip for now
+                        </Button>
+                    )}
+
                     {currentStep === STEPS.length - 1 ? (
                         <Button
                             onClick={form.handleSubmit(onSubmit, (errors) => {
+                                console.log("Form Errors:", errors);
                                 toast({
                                     title: "Submission Error",
                                     description: "Please check all steps for required information.",
                                     variant: "destructive",
                                 });
                             })}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || Object.values(uploadingFields).some(Boolean)}
                             className="bg-primary text-primary-foreground hover:bg-primary/90 min-w-[120px]"
                         >
                             {isSubmitting ? (
                                 <>
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                     Submitting...
+                                </>
+                            ) : Object.values(uploadingFields).some(Boolean) ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Uploading...
                                 </>
                             ) : (
                                 "Finish Application"
@@ -921,13 +1011,18 @@ export function KYBForm() {
                         <Button
                             type="button"
                             onClick={nextStep}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || Object.values(uploadingFields).some(Boolean)}
                             className="bg-primary text-primary-foreground hover:bg-primary/90"
                         >
                             {isSubmitting ? (
                                 <>
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                     Processing...
+                                </>
+                            ) : Object.values(uploadingFields).some(Boolean) ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Uploading...
                                 </>
                             ) : (
                                 <>
