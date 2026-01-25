@@ -7,6 +7,7 @@ import {
     FileText,
     Landmark,
     CheckCircle2,
+    Clock,
     XCircle,
     Download,
     ExternalLink,
@@ -44,7 +45,7 @@ export function MerchantKYBDetails({ merchant, onStatusUpdate }: MerchantKYBDeta
     const handleUpdateStatus = async (status: "APPROVED" | "REJECTED") => {
         setIsUpdating(true);
         try {
-            await adminApi.updateMerchantKYBStatus(merchant.id, status);
+            await adminApi.updateMerchant(merchant.id, { kyb: { status } });
             toast({
                 title: "Status Updated",
                 description: `Merchant KYB has been ${status.toLowerCase()} successfully.`,
