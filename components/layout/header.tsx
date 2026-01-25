@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAuthStore, useIsAuthenticated } from "@/lib/store";
+import { merchantApi } from "@/lib/api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,8 +22,28 @@ interface HeaderProps {
 
 export function Header({ onOpenAuthModal }: HeaderProps) {
   const isAuthenticated = useIsAuthenticated();
-  const { user, logout } = useAuthStore();
+  const { user, logout, updateUser } = useAuthStore();
   const router = useRouter();
+
+  useEffect(() => {
+    const fetchMerchantStatus = async () => {
+      if (isAuthenticated && user && (user.isMerchant === undefined || user.isOnboarded === undefined)) {
+        try {
+          const [statusRes, onboardedRes] = await Promise.all([
+            merchantApi.getMerchantStatus(),
+            merchantApi.getIsOnboarded()
+          ]);
+          updateUser({
+            isMerchant: statusRes.data.isMerchant,
+            isOnboarded: onboardedRes.data.isOnboarded
+          });
+        } catch (error) {
+          console.error("Failed to fetch merchant status:", error);
+        }
+      }
+    };
+    fetchMerchantStatus();
+  }, [isAuthenticated, user, updateUser]);
 
   const handleLogout = () => {
     logout();
@@ -89,6 +111,13 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                         Profile
                       </Link>
                     </DropdownMenuItem>
+                    {user?.isMerchant && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/merchant/dashboard" className="cursor-pointer font-medium text-secondary">
+                          Merchant Portal
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={handleLogout}

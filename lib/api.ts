@@ -126,6 +126,8 @@ export interface User {
   phoneNumber?: string;
   walletAddress?: string;
   role: string;
+  isMerchant?: boolean;
+  isOnboarded?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -569,4 +571,97 @@ export const swapApi = {
     api.get<{ estimatedNgn: number; usdNgnRate: number; usdValue: number }>(
       `/swap/estimate-ngn?cngnAmount=${cngnAmount}`,
     ),
+};
+
+// ============== Merchant API ==============
+
+export interface MerchantBusinessDetailsDto {
+  userId: string;
+  name: string;
+  natureOfBusiness?: string;
+  description?: string;
+  websiteUrl?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+  metadata?: any;
+}
+
+export interface MerchantDocumentationDto {
+  merchantId: string;
+  cacCertificate?: string;
+  cacEStatus?: string;
+  memart?: string;
+  memorandum?: string;
+  proofOfAddress?: string;
+  capitalSource?: string;
+  tradingName: string;
+  taxIdentificationNumber?: string;
+  proofOfFunds?: string;
+  metadata?: any;
+}
+
+export interface MerchantDirectorDto {
+  merchantId?: string;
+  firstName?: string;
+  lastName?: string;
+  nationality?: string;
+  bvn?: string;
+  proofOfAddress?: string;
+  idType?: string;
+  idUrl?: string;
+  metadata?: any;
+}
+
+export interface MerchantShareholderDto {
+  merchantId?: string;
+  firstName?: string;
+  lastName?: string;
+  nationality?: string;
+  bvn?: string;
+  proofOfAddress?: string;
+  idType?: string;
+  idUrl?: string;
+  metadata?: any;
+}
+
+export interface MerchantBankAccountDto {
+  merchantId: string;
+  bankCode: string;
+  accountNumber: string;
+  accountName: string;
+  bankName: string;
+  metadata?: any;
+}
+
+export const merchantApi = {
+  submitBusinessDetails: (data: MerchantBusinessDetailsDto) =>
+    api.post("/merchant/onboarding", data),
+
+  submitDocumentation: (data: MerchantDocumentationDto) =>
+    api.post("/merchant/documentations", data),
+
+  submitDirector: (data: MerchantDirectorDto) =>
+    api.post("/merchant/directors", data),
+
+  submitShareholder: (data: MerchantShareholderDto) =>
+    api.post("/merchant/shareholders", data),
+
+  submitBankAccount: (data: MerchantBankAccountDto) =>
+    api.post("/merchant/bank-accounts", data),
+
+  getOnboardingStatus: () =>
+    api.get<{ isOnboarded: boolean; step: string }>("/merchant/onboarding/status"),
+
+  getMerchantProfile: () =>
+    api.get<any>("/merchant/profile"),
+
+  getMerchantStatus: () =>
+    api.get<{ isMerchant: boolean }>("/merchants/status"),
+
+  getIsOnboarded: () =>
+    api.get<{ isOnboarded: boolean }>("/merchants/onboarded"),
 };

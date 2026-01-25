@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { HeroBackground } from "@/components/hero/hero-background";
 import { Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/lib/store";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.autoramp.com";
 
@@ -109,6 +111,20 @@ function EndpointSection({
 }
 
 export default function DocsPage() {
+    const { user } = useAuthStore();
+    const router = useRouter();
+
+    const handleRequestAccess = (e: React.MouseEvent) => {
+        if (user?.isMerchant) {
+            e.preventDefault();
+            if (user.isOnboarded) {
+                router.push("/merchant/dashboard");
+            } else {
+                router.push("/merchant/onboarding");
+            }
+        }
+    };
+
     return (
         <div className="min-h-screen relative overflow-hidden">
             <HeroBackground />
@@ -136,6 +152,7 @@ export default function DocsPage() {
                                 href="https://forms.gle/kKufhZvsFpYAVwLz5"
                                 target="_blank"
                                 rel="noopener noreferrer"
+                                onClick={handleRequestAccess}
                                 className="inline-flex items-center gap-2 px-4 py-2 bg-secondary text-black text-sm font-medium rounded-lg transition-colors"
                             >
                                 Request API Access

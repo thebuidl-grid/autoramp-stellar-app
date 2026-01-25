@@ -11,10 +11,13 @@ export interface User {
   id: string;
   email: string;
   role: string;
+  isMerchant?: boolean;
+  isOnboarded?: boolean;
   firstName?: string;
   lastName?: string;
   phoneNumber?: string;
   walletAddress?: string;
+  isApiAccessApproved?: boolean;
 }
 
 interface AuthState {
