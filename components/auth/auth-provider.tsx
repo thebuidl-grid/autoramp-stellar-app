@@ -27,13 +27,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Only run after hydration
     if (!_hasHydrated) return;
 
-    // Check if we have a token but no user (page refresh scenario)
-    if (token && !user) {
-      // Validate token by fetching user profile
+    // Check if we have a token (page refresh scenario)
+    if (token) {
+      // Always fetch latest profile on startup to ensure state (like isMerchant) is fresh
       userApi
         .getProfile()
         .then((response) => {
-          // Token is valid, restore auth state
+          // restored or refreshed auth state
           setAuth(
             {
               id: response.data.id,
@@ -41,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               role: response.data.role,
               phoneNumber: (response.data as any).phoneNumber,
               walletAddress: (response.data as any).walletAddress,
+              isMerchant: response.data.isMerchant,
             } as any,
             token
           );
@@ -52,12 +53,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             router.push("/");
           }
         });
-    } else if (!token && !pathname?.startsWith("/auth") && !pathname?.startsWith("/admin") && !pathname?.startsWith("/merchant") && !pathname?.startsWith("/docs") && pathname !== "/") {
+    } else if (!pathname?.startsWith("/auth") && !pathname?.startsWith("/admin") && !pathname?.startsWith("/merchant") && !pathname?.startsWith("/docs") && pathname !== "/") {
       // No token and not on auth page or admin page or merchant page or docs, redirect to home
-      // Note: AdminProtected handles admin page redirection
       router.push("/");
     }
-  }, [token, user, _hasHydrated, setAuth, logout, router, pathname]);
+  }, [token, _hasHydrated, setAuth, logout, router, pathname]); // Removed user from deps to avoid infinite loop if user object changes slightly
 
   return <>{children}</>;
 }

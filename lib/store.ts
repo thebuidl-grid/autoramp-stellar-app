@@ -11,20 +11,19 @@ export interface User {
   id: string;
   email: string;
   role: string;
-  isMerchant?: boolean;
   isOnboarded?: boolean;
   firstName?: string;
   lastName?: string;
   phoneNumber?: string;
   walletAddress?: string;
-  isApiAccessApproved?: boolean;
+  isMerchant?: boolean;
 }
 
 interface AuthState {
   user: User | null;
   token: string | null;
   _hasHydrated: boolean;
-  
+
   // Actions
   setAuth: (user: User, token: string) => void;
   updateUser: (user: Partial<User>) => void;
@@ -38,7 +37,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       _hasHydrated: false,
-      
+
       setAuth: (user, token) => {
         set({
           user,
@@ -49,7 +48,7 @@ export const useAuthStore = create<AuthState>()(
           localStorage.setItem("token", token);
         }
       },
-      
+
       updateUser: (updates) => {
         const currentUser = get().user;
         if (currentUser) {
@@ -59,7 +58,7 @@ export const useAuthStore = create<AuthState>()(
           });
         }
       },
-      
+
       logout: () => {
         set({
           user: null,
@@ -70,7 +69,7 @@ export const useAuthStore = create<AuthState>()(
           localStorage.removeItem("auth-storage");
         }
       },
-      
+
       setHasHydrated: (state) => {
         set({
           _hasHydrated: state,
@@ -122,7 +121,7 @@ interface Toast {
 interface UIState {
   toasts: Toast[];
   isSidebarOpen: boolean;
-  
+
   // Actions
   addToast: (toast: Omit<Toast, "id">) => void;
   removeToast: (id: string) => void;
@@ -133,7 +132,7 @@ interface UIState {
 export const useUIStore = create<UIState>((set, get) => ({
   toasts: [],
   isSidebarOpen: true,
-  
+
   addToast: (toast) => {
     const id = Math.random().toString(36).substring(7);
     set({ toasts: [...get().toasts, { ...toast, id }] });
@@ -142,15 +141,15 @@ export const useUIStore = create<UIState>((set, get) => ({
       get().removeToast(id);
     }, 5000);
   },
-  
+
   removeToast: (id) => {
     set({ toasts: get().toasts.filter((t) => t.id !== id) });
   },
-  
+
   toggleSidebar: () => {
     set({ isSidebarOpen: !get().isSidebarOpen });
   },
-  
+
   setSidebarOpen: (open) => {
     set({ isSidebarOpen: open });
   },
@@ -172,25 +171,25 @@ interface TransactionFormState {
   cryptoType: CryptoType;
   fromCryptoType: CryptoType;
   toCryptoType: CryptoType;
-  
+
   // Form fields
   sellAmount: string;
   buyAmount: string;
   bankCode: string;
   accountNumber: string;
   walletAddress: string;
-  
+
   // Transaction state
   step: StepType;
   transactionData: any;
   swapData: any;
-  
+
   // Modal states
   isCryptoModalOpen: boolean;
   isFromCryptoModalOpen: boolean;
   isToCryptoModalOpen: boolean;
   isAuthModalOpen: boolean;
-  
+
   // Actions
   setActiveTab: (tab: TabType) => void;
   setCryptoType: (type: CryptoType) => void;
@@ -229,7 +228,7 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
   isFromCryptoModalOpen: false,
   isToCryptoModalOpen: false,
   isAuthModalOpen: false,
-  
+
   // Actions
   setActiveTab: (tab) => set({ activeTab: tab }),
   setCryptoType: (type) => set({ cryptoType: type }),
