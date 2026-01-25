@@ -41,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               role: response.data.role,
               phoneNumber: (response.data as any).phoneNumber,
               walletAddress: (response.data as any).walletAddress,
+              isMerchant: response.data.isMerchant,
             } as any,
             token
           );
