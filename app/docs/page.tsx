@@ -29,7 +29,7 @@ function RequestAPIAccessButton() {
             onClick={handleClick}
             className="inline-flex items-center gap-2 px-4 py-2 bg-secondary text-black text-sm font-medium rounded-lg hover:bg-secondary/90 transition-colors"
         >
-            Request API Access
+            {user?.isMerchant ? "Go to Merchant Dashboard" : "Request API Key"}
         </button>
     );
 }
