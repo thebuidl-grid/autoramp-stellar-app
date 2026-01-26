@@ -64,7 +64,7 @@ export default function MerchantDetailPage({ params }: PageProps) {
                 </Button>
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-white">
-                        {merchant.kyb?.businessName || "Merchant Details"}
+                        {merchant.name || "Merchant Details"}
                     </h1>
                     <p className="text-zinc-500 text-sm">Review merchant onboarding and KYB data.</p>
                 </div>

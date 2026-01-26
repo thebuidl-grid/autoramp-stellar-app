@@ -503,6 +503,31 @@ export interface ApproveMerchantResponse {
   message: string;
 }
 
+export interface MerchantKYB {
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  businessName: string;
+  tradingName: string;
+  email: string;
+  websiteUrl: string;
+  natureOfBusiness: string;
+  contactPerson: string;
+  contactPhone?: string;
+  bvn?: string;
+  tin?: string;
+  numberOfDirectors?: string;
+  capitalSource?: string;
+  companyDirectors?: string;
+  idType?: string;
+  cacCertificate?: string | null;
+  cacEStatus?: string | null;
+  memart?: string | null;
+  memorandum?: string | null;
+  proofOfAddress?: string | null;
+  proofOfFunds?: string | null;
+  directorProofOfAddress?: string | null;
+  idDocument?: string | null;
+}
+
 export interface MerchantUser {
   id: string;
   userId: string;
@@ -531,6 +556,7 @@ export interface MerchantUser {
     contactName: string | null;
   };
   isApiAccessApproved?: boolean;
+  kyb?: MerchantKYB;
 }
 
 export interface MerchantsResponse {
