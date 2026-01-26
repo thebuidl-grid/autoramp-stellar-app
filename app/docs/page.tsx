@@ -20,7 +20,7 @@ function RequestAPIAccessButton() {
         if (user?.isMerchant) {
             router.push("/merchant/dashboard");
         } else {
-            router.push("/merchant/onboardng");
+            router.push("/merchant/onboarding");
         }
     };
 
