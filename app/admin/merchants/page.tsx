@@ -35,10 +35,10 @@ export default function AdminMerchantsPage() {
 
     // Client-side filtering
     const filteredMerchants = merchants.filter(merchant =>
-        (statusFilter ? merchant.kyb?.status === statusFilter : true) &&
+        (statusFilter ? merchant.status === statusFilter : true) &&
         (searchTerm ?
-            merchant.kyb?.businessName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            merchant.email?.toLowerCase().includes(searchTerm.toLowerCase())
+            merchant.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            merchant.user?.email?.toLowerCase().includes(searchTerm.toLowerCase())
             : true)
     );
 
@@ -56,14 +56,14 @@ export default function AdminMerchantsPage() {
         },
         {
             title: "Pending KYB",
-            value: merchants.filter(m => m.kyb?.status === "PENDING").length,
+            value: merchants.filter(m => m.status === "PENDING").length,
             icon: Clock,
             color: "text-amber-500",
             bg: "bg-amber-500/10"
         },
         {
             title: "Approved",
-            value: merchants.filter(m => m.kyb?.status === "APPROVED").length,
+            value: merchants.filter(m => m.status === "APPROVED").length,
             icon: CheckCircle2,
             color: "text-green-500",
             bg: "bg-green-500/10"
@@ -76,6 +76,7 @@ export default function AdminMerchantsPage() {
             bg: "bg-primary/10"
         }
     ];
+
 
     return (
         <div className="space-y-8">
