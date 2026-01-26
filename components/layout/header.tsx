@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAuthStore, useIsAuthenticated } from "@/lib/store";
-import { merchantApi } from "@/lib/merchant";
+import { useMerchantStatus } from "@/lib/hooks/use-auth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,25 +25,20 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
   const { user, logout, updateUser } = useAuthStore();
   const router = useRouter();
 
+
+  const { data: merchantStatus } = useMerchantStatus();
+
+
+  // Sync merchant status to store when fetched
   useEffect(() => {
-    const fetchMerchantStatus = async () => {
-      if (isAuthenticated && user && (user.isMerchant === undefined || user.isOnboarded === undefined)) {
-        try {
-          const [statusRes, onboardedRes] = await Promise.all([
-            merchantApi.getMerchantStatus(),
-            merchantApi.getIsOnboarded()
-          ]);
-          updateUser({
-            isMerchant: statusRes.data.isMerchant,
-            isOnboarded: onboardedRes.data.isOnboarded
-          });
-        } catch (error) {
-          console.error("Failed to fetch merchant status:", error);
-        }
+    if (merchantStatus?.data) {
+      if (user?.isMerchant !== merchantStatus.data.isMerchant) {
+        updateUser({
+          isMerchant: merchantStatus.data.isMerchant,
+        });
       }
-    };
-    fetchMerchantStatus();
-  }, [isAuthenticated, user, updateUser]);
+    }
+  }, [merchantStatus, user, updateUser]);
 
   const handleLogout = () => {
     logout();
@@ -56,6 +51,7 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
       onOpenAuthModal();
     }
   };
+
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50">
