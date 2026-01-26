@@ -11,7 +11,6 @@ export interface User {
   id: string;
   email: string;
   role: string;
-  isOnboarded?: boolean;
   firstName?: string;
   lastName?: string;
   phoneNumber?: string;
