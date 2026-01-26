@@ -29,7 +29,7 @@ import { uploadFile } from "@/lib/cloudinary"
 const kybSchema = z.object({
     // Step 1: Business Profile
     businessName: z.string().min(2, "Business name is required"),
-    email: z.email("Invalid email address"),
+    email: z.string().email("Invalid email address"), // Changed from z.email()
     websiteUrl: z.string().min(1, "Website / Product URL is required"),
     natureOfBusiness: z.string().min(5, "Please describe business nature"),
     description: z.string().min(10, "Please provide a brief description"),
@@ -40,21 +40,21 @@ const kybSchema = z.object({
     addressLine2: z.string().optional(),
     city: z.string().min(2, "City is required"),
     state: z.string().min(2, "State is required"),
-    country: z.string().default("Nigeria"),
+    country: z.string().min(1, "Country is required"),
     postalCode: z.string().min(3, "Postal code is required"),
 
     // Step 2: Address & Contact
     contactPerson: z.string().min(2, "Contact person is required"),
 
     // Step 3: Documentation
-    cacCertificate: z.any().optional(),
-    cacEStatus: z.any().optional(),
-    memart: z.any().optional(),
-    memorandum: z.any().optional(),
-    proofOfAddress: z.any().optional(),
+    cacCertificate: z.any(),
+    cacEStatus: z.any(),
+    memart: z.any(),
+    memorandum: z.any(),
+    proofOfAddress: z.any(),
     capitalSource: z.string().min(5, "Capital source is required"),
     taxIdentificationNumber: z.string().min(8, "TIN is required"),
-    proofOfFunds: z.any().optional(),
+    proofOfFunds: z.any(),
 
     // Step 4: Directors
     directors: z.array(z.object({
@@ -62,9 +62,9 @@ const kybSchema = z.object({
         lastName: z.string().min(2, "Last name is required"),
         nationality: z.string().min(2, "Nationality is required"),
         bvn: z.string().length(11, "BVN must be 11 digits"),
-        proofOfAddress: z.any().optional(),
+        proofOfAddress: z.any(),
         idType: z.string().min(2, "ID type is required"),
-        idUrl: z.any().optional(),
+        idUrl: z.any(),
         role: z.string().min(2, "Role is required"),
     })).min(1, "At least one director is required"),
 });
@@ -115,12 +115,12 @@ export function KYBForm() {
         name: "directors",
     });
 
-    const handleAutoUpload = async (file: File, fieldName: string, folder?: string) => {
+    const handleAutoUpload = async (file: File, fieldName: string) => {
         if (!file) return;
 
         setUploadingFields(prev => ({ ...prev, [fieldName]: true }));
         try {
-            const url = await uploadFile(file, folder);
+            const url = await uploadFile(file);
             form.setValue(fieldName as any, url);
             toast({
                 title: "Upload Successful",
@@ -139,8 +139,8 @@ export function KYBForm() {
         }
     };
 
-    const handleCloudinaryUpload = async (file: File, folder?: string) => {
-        return await uploadFile(file, folder);
+    const handleCloudinaryUpload = async (file: File) => {
+        return await uploadFile(file);
     };
 
     const handleCreateMerchant = async (data: KYBFormValues) => {
@@ -214,7 +214,7 @@ export function KYBForm() {
                 if (value instanceof File) {
                     try {
                         const folder = `merchant/${merchantId}/documentation`;
-                        const url = await handleCloudinaryUpload(value, folder);
+                        const url = await handleCloudinaryUpload(value);
                         return { [key]: url };
                     } catch (err) {
                         console.error(`Failed to upload ${key}`, err);
@@ -280,13 +280,13 @@ export function KYBForm() {
                 if (typeof director.proofOfAddress === "string" && director.proofOfAddress.startsWith("http")) {
                     directorPoAUrl = director.proofOfAddress;
                 } else if (director.proofOfAddress instanceof File) {
-                    directorPoAUrl = await handleCloudinaryUpload(director.proofOfAddress, directorFolder);
+                    directorPoAUrl = await handleCloudinaryUpload(director.proofOfAddress);
                 }
 
                 if (typeof director.idUrl === "string" && director.idUrl.startsWith("http")) {
                     directorIdUrl = director.idUrl;
                 } else if (director.idUrl instanceof File) {
-                    directorIdUrl = await handleCloudinaryUpload(director.idUrl, directorFolder);
+                    directorIdUrl = await handleCloudinaryUpload(director.idUrl);
                 }
 
                 const directorPayload = {
@@ -684,7 +684,7 @@ export function KYBForm() {
                                                                     accept=".pdf"
                                                                     onChange={(e) => {
                                                                         const file = e.target.files?.[0];
-                                                                        if (file) handleAutoUpload(file, doc.name, `merchant/${merchantId || 'temp'}/documentation`);
+                                                                        if (file) handleAutoUpload(file, doc.name);
                                                                     }}
                                                                     className="hidden"
                                                                     id={`file-${doc.name}`}
@@ -865,7 +865,7 @@ export function KYBForm() {
                                                                             type="file"
                                                                             onChange={(e) => {
                                                                                 const file = e.target.files?.[0];
-                                                                                if (file) handleAutoUpload(file, fieldKey, `merchant/${merchantId || 'temp'}/directors`);
+                                                                                if (file) handleAutoUpload(file, fieldKey);
                                                                             }}
                                                                             className="hidden"
                                                                             id={`director-id-${index}`}
@@ -914,7 +914,7 @@ export function KYBForm() {
                                                                             type="file"
                                                                             onChange={(e) => {
                                                                                 const file = e.target.files?.[0];
-                                                                                if (file) handleAutoUpload(file, fieldKey, `merchant/${merchantId || 'temp'}/directors`);
+                                                                                if (file) handleAutoUpload(file, fieldKey);
                                                                             }}
                                                                             className="hidden"
                                                                             id={`director-poa-${index}`}

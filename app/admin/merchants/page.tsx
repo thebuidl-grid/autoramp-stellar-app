@@ -28,7 +28,7 @@ export default function AdminMerchantsPage() {
         queryKey: ["admin-merchants", statusFilter],
         queryFn: async () => {
             // Fetch all merchants
-            const { data } = await adminApi.getMerchants(statusFilter);
+            const { data } = await adminApi.getMerchants();
             return data;
         },
     });
