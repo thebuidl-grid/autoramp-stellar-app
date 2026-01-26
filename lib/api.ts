@@ -503,36 +503,34 @@ export interface ApproveMerchantResponse {
   message: string;
 }
 
-export interface MerchantKYB {
+export interface MerchantUser {
   id: string;
-  businessName: string;
-  email: string;
-  websiteUrl: string;
+  userId: string;
+  name: string;
   natureOfBusiness: string;
-  tradingName: string;
-  contactPerson: string;
-  contactPhone: string;
-  bvn: string;
-  tin: string;
-  capitalSource: string;
-  numberOfDirectors: string;
-  companyDirectors: string;
-  idType: string;
+  description: string;
+  websiteUrl: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  country: string;
+  postalCode: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
+  verifiedAt: string | null;
+  rejectionReason: string | null;
+  metadata: {
+    industry?: string;
+    contactPerson?: string;
+    [key: string]: any;
+  } | null;
   createdAt: string;
   updatedAt: string;
-  cacCertificate?: string;
-  cacEStatus?: string;
-  memart?: string;
-  memorandum?: string;
-  proofOfAddress?: string;
-  proofOfFunds?: string;
-  directorProofOfAddress?: string;
-  idDocument?: string;
-}
-
-export interface MerchantUser extends AdminUser {
-  kyb?: MerchantKYB;
+  user: {
+    email: string;
+    contactName: string | null;
+  };
+  isApiAccessApproved?: boolean;
 }
 
 export interface MerchantsResponse {
@@ -544,6 +542,7 @@ export interface MerchantsResponse {
     totalPages: number;
   };
 }
+
 
 export const adminApi = {
   getMe: () =>

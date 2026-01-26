@@ -89,35 +89,53 @@ export function MerchantTable({ merchants, isLoading }: MerchantTableProps) {
                                 <td className="p-4 align-middle">
                                     <div className="flex flex-col">
                                         <span className="font-semibold text-white">
-                                            {merchant.kyb?.businessName || "Unknown Business"}
+                                            {merchant.name || "Unknown Business"}
                                         </span>
                                         <span className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
-                                            <Mail className="h-3 w-3" /> {merchant.email}
+                                            <Mail className="h-3 w-3" /> {merchant.user.email}
                                         </span>
+                                        <span className="text-[10px] text-zinc-600 mt-1">ID: {merchant.id.slice(0, 8)}...</span>
                                     </div>
                                 </td>
                                 <td className="p-4 align-middle">
                                     <div className="flex flex-col text-xs gap-1">
-                                        {merchant.kyb?.websiteUrl && (
+                                        {merchant.websiteUrl && (
                                             <a
-                                                href={merchant.kyb.websiteUrl}
+                                                href={merchant.websiteUrl.startsWith('http') ? merchant.websiteUrl : `https://${merchant.websiteUrl}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="text-primary hover:underline flex items-center gap-1"
                                             >
-                                                <Globe className="h-3 w-3" /> Website <ExternalLink className="h-2 w-2" />
+                                                <Globe className="h-3 w-3" /> {merchant.websiteUrl.replace(/^https?:\/\//, "")} <ExternalLink className="h-2 w-2" />
                                             </a>
                                         )}
                                         <span className="text-zinc-400 flex items-center gap-1">
-                                            <Building2 className="h-3 w-3" /> {merchant.kyb?.natureOfBusiness || "N/A"}
+                                            <Building2 className="h-3 w-3" /> {merchant.natureOfBusiness || "N/A"}
                                         </span>
+                                        {merchant.metadata?.contactPerson && (
+                                            <span className="text-zinc-500 italic">Contact: {merchant.metadata.contactPerson}</span>
+                                        )}
                                     </div>
                                 </td>
                                 <td className="p-4 align-middle">
-                                    {getStatusBadge(merchant.kyb?.status || "")}
+                                    <div className="flex flex-col gap-1.5">
+                                        {getStatusBadge(merchant.status || "")}
+                                        {merchant.isApiAccessApproved && (
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-500 border border-blue-500/20 w-fit">
+                                                API Active
+                                            </span>
+                                        )}
+                                    </div>
                                 </td>
-                                <td className="p-4 align-middle text-zinc-500">
-                                    {format(new Date(merchant.createdAt), "MMM d, yyyy")}
+                                <td className="p-4 align-middle">
+                                    <div className="flex flex-col text-xs">
+                                        <span className="text-zinc-500">
+                                            {format(new Date(merchant.createdAt), "MMM d, yyyy")}
+                                        </span>
+                                        <span className="text-[10px] text-zinc-600">
+                                            {format(new Date(merchant.createdAt), "HH:mm")}
+                                        </span>
+                                    </div>
                                 </td>
                                 <td className="p-4 align-middle text-right">
                                     <DropdownMenu>
@@ -130,7 +148,7 @@ export function MerchantTable({ merchants, isLoading }: MerchantTableProps) {
                                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                             <DropdownMenuItem asChild>
                                                 <Link href={`/admin/merchants/${merchant.id}`}>
-                                                    View KYB Details
+                                                    View Details
                                                 </Link>
                                             </DropdownMenuItem>
                                             <DropdownMenuItem>Send Message</DropdownMenuItem>
@@ -141,6 +159,8 @@ export function MerchantTable({ merchants, isLoading }: MerchantTableProps) {
                                 </td>
                             </tr>
                         ))
+
+
                     )}
                 </tbody>
             </table>
