@@ -25,7 +25,8 @@ export default function AdminMerchantsPage() {
     const [searchTerm, setSearchTerm] = useState("");
 
     const { data: merchants = [], isLoading } = useQuery({
-        queryKey: ["admin-merchants", statusFilter],
+        // queryKey: ["admin-merchants", statusFilter],
+        queryKey: ["admin-merchants"],
         queryFn: async () => {
             // Fetch all merchants
             const { data } = await adminApi.getMerchants();
