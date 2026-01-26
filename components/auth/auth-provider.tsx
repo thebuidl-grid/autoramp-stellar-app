@@ -29,6 +29,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Check if we have a token (page refresh scenario)
     if (token) {
+      // SKIP profile fetch if we are in onboarding/KYB flow
+      // This prevents 401 from clearing the session for merchants with restricted onboarding tokens
+      const isOnboardingRoute = pathname?.startsWith("/merchant/kyb") || pathname?.startsWith("/merchant/onboarding");
+
+      if (isOnboardingRoute) {
+        return;
+      }
+
       // Always fetch latest profile on startup to ensure state (like isMerchant) is fresh
       userApi
         .getProfile()

@@ -1,4 +1,5 @@
 import axios, { AxiosError } from "axios";
+import { useAuthStore } from "./store";
 
 /**
  * API Configuration
@@ -19,8 +20,13 @@ export const api = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    // Get token from global store (synced with localStorage)
+    const storeToken = useAuthStore.getState().token;
+
+    // Fallback to direct localStorage if store is not yet initialized 
+    // (though in current setup, store is the source of truth)
+    const token = storeToken || (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -33,13 +39,8 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      // Clear token and auth storage
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("token");
-        localStorage.removeItem("auth-storage");
-      }
-    }
+    // Rely on AuthProvider and store for global logout handling
+    // Direct localStorage manipulation here causes synchronization issues
     return Promise.reject(error);
   },
 );

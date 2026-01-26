@@ -8,8 +8,10 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
 import { authApi, getErrorMessage } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/lib/store";
 
 export default function MerchantLoginPage() {
+    const setAuth = useAuthStore((state) => state.setAuth);
     const [step, setStep] = useState<"email" | "otp">("email");
     const [email, setEmail] = useState("");
     const [otpCode, setOtpCode] = useState("");
@@ -63,30 +65,22 @@ export default function MerchantLoginPage() {
         try {
             // Reusing signUp for login as per auth implementation
             const response = await authApi.signUp({ email, otpCode });
+            const { user, accessToken } = response.data;
+
+            // Save auth session globally using the store
+            setAuth(user as any, accessToken);
 
             // Check if merchant has approved API access
-            const user = response.data.user;
             if (!user.isApiAccessApproved) {
                 toast({
                     title: "Access Pending",
                     description: "Your API access is pending approval. Please ensure you have completed the KYB onboarding.",
                     variant: "destructive",
                 });
-                // Optionally redirect to KYB after a short delay
-                setTimeout(() => router.push("/merchant/kyb"), 2000);
-                return;
-            }
 
-            // Store auth data
-            if (typeof window !== "undefined") {
-                localStorage.setItem("token", response.data.accessToken);
-                localStorage.setItem("auth-storage", JSON.stringify({
-                    state: {
-                        user: response.data.user,
-                        isAuthenticated: true
-                    },
-                    version: 0
-                }));
+                // Redirect to KYB form – they stay logged in now!
+                router.push("/merchant/kyb");
+                return;
             }
 
             router.push("/merchant/dashboard");
