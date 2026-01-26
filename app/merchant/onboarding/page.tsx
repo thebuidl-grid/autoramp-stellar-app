@@ -9,17 +9,10 @@ import Image from "next/image";
 export default function MerchantKYBPage() {
     const router = useRouter();
     const isAuthenticated = useIsAuthenticated();
-    const { _hasHydrated } = useAuthStore();
+    const { _hasHydrated, user } = useAuthStore();
 
-    // Redirect to home if not authenticated (after hydration)
-    useEffect(() => {
-        if (_hasHydrated && !isAuthenticated) {
-            router.push("/");
-        }
-    }, [isAuthenticated, _hasHydrated, router]);
-
-    // Show loading while hydrating or checking auth
-    if (!_hasHydrated || !isAuthenticated) {
+    // Simplified: MerchantProtected layout handles auth check
+    if (!_hasHydrated || !user?.isMerchant) {
         return null;
     }
 
