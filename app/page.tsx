@@ -15,6 +15,8 @@ import { formatNumber } from "@/lib/utils";
 import { TabButton } from "@/components/swap/tab-button";
 import { SwapSection } from "@/components/swap/swap-section";
 import { CryptoSelectionModal } from "@/components/swap/crypto-selection-modal";
+import { SavedAccountSelector } from "@/components/swap/SavedAccountSelector";
+import { SavedWalletSelector } from "@/components/swap/SavedWalletSelector";
 import { HeroBackground } from "@/components/hero/hero-background";
 import {
   useBanks,
@@ -1217,22 +1219,33 @@ export default function HomePage() {
           />
 
           {activeTab === "buy" && (
-            <div className="space-y-2">
-              <label className="text-sm text-white/70 mb-3 block">
-                Wallet Address
-              </label>
-              <Input
-                type="text"
-                placeholder="0x..."
-                value={walletAddress}
-                onChange={(e) => setWalletAddress(e.target.value)}
-                className="h-14 bg-black/50! border-white/10 text-white placeholder:text-white/30 border-0! outline-0!  focus:ring-0 focus:outline-0 focus:border-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            <div className="space-y-4">
+              <SavedWalletSelector
+                onSelect={(address) => setWalletAddress(address)}
               />
+              <div className="space-y-2">
+                <label className="text-sm text-white/70 mb-3 block">
+                  Wallet Address
+                </label>
+                <Input
+                  type="text"
+                  placeholder="0x..."
+                  value={walletAddress}
+                  onChange={(e) => setWalletAddress(e.target.value)}
+                  className="h-14 bg-black/50! border-white/10 text-white placeholder:text-white/30 border-0! outline-0!  focus:ring-0 focus:outline-0 focus:border-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
             </div>
           )}
 
           {activeTab === "sell" && (
-            <div className="space-y-2">
+            <div className="space-y-4">
+              <SavedAccountSelector
+                onSelect={(account) => {
+                  setBankCode(account.bankCode);
+                  setAccountNumber(account.accountNumber);
+                }}
+              />
               <div className="grid grid-cols-6 gap-2 p-2 bg-black/50 rounded-xl border border-white/10">
                 <div className="col-span-6 md:col-span-3">
                   <SearchableBankSelect
