@@ -20,7 +20,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Loader2, CheckCircle2, ChevronRight, ChevronLeft, Upload, Building2, User, FileText, Landmark, X, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import axios from "axios";
-import { publicMerchantApi } from "@/lib/api";
+import { publicMerchantApi } from "@/lib/merchant";
 import { useAuthStore } from "@/lib/store";
 import { Badge } from "@/components/ui/badge";
 import { TagInput } from "@/components/ui/tag-input";

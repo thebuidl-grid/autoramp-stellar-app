@@ -196,7 +196,7 @@ export const userApi = {
   getUserApiKeys: () => api.get<ApiKey[]>("/user/api-keys"),
 
   createApiKey: (data: CreateApiKeyDto) =>
-    api.post<CreateApiKeyResponse>("/user/api-keys", data),
+    api.post<CreateApiKeyResponse>("/merchants/api-keys", data),
 
   getUserApiKeyStats: () =>
     api.get<UserApiKeyStatsResponse>("/user/api-keys/stats"),
@@ -482,12 +482,18 @@ export interface AdminTransactionsResponse {
 
 
 export interface CreateMerchantDto {
-  email: string;
+  userId: string;
   name: string;
-  businessName: string;
+  natureOfBusiness: string;
+  description?: string;
   websiteUrl: string;
-  trafficEstimate?: string;
-  requestLimit?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+  metadata?: any;
 }
 
 // Response from backend ApproveMerchant
@@ -599,42 +605,7 @@ export const adminApi = {
     api.post<ApproveMerchantResponse>("/admin/approve-access", data),
 };
 
-// Response from /merchants/onboarding
-export interface MerchantOnboardingResponse {
-  id: string;
-  userId: string;
-  name: string;
-  status: string;
-  // ... other fields as needed
-}
-
-export interface CreateDirectorDto {
-  merchantId: string;
-  firstName: string;
-  lastName: string;
-  nationality: string;
-  bvn: string;
-  proofOfAddress: string;
-  idType: string;
-  idUrl: string;
-  metadata: {
-    role: string;
-  }
-}
-
-export const publicMerchantApi = {
-  // Stage 1: Create Merchant
-  createMerchant: (data: any) =>
-    api.post<MerchantOnboardingResponse>(`/merchants/onboarding`, data),
-
-  // Stage 2: Upload Documents & Complete Info
-  completeMerchantKYB: (data: any) =>
-    api.post<{ message: string }>(`/merchants/documentations`, data),
-
-  // Stage 3: Add Merchant Director
-  addMerchantDirector: (data: CreateDirectorDto) =>
-    api.post<{ message: string }>(`/merchants/directors`, data),
-};
+// Redundant public merchant definitions moved to merchant.ts
 
 export interface AdminTransactionSummaryResponse {
   onRamps: {
@@ -756,92 +727,4 @@ export const swapApi = {
     ),
 };
 
-// ============== Merchant API ==============
-
-export interface MerchantBusinessDetailsDto {
-  userId: string;
-  name: string;
-  natureOfBusiness?: string;
-  description?: string;
-  websiteUrl?: string;
-  addressLine1?: string;
-  addressLine2?: string;
-  city?: string;
-  state?: string;
-  country?: string;
-  postalCode?: string;
-  metadata?: any;
-}
-
-export interface MerchantDocumentationDto {
-  merchantId: string;
-  cacCertificate?: string;
-  cacEStatus?: string;
-  memart?: string;
-  memorandum?: string;
-  proofOfAddress?: string;
-  capitalSource?: string;
-  tradingName: string;
-  taxIdentificationNumber?: string;
-  proofOfFunds?: string;
-  metadata?: any;
-}
-
-export interface MerchantDirectorDto {
-  merchantId?: string;
-  firstName?: string;
-  lastName?: string;
-  nationality?: string;
-  bvn?: string;
-  proofOfAddress?: string;
-  idType?: string;
-  idUrl?: string;
-  metadata?: any;
-}
-
-export interface MerchantShareholderDto {
-  merchantId?: string;
-  firstName?: string;
-  lastName?: string;
-  nationality?: string;
-  bvn?: string;
-  proofOfAddress?: string;
-  idType?: string;
-  idUrl?: string;
-  metadata?: any;
-}
-
-export interface MerchantBankAccountDto {
-  merchantId: string;
-  bankCode: string;
-  accountNumber: string;
-  accountName: string;
-  bankName: string;
-  metadata?: any;
-}
-
-export const merchantApi = {
-  submitBusinessDetails: (data: MerchantBusinessDetailsDto) =>
-    api.post("/merchants/onboarding", data),
-
-  submitDocumentation: (data: MerchantDocumentationDto) =>
-    api.post("/merchants/documentations", data),
-
-  submitDirector: (data: MerchantDirectorDto) =>
-    api.post("/merchants/directors", data),
-
-  submitShareholder: (data: MerchantShareholderDto) =>
-    api.post("/merchants/shareholders", data),
-
-  submitBankAccount: (data: MerchantBankAccountDto) =>
-    api.post("/merchants/bank-accounts", data),
-
-  getMerchantStatus: () =>
-    api.get<{ isMerchant: boolean }>("/merchants/status"),
-
-  getIsOnboarded: () =>
-    api.get<{ isOnboarded: boolean }>("/merchants/onboarded"),
-
-  getMerchantProfile: () =>
-    api.get<any>("/merchants/onboarding/profile"), // Adjust if profile endpoint is different in spec
-};
+// Redundant merchant definitions moved to merchant.ts

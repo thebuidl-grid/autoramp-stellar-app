@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { authApi, SignInDto, SignUpDto, getErrorMessage, merchantApi } from "@/lib/api";
+import { authApi, SignInDto, SignUpDto, getErrorMessage } from "@/lib/api";
+import { merchantApi } from "@/lib/merchant";
 import { useAuthStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
 
