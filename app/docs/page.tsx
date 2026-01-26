@@ -142,7 +142,7 @@ export default function DocsPage() {
     const handleRequestAccess = (e: React.MouseEvent) => {
         if (user?.isMerchant) {
             e.preventDefault();
-            if (user.isOnboarded) {
+            if (user.isMerchant) {
                 router.push("/merchant/dashboard");
             } else {
                 router.push("/merchant/onboarding");
