@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
-import { merchantApi, getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/api";
+import { merchantApi } from "@/lib/merchant";
 import { useAuthStore } from "@/lib/store";
 
 const businessSchema = z.object({

@@ -484,7 +484,7 @@ export interface AdminTransactionsResponse {
 export interface CreateMerchantDto {
   userId: string;
   name: string;
-  natureOfBusiness: string;
+  natureOfBusiness?: string;
   description?: string;
   websiteUrl: string;
   addressLine1?: string;

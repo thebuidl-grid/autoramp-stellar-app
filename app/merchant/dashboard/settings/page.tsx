@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { merchantApi } from "@/lib/api";
+import { merchantApi } from "@/lib/merchant";
 import BusinessDetailsView from "@/components/merchant/settings/BusinessDetailsView";
 import DocumentationView from "@/components/merchant/settings/DocumentationView";
 import DirectorsView from "@/components/merchant/settings/DirectorsView";

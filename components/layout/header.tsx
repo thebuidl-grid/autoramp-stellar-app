@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAuthStore, useIsAuthenticated } from "@/lib/store";
-import { merchantApi } from "@/lib/api";
+import { merchantApi } from "@/lib/merchant";
 import {
   DropdownMenu,
   DropdownMenuContent,

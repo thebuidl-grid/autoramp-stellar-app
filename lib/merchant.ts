@@ -12,9 +12,9 @@ import { api } from "./api";
 export interface MerchantBusinessDetailsDto {
     userId: string;
     name: string;
-    natureOfBusiness: string;
+    natureOfBusiness?: string;
     description?: string;
-    websiteUrl: string;
+    websiteUrl?: string;
     addressLine1?: string;
     addressLine2?: string;
     city?: string;

@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableBankSelect } from "@/components/ui/searchable-bank-select";
 import { useToast } from "@/components/ui/toast";
-import { merchantApi, stablestackApi, getErrorMessage, Bank } from "@/lib/api";
+import { getErrorMessage, stablestackApi, Bank } from "@/lib/api";
+import { merchantApi } from "@/lib/merchant";
 import { useAuthStore } from "@/lib/store";
 
 const bankSchema = z.object({
