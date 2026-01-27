@@ -693,6 +693,9 @@ export const adminApi = {
   updateMerchant: (id: string, data: any) =>
     api.patch<MerchantUser>(`/merchants/onboarding/${id}`, data),
 
+  updateMerchantStatus: (id: string, data: { status: string; rejectionReason?: string }) =>
+    api.patch<{ message: string; merchant?: MerchantUser }>(`/merchants/onboarding/${id}`, data),
+
   deleteMerchant: (id: string) =>
     api.delete(`/merchants/onboarding/${id}`),
 
