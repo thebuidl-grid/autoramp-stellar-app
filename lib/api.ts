@@ -24,11 +24,22 @@ api.interceptors.request.use(
     const storeToken = useAuthStore.getState().token;
 
     // Fallback to direct localStorage if store is not yet initialized 
-    // (though in current setup, store is the source of truth)
     const token = storeToken || (typeof window !== "undefined" ? localStorage.getItem("token") : null);
 
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      if (config.headers) {
+        // Use the standard set method for AxiosHeaders in Axios 1.x
+        if (typeof config.headers.set === 'function') {
+          config.headers.set('Authorization', `Bearer ${token}`);
+        } else {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    } else {
+      // Debug log for missing token scenarios (only in dev)
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`[API] No token found in store or localStorage for: ${config.url}`);
+      }
     }
     return config;
   },
@@ -503,29 +514,62 @@ export interface ApproveMerchantResponse {
   message: string;
 }
 
-export interface MerchantKYB {
-  status: "PENDING" | "APPROVED" | "REJECTED";
-  businessName: string;
-  tradingName: string;
-  email: string;
-  websiteUrl: string;
-  natureOfBusiness: string;
-  contactPerson: string;
-  contactPhone?: string;
+export interface Director {
+  id: string;
+  firstName: string;
+  lastName: string;
+  nationality: string;
   bvn?: string;
-  tin?: string;
-  numberOfDirectors?: string;
-  capitalSource?: string;
-  companyDirectors?: string;
   idType?: string;
+  idUrl?: string;
+  proofOfAddress?: string;
+  metadata?: {
+    role?: string;
+    [key: string]: any;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Shareholder {
+  id: string;
+  firstName: string;
+  lastName: string;
+  nationality: string;
+  bvn?: string;
+  idType?: string;
+  idUrl?: string;
+  proofOfAddress?: string;
+  metadata?: any;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MerchantDocumentation {
+  id: string;
+  merchantId: string;
   cacCertificate?: string | null;
   cacEStatus?: string | null;
   memart?: string | null;
   memorandum?: string | null;
   proofOfAddress?: string | null;
+  capitalSource?: string | null;
+  tradingName?: string | null;
+  taxIdentificationNumber?: string | null;
+  tin?: string | null;
   proofOfFunds?: string | null;
   directorProofOfAddress?: string | null;
   idDocument?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContactPerson {
+  name: string;
+  phone: string;
+  bvn: string;
+  tin?: string;
+  taxIdentificationNumber?: string;
 }
 
 export interface MerchantUser {
@@ -541,7 +585,7 @@ export interface MerchantUser {
   state: string;
   country: string;
   postalCode: string;
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  status: "PENDING" | "REJECTED" | "VERIFIED";
   verifiedAt: string | null;
   rejectionReason: string | null;
   metadata: {
@@ -556,7 +600,10 @@ export interface MerchantUser {
     contactName: string | null;
   };
   isApiAccessApproved?: boolean;
-  kyb?: MerchantKYB;
+  documentations?: MerchantDocumentation[];
+  directors?: Director[];
+  shareholders?: Shareholder[];
+  contactPerson?: ContactPerson;
 }
 
 export interface MerchantsResponse {
@@ -649,23 +696,18 @@ export const adminApi = {
   deleteMerchant: (id: string) =>
     api.delete(`/merchants/onboarding/${id}`),
 
-  getMerchantBankAccounts: (id: string) =>
-    api.get<any[]>(`/merchants/bank-accounts/${id}`),
-
-  getMerchantApiKeys: (id: string) =>
-    api.get<ApiKey[]>(`/merchants/api-keys/${id}`),
-
-  getMerchantDirectors: (id: string) =>
-    api.get<any[]>(`/merchants/directors/${id}`),
-
-  getMerchantShareholders: (id: string) =>
-    api.get<any[]>(`/merchants/shareholders/${id}`),
-
-  getMerchantDocumentations: (id: string) =>
-    api.get<any[]>(`/merchants/documentations/${id}`),
-
   approveMerchantAccess: (data: CreateMerchantDto) =>
     api.post<ApproveMerchantResponse>("/admin/approve-access", data),
+
+  // Merchant Sub-resource Management
+  getMerchantDocumentation: (merchantId: string) =>
+    api.get<any>(`/merchants/documentations/${merchantId}`),
+
+  getMerchantDirectors: (merchantId: string) =>
+    api.get<Director[]>(`/merchants/directors/${merchantId}`),
+
+  getMerchantShareholders: (merchantId: string) =>
+    api.get<Shareholder[]>(`/merchants/shareholders/${merchantId}`),
 };
 
 // Redundant public merchant definitions moved to merchant.ts

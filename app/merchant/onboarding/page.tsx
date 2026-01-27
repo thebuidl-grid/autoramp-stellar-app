@@ -11,8 +11,8 @@ export default function MerchantKYBPage() {
     const isAuthenticated = useIsAuthenticated();
     const { _hasHydrated, user } = useAuthStore();
 
-    // Simplified: MerchantProtected layout handles auth check
-    if (!_hasHydrated || !user?.isMerchant) {
+    // Authenticated session check
+    if (!_hasHydrated) {
         return null;
     }
 
