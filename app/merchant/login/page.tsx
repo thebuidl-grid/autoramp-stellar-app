@@ -79,7 +79,7 @@ export default function MerchantLoginPage() {
                 });
 
                 // Redirect to KYB form – they stay logged in now!
-                router.push("/merchant/kyb");
+                router.push("/merchant/onboarding");
                 return;
             }
 
