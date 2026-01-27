@@ -7,7 +7,6 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api";
 import { MerchantKYBDetails } from "@/components/admin/merchants/MerchantKYBDetails";
-import { format } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface PageProps {
@@ -20,87 +19,9 @@ export default function MerchantDetailPage({ params }: PageProps) {
     const { data: merchant, isLoading, refetch } = useQuery({
         queryKey: ["admin-merchant", id],
         queryFn: async () => {
-            const [merchantRes, docsRes, directorsRes, shareholdersRes] = await Promise.all([
-                adminApi.getMerchantById(id),
-                adminApi.getMerchantDocumentation(id).catch(() => ({ data: null })),
-                adminApi.getMerchantDirectors(id).catch(() => ({ data: [] })),
-                adminApi.getMerchantShareholders(id).catch(() => ({ data: [] })),
-            ]);
-
-            const merchantData = merchantRes.data;
-            if (merchantData) {
-                // Get documentation from array or separate fetch
-                const firstDocs = merchantData.documentations?.[0] || docsRes.data;
-
-                // Consolidate documentation data
-                if (firstDocs) {
-                    merchantData.documentations = [firstDocs];
-                }
-
-                // Consolidate directors and shareholders
-                merchantData.directors = merchantData.directors?.length ? merchantData.directors : (directorsRes.data || []);
-                merchantData.shareholders = merchantData.shareholders?.length ? merchantData.shareholders : (shareholdersRes.data || []);
-
-                // Ensure contactPerson exists for the component
-                if (!merchantData.contactPerson) {
-                    const tinValue = firstDocs?.taxIdentificationNumber || firstDocs?.tin || merchantData.metadata?.tin || "N/A";
-                    merchantData.contactPerson = {
-                        name: firstDocs?.contactPerson || merchantData.metadata?.contactPerson || "N/A",
-                        phone: firstDocs?.contactPhone || merchantData.metadata?.contactPhone || "N/A",
-                        bvn: firstDocs?.bvn || merchantData.metadata?.bvn || "N/A",
-                        tin: tinValue,
-                        taxIdentificationNumber: tinValue,
-                    };
-                }
-            }
-
-            return merchantData;
-        },
-    });
-
-    const { data: bankAccounts, isLoading: isLoadingBanks } = useQuery({
-        queryKey: ["merchant-bank-accounts", id],
-        queryFn: async () => {
-            const { data } = await adminApi.getMerchantBankAccounts(id);
+            const { data } = await adminApi.getMerchantById(id);
             return data;
         },
-        enabled: Boolean(id),
-    });
-
-    const { data: merchantApiKeys, isLoading: isLoadingApiKeys } = useQuery({
-        queryKey: ["merchant-api-keys", id],
-        queryFn: async () => {
-            const { data } = await adminApi.getMerchantApiKeys(id);
-            return data;
-        },
-        enabled: Boolean(id),
-    });
-
-    const { data: directors } = useQuery({
-        queryKey: ["merchant-directors", id],
-        queryFn: async () => {
-            const { data } = await adminApi.getMerchantDirectors(id);
-            return data;
-        },
-        enabled: Boolean(id),
-    });
-
-    const { data: shareholders } = useQuery({
-        queryKey: ["merchant-shareholders", id],
-        queryFn: async () => {
-            const { data } = await adminApi.getMerchantShareholders(id);
-            return data;
-        },
-        enabled: Boolean(id),
-    });
-
-    const { data: documentations } = useQuery({
-        queryKey: ["merchant-documentations", id],
-        queryFn: async () => {
-            const { data } = await adminApi.getMerchantDocumentations(id);
-            return data;
-        },
-        enabled: Boolean(id),
     });
 
     if (isLoading) {
@@ -164,84 +85,6 @@ export default function MerchantDetailPage({ params }: PageProps) {
 
                 <TabsContent value="kyb" className="mt-0 outline-none">
                     <MerchantKYBDetails merchant={merchant} onStatusUpdate={() => refetch()} />
-
-                    <div className="mt-8 grid gap-6">
-                        <section>
-                            <h3 className="text-lg font-semibold mb-2">Bank Accounts</h3>
-                            {isLoadingBanks ? (
-                                <p className="text-zinc-500">Loading bank accounts...</p>
-                            ) : !bankAccounts || bankAccounts.length === 0 ? (
-                                <p className="text-zinc-500">No bank accounts found.</p>
-                            ) : (
-                                <div className="space-y-2">
-                                    {bankAccounts.map((b: any) => (
-                                        <div key={b.id || b.accountNumber} className="p-3 bg-white/3 rounded-md">
-                                            <div className="flex justify-between">
-                                                <div>
-                                                    <div className="font-medium">{b.accountName || b.account_number || b.accountNumber}</div>
-                                                    <div className="text-sm text-zinc-400">{b.bankName || b.bank_name || b.bank}</div>
-                                                </div>
-                                                <div className="text-sm text-zinc-400">{b.accountNumber || b.account_number}</div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </section>
-
-                        <section>
-                            <h3 className="text-lg font-semibold mb-2">Directors</h3>
-                            {!directors || directors.length === 0 ? (
-                                <p className="text-zinc-500">No directors listed.</p>
-                            ) : (
-                                <ul className="space-y-2">
-                                    {directors.map((d: any) => (
-                                        <li key={d.id || d.name} className="p-3 bg-white/3 rounded-md">
-                                            <div className="font-medium">{d.name}</div>
-                                            <div className="text-sm text-zinc-400">{d.role || d.position}</div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </section>
-
-                        <section>
-                            <h3 className="text-lg font-semibold mb-2">Shareholders</h3>
-                            {!shareholders || shareholders.length === 0 ? (
-                                <p className="text-zinc-500">No shareholders listed.</p>
-                            ) : (
-                                <ul className="space-y-2">
-                                    {shareholders.map((s: any) => (
-                                        <li key={s.id || s.name} className="p-3 bg-white/3 rounded-md">
-                                            <div className="font-medium">{s.name}</div>
-                                            <div className="text-sm text-zinc-400">{s.shares ? `${s.shares} shares` : s.percentage ? `${s.percentage}%` : ""}</div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </section>
-
-                        <section>
-                            <h3 className="text-lg font-semibold mb-2">Documents</h3>
-                            {!documentations || documentations.length === 0 ? (
-                                <p className="text-zinc-500">No documents uploaded.</p>
-                            ) : (
-                                <ul className="space-y-2">
-                                    {documentations.map((doc: any) => (
-                                        <li key={doc.id || doc.name} className="p-3 bg-white/3 rounded-md flex justify-between items-center">
-                                            <div>
-                                                <div className="font-medium">{doc.name || doc.documentName || doc.type}</div>
-                                                <div className="text-sm text-zinc-400">{doc.status || doc.documentStatus || ""}</div>
-                                            </div>
-                                            {doc.url || doc.fileUrl ? (
-                                                <a href={doc.url || doc.fileUrl} target="_blank" rel="noreferrer" className="text-primary">View</a>
-                                            ) : null}
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </section>
-                    </div>
                 </TabsContent>
 
                 <TabsContent value="transactions" className="mt-0 outline-none">
