@@ -18,7 +18,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { adminApi, MerchantUser, Director, Shareholder } from "@/lib/api";
+import { adminApi, MerchantUser, Director, Shareholder, MerchantBankAccount } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { DocumentViewer } from "./DocumentViewer";
 import { DocumentPreviewDialog } from "./DocumentPreviewDialog";
@@ -47,6 +48,15 @@ export function MerchantKYBDetails({ merchant, onStatusUpdate }: MerchantKYBDeta
     const [isRejectionModalOpen, setIsRejectionModalOpen] = useState(false);
     const [rejectionReason, setRejectionReason] = useState("");
     const { toast } = useToast();
+
+    const { data: bankAccounts, isLoading: isLoadingBanks } = useQuery({
+        queryKey: ["merchant-bank-accounts", merchant.id],
+        queryFn: async () => {
+            const { data } = await adminApi.getMerchantBankAccounts(merchant.id);
+            return data;
+        },
+        enabled: !!merchant.id,
+    });
 
     // Use the first documentation if available (consolidated in parent)
     const docs = merchant.documentations?.[0];
@@ -264,6 +274,9 @@ export function MerchantKYBDetails({ merchant, onStatusUpdate }: MerchantKYBDeta
                         <TabsTrigger value="shareholders" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-6 py-2">
                             <Users className="h-4 w-4 mr-2" /> Shareholders ({merchant.shareholders?.length || 0})
                         </TabsTrigger>
+                        <TabsTrigger value="bank" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-6 py-2">
+                            <Landmark className="h-4 w-4 mr-2" /> Bank Accounts ({bankAccounts?.length || 0})
+                        </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="overview" className="space-y-8 animate-in fade-in slide-in-from-left-4">
@@ -394,6 +407,53 @@ export function MerchantKYBDetails({ merchant, onStatusUpdate }: MerchantKYBDeta
                                     </div>
                                 )}
                             </div>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="bank" className="space-y-8 animate-in fade-in slide-in-from-left-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {isLoadingBanks ? (
+                                Array.from({ length: 1 }).map((_, i) => (
+                                    <Card key={i} className="bg-white/5 border-white/10 overflow-hidden animate-pulse">
+                                        <div className="h-1.5 w-full bg-zinc-800" />
+                                        <div className="p-6 space-y-4">
+                                            <div className="h-6 w-1/2 bg-zinc-800 rounded" />
+                                            <div className="space-y-2">
+                                                <div className="h-4 w-full bg-zinc-800 rounded" />
+                                                <div className="h-4 w-3/4 bg-zinc-800 rounded" />
+                                            </div>
+                                        </div>
+                                    </Card>
+                                ))
+                            ) : (bankAccounts && bankAccounts.length > 0) ? (
+                                bankAccounts.map((account) => (
+                                    <Card key={account.id} className="bg-white/5 border-white/10 overflow-hidden hover:border-primary/30 transition-all shadow-xl backdrop-blur-sm">
+                                        <div className="h-1.5 w-full bg-primary/40" />
+                                        <CardHeader className="pb-4">
+                                            <CardTitle className="text-lg text-white font-bold flex items-center gap-2">
+                                                <Landmark className="h-5 w-5 text-primary" /> Settlement Account
+                                            </CardTitle>
+                                            <CardDescription className="text-zinc-500 text-xs">Primary bank for merchant settlements.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="space-y-6 pt-2">
+                                            <div className="grid grid-cols-1 gap-6">
+                                                <DetailItem label="Account Name" value={account.accountName} />
+                                                <DetailItem label="Bank Name" value={account.bankName} />
+                                                <div className="p-3 bg-white/5 rounded-lg border border-white/5">
+                                                    <DetailItem label="Account Number" value={account.accountNumber} />
+                                                </div>
+                                                <DetailItem label="Bank Code" value={account.bankCode} />
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))
+                            ) : (
+                                <div className="col-span-full h-full min-h-[400px] flex flex-col items-center justify-center p-12 border border-dashed border-white/10 rounded-2xl bg-white/5">
+                                    <Landmark className="h-12 w-12 text-zinc-600 mb-4" />
+                                    <h4 className="text-xl font-bold text-white mb-2">No Bank Accounts Found</h4>
+                                    <p className="text-zinc-500 text-center max-w-sm">This merchant hasn't registered any settlement bank accounts yet.</p>
+                                </div>
+                            )}
                         </div>
                     </TabsContent>
                 </Tabs>

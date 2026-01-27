@@ -545,6 +545,18 @@ export interface Shareholder {
   updatedAt?: string;
 }
 
+export interface MerchantBankAccount {
+  id: string;
+  merchantId: string;
+  bankCode: string;
+  accountNumber: string;
+  accountName: string;
+  bankName: string;
+  metadata?: any;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface MerchantDocumentation {
   id: string;
   merchantId: string;
@@ -603,6 +615,7 @@ export interface MerchantUser {
   documentations?: MerchantDocumentation[];
   directors?: Director[];
   shareholders?: Shareholder[];
+  bankAccounts?: MerchantBankAccount[];
   contactPerson?: ContactPerson;
 }
 
@@ -711,6 +724,9 @@ export const adminApi = {
 
   getMerchantShareholders: (merchantId: string) =>
     api.get<Shareholder[]>(`/merchants/shareholders/${merchantId}`),
+
+  getMerchantBankAccounts: (merchantId: string) =>
+    api.get<MerchantBankAccount[]>(`/merchants/bank-accounts/${merchantId}`),
 };
 
 // Redundant public merchant definitions moved to merchant.ts
