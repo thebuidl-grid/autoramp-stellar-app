@@ -24,6 +24,15 @@ import { DocumentViewer } from "./DocumentViewer";
 import { DocumentPreviewDialog } from "./DocumentPreviewDialog";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 interface MerchantKYBDetailsProps {
     merchant: MerchantUser;
@@ -35,6 +44,8 @@ export function MerchantKYBDetails({ merchant, onStatusUpdate }: MerchantKYBDeta
     const [previewDoc, setPreviewDoc] = useState<{ url: string; label: string } | null>(null);
     const [selectedDirectorId, setSelectedDirectorId] = useState<string | null>(null);
     const [selectedShareholderId, setSelectedShareholderId] = useState<string | null>(null);
+    const [isRejectionModalOpen, setIsRejectionModalOpen] = useState(false);
+    const [rejectionReason, setRejectionReason] = useState("");
     const { toast } = useToast();
 
     // Use the first documentation if available (consolidated in parent)
@@ -53,15 +64,17 @@ export function MerchantKYBDetails({ merchant, onStatusUpdate }: MerchantKYBDeta
         );
     }
 
-    const handleUpdateStatus = async (status: "APPROVED" | "REJECTED") => {
+    const handleUpdateStatus = async (status: "VERIFIED" | "REJECTED" | "PENDING", reason?: string) => {
         setIsUpdating(true);
         try {
-            await adminApi.updateMerchant(merchant.id, { status });
+            const { message } = (await adminApi.updateMerchantStatus(merchant.id, { status, rejectionReason: reason })).data;
             toast({
                 title: "Status Updated",
-                description: `Merchant status has been ${status.toLowerCase()} successfully.`,
+                description: message || `Merchant status has been ${status.toLowerCase()} successfully.`,
                 variant: "success",
             });
+            setIsRejectionModalOpen(false);
+            setRejectionReason("");
             onStatusUpdate?.();
         } catch (error: any) {
             toast({
@@ -180,10 +193,10 @@ export function MerchantKYBDetails({ merchant, onStatusUpdate }: MerchantKYBDeta
                     <div className="flex items-center gap-5">
                         <div className={cn(
                             "p-4 rounded-xl shadow-lg",
-                            merchant.status === "APPROVED" ? "bg-green-500/20 text-green-500 shadow-green-500/10" :
+                            merchant.status === "VERIFIED" ? "bg-green-500/20 text-green-500 shadow-green-500/10" :
                                 merchant.status === "PENDING" ? "bg-amber-500/20 text-amber-500 shadow-amber-500/10" : "bg-red-500/20 text-red-500 shadow-red-500/10"
                         )}>
-                            {merchant.status === "APPROVED" ? <CheckCircle2 className="h-8 w-8" /> :
+                            {merchant.status === "VERIFIED" ? <CheckCircle2 className="h-8 w-8" /> :
                                 merchant.status === "PENDING" ? <Clock className="h-8 w-8" /> : <XCircle className="h-8 w-8" />}
                         </div>
                         <div>
@@ -191,7 +204,7 @@ export function MerchantKYBDetails({ merchant, onStatusUpdate }: MerchantKYBDeta
                             <p className="text-zinc-500 flex items-center gap-2 text-sm mt-1">
                                 Application Status: <span className={cn(
                                     "px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border",
-                                    merchant.status === "APPROVED" ? "bg-green-500/10 text-green-500 border-green-500/20" :
+                                    merchant.status === "VERIFIED" ? "bg-green-500/10 text-green-500 border-green-500/20" :
                                         merchant.status === "PENDING" ? "bg-amber-500/10 text-amber-500 border-amber-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
                                 )}>{merchant.status}</span>
                             </p>
@@ -203,18 +216,18 @@ export function MerchantKYBDetails({ merchant, onStatusUpdate }: MerchantKYBDeta
                             <Button
                                 variant="outline"
                                 className="h-11 border-red-500/30 text-red-500 hover:bg-red-500 hover:text-white transition-all"
-                                onClick={() => handleUpdateStatus("REJECTED")}
+                                onClick={() => setIsRejectionModalOpen(true)}
                                 disabled={isUpdating}
                             >
                                 <XCircle className="w-4 h-4 mr-2" /> Reject
                             </Button>
                             <Button
                                 className="h-11 bg-green-600 text-white hover:bg-green-500 hover:scale-[1.02] active:scale-[0.98] transition-all px-8 font-bold"
-                                onClick={() => handleUpdateStatus("APPROVED")}
+                                onClick={() => handleUpdateStatus("VERIFIED")}
                                 disabled={isUpdating}
                             >
                                 {isUpdating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-                                Approve Merchant Access
+                                Verify & Approve Access
                             </Button>
                         </div>
                     )}
@@ -393,6 +406,46 @@ export function MerchantKYBDetails({ merchant, onStatusUpdate }: MerchantKYBDeta
                 open={!!previewDoc}
                 onOpenChange={(open) => !open && setPreviewDoc(null)}
             />
+
+            {/* Rejection Reason Modal */}
+            <Dialog open={isRejectionModalOpen} onOpenChange={setIsRejectionModalOpen}>
+                <DialogContent className="bg-zinc-900 border-white/10 text-white max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                            <XCircle className="h-5 w-5 text-red-500" />
+                            Reject Application
+                        </DialogTitle>
+                        <DialogDescription className="text-zinc-400">
+                            Please provide a reason for rejecting this merchant application. This will be shared with the merchant.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <Textarea
+                            placeholder="e.g. Invalid business documentation, expired certificate, etc."
+                            className="bg-zinc-800 border-white/10 min-h-[120px] focus:border-primary/50 text-white"
+                            value={rejectionReason}
+                            onChange={(e) => setRejectionReason(e.target.value)}
+                        />
+                    </div>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button
+                            variant="ghost"
+                            onClick={() => setIsRejectionModalOpen(false)}
+                            className="text-zinc-400 hover:text-white"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            className="bg-red-600 hover:bg-red-500 text-white font-bold"
+                            onClick={() => handleUpdateStatus("REJECTED", rejectionReason)}
+                            disabled={isUpdating || !rejectionReason.trim()}
+                        >
+                            {isUpdating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                            Confirm Rejection
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

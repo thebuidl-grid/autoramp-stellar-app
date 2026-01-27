@@ -585,7 +585,7 @@ export interface MerchantUser {
   state: string;
   country: string;
   postalCode: string;
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  status: "PENDING" | "REJECTED" | "VERIFIED";
   verifiedAt: string | null;
   rejectionReason: string | null;
   metadata: {
@@ -673,6 +673,9 @@ export const adminApi = {
 
   deleteMerchant: (id: string) =>
     api.delete(`/merchants/onboarding/${id}`),
+
+  updateMerchantStatus: (id: string, data: { status: "VERIFIED" | "REJECTED" | "PENDING"; rejectionReason?: string }) =>
+    api.post<{ merchant: MerchantUser; message: string }>(`/admin/merchants/${id}/status`, data),
 
   approveMerchantAccess: (data: CreateMerchantDto) =>
     api.post<ApproveMerchantResponse>("/admin/approve-access", data),
