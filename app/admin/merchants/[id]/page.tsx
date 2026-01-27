@@ -19,8 +19,41 @@ export default function MerchantDetailPage({ params }: PageProps) {
     const { data: merchant, isLoading, refetch } = useQuery({
         queryKey: ["admin-merchant", id],
         queryFn: async () => {
-            const { data } = await adminApi.getMerchantById(id);
-            return data;
+            const [merchantRes, docsRes, directorsRes, shareholdersRes] = await Promise.all([
+                adminApi.getMerchantById(id),
+                adminApi.getMerchantDocumentation(id).catch(() => ({ data: null })),
+                adminApi.getMerchantDirectors(id).catch(() => ({ data: [] })),
+                adminApi.getMerchantShareholders(id).catch(() => ({ data: [] })),
+            ]);
+
+            const merchantData = merchantRes.data;
+            if (merchantData) {
+                // Get documentation from array or separate fetch
+                const firstDocs = merchantData.documentations?.[0] || docsRes.data;
+
+                // Consolidate documentation data
+                if (firstDocs) {
+                    merchantData.documentations = [firstDocs];
+                }
+
+                // Consolidate directors and shareholders
+                merchantData.directors = merchantData.directors?.length ? merchantData.directors : (directorsRes.data || []);
+                merchantData.shareholders = merchantData.shareholders?.length ? merchantData.shareholders : (shareholdersRes.data || []);
+
+                // Ensure contactPerson exists for the component
+                if (!merchantData.contactPerson) {
+                    const tinValue = firstDocs?.taxIdentificationNumber || firstDocs?.tin || merchantData.metadata?.tin || "N/A";
+                    merchantData.contactPerson = {
+                        name: firstDocs?.contactPerson || merchantData.metadata?.contactPerson || "N/A",
+                        phone: firstDocs?.contactPhone || merchantData.metadata?.contactPhone || "N/A",
+                        bvn: firstDocs?.bvn || merchantData.metadata?.bvn || "N/A",
+                        tin: tinValue,
+                        taxIdentificationNumber: tinValue,
+                    };
+                }
+            }
+
+            return merchantData;
         },
     });
 
