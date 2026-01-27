@@ -17,7 +17,7 @@ import { base } from 'wagmi/chains';
 // Get project ID from environment
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'default-project-id';
 
-const connectors = connectorsForWallets(
+const connectors = typeof window !== 'undefined' ? connectorsForWallets(
   [
     {
       groupName: 'Recommended',
@@ -32,7 +32,7 @@ const connectors = connectorsForWallets(
     appName: 'AutoRamp',
     projectId,
   }
-);
+) : [];
 
 /**
  * Wagmi config using createConfig directly to avoid MetaMask SDK

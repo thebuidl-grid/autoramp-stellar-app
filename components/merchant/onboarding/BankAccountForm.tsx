@@ -103,7 +103,7 @@ export default function BankAccountForm({ onNext, onBack }: BankAccountFormProps
             });
 
             // Update store state to reflect onboarding completion
-            updateUser({ isOnboarded: true });
+            //updateUser({ isOnboarded: true });
 
             toast({
                 title: "Success",
