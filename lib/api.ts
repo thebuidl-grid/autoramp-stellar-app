@@ -580,6 +580,28 @@ export const adminApi = {
   getUserById: (id: string) =>
     api.get<AdminUser>(`/admin/users/${id}`),
 
+  createUser: (data: {
+    email: string;
+    phone_number?: string;
+    wallet_address?: string;
+    is_merchant?: boolean;
+    is_api_access_approved?: boolean;
+    contact_name?: string;
+  }) => api.post<AdminUser>(`/admin/users`, data),
+
+  updateUserProfile: (userId: string, data: Partial<{
+    email: string;
+    phone_number?: string;
+    wallet_address?: string;
+    contact_name?: string;
+  }>) => api.patch<AdminUser>(`/admin/user/${userId}/profile`, data),
+
+  suspendUser: (userId: string, data: { suspended: boolean }) =>
+    api.patch<{ message: string }>(`/admin/user/${userId}/suspend`, data),
+
+  updateUserFlags: (userId: string, data: { is_merchant?: boolean; is_api_access_approved?: boolean }) =>
+    api.patch<AdminUser>(`/admin/user/${userId}/flags`, data),
+
   // API Key Management
   getAllApiKeys: (page: number = 1, limit: number = 10) =>
     api.get<ApiKeysResponse>(`/admin/api-keys?page=${page}&limit=${limit}`),
@@ -626,6 +648,21 @@ export const adminApi = {
 
   deleteMerchant: (id: string) =>
     api.delete(`/merchants/onboarding/${id}`),
+
+  getMerchantBankAccounts: (id: string) =>
+    api.get<any[]>(`/merchants/bank-accounts/${id}`),
+
+  getMerchantApiKeys: (id: string) =>
+    api.get<ApiKey[]>(`/merchants/api-keys/${id}`),
+
+  getMerchantDirectors: (id: string) =>
+    api.get<any[]>(`/merchants/directors/${id}`),
+
+  getMerchantShareholders: (id: string) =>
+    api.get<any[]>(`/merchants/shareholders/${id}`),
+
+  getMerchantDocumentations: (id: string) =>
+    api.get<any[]>(`/merchants/documentations/${id}`),
 
   approveMerchantAccess: (data: CreateMerchantDto) =>
     api.post<ApproveMerchantResponse>("/admin/approve-access", data),

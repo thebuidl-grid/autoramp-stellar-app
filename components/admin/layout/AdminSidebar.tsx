@@ -11,9 +11,9 @@ import { useAuthStore } from "@/lib/store";
 const sidebarLinks = [
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
     { name: "Users", href: "/admin/users", icon: Users },
-    { name: "Merchants", href: "/admin/merchants", icon: Building2 },
-    { name: "API Keys", href: "/admin/api-keys", icon: Key },
     { name: "Transactions", href: "/admin/transactions", icon: History },
+    { name: "Merchants", href: "/admin/merchants", icon: Building2 },
+    // { name: "API Keys", href: "/admin/api-keys", icon: Key },
 ];
 
 export function AdminSidebar() {
