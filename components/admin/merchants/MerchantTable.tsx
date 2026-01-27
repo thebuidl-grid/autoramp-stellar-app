@@ -31,7 +31,7 @@ interface MerchantTableProps {
 export function MerchantTable({ merchants, isLoading }: MerchantTableProps) {
     const getStatusBadge = (status: string) => {
         switch (status) {
-            case "APPROVED":
+            case "VERIFIED":
                 return (
                     <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-500 border border-green-500/20">
                         <CheckCircle2 className="h-3 w-3" /> Approved

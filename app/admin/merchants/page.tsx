@@ -63,19 +63,12 @@ export default function AdminMerchantsPage() {
             bg: "bg-amber-500/10"
         },
         {
-            title: "Approved",
-            value: merchants.filter(m => m.status === "APPROVED").length,
+            title: "Verified",
+            value: merchants.filter(m => m.status === "VERIFIED").length,
             icon: CheckCircle2,
             color: "text-green-500",
             bg: "bg-green-500/10"
         },
-        {
-            title: "Growth",
-            value: "+12%",
-            icon: TrendingUp,
-            color: "text-primary",
-            bg: "bg-primary/10"
-        }
     ];
 
 
