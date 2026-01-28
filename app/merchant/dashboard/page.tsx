@@ -92,12 +92,12 @@ export default function MerchantDashboardPage() {
                         </CardHeader>
                     </Card>
                 </Link>
-                <Link href="/merchant/dashboard/analytics">
+                <Link href="/merchant/dashboard/transactions">
                     <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
                         <CardHeader className="flex flex-row items-center gap-4">
                             <BarChart3 className="h-8 w-8 text-blue-500" />
                             <div>
-                                <CardTitle>Analytics</CardTitle>
+                                <CardTitle>Transactions</CardTitle>
                                 <p className="text-sm text-muted-foreground">View usage reports</p>
                             </div>
                         </CardHeader>
