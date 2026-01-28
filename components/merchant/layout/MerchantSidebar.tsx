@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 const sidebarLinks = [
     { name: "Dashboard", href: "/merchant/dashboard", icon: LayoutDashboard },
     { name: "API Keys", href: "/merchant/dashboard/api-keys", icon: Key },
-    { name: "Analytics", href: "/merchant/dashboard/analytics", icon: BarChart3 },
+    { name: "Transactions", href: "/merchant/dashboard/transactions", icon: BarChart3 },
     { name: "Settings", href: "/merchant/dashboard/settings", icon: Settings },
 ];
 
