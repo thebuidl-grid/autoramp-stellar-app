@@ -13,17 +13,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 interface MerchantApiKeysProps {
     merchantId: string;
-    userId: string;
 }
 
-export function MerchantApiKeys({ merchantId, userId }: MerchantApiKeysProps) {
+export function MerchantApiKeys({ merchantId }: MerchantApiKeysProps) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
 
     const { data: apiKeys, isLoading } = useQuery({
-        queryKey: ["merchant-api-keys", userId],
+        queryKey: ["merchant-api-keys", merchantId],
         queryFn: async () => {
-            const { data } = await adminApi.getUserApiKeys(userId);
+            const { data } = await adminApi.getMerchantApiKeys(merchantId);
             // Handle potentially wrapped response
             if (Array.isArray(data)) return data;
             // Check for common wrapper patterns
@@ -35,7 +34,7 @@ export function MerchantApiKeys({ merchantId, userId }: MerchantApiKeysProps) {
     const revokeMutation = useMutation({
         mutationFn: (id: string) => adminApi.revokeApiKey(id),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["merchant-api-keys", userId] });
+            queryClient.invalidateQueries({ queryKey: ["merchant-api-keys", merchantId] });
             toast({
                 title: "Key Revoked",
                 description: "The API key has been successfully revoked.",

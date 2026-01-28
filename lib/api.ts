@@ -205,7 +205,7 @@ export const userApi = {
     api.get<User>("/user/profile"),
 
   // User API Keys
-  getUserApiKeys: () => api.get<ApiKey[]>("/user/api-keys"),
+  getMerchantApiKeys: () => api.get<ApiKey[]>("/user/api-keys"),
 
   createApiKey: (data: CreateApiKeyDto) =>
     api.post<CreateApiKeyResponse>("/merchants/api-keys", data),
@@ -401,6 +401,7 @@ export interface Transaction {
   accountNumber?: string;
   accountName?: string;
   bankName?: string;
+  tokenType?: string;
 }
 
 export interface SwapTransaction {
@@ -431,6 +432,16 @@ export interface TransactionsResponse {
   limit: number;
   totalPages: number;
 }
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export type MerchantTransactionsResponse = PaginatedResponse<Transaction>;
 
 export interface ResolveAccountResponse {
   status?: string;
@@ -667,8 +678,8 @@ export const adminApi = {
     api.get<ApiKeysResponse>(`/admin/api-keys?page=${page}&limit=${limit}`),
 
 
-  getUserApiKeys: (userId: string) =>
-    api.get<ApiKey[]>(`/admin/users/${userId}/api-keys`),
+  getMerchantApiKeys: (merchantId: string) =>
+    api.get<ApiKey[]>(`/merchants/api-keys/?merchantId=${merchantId}`),
 
   createApiKeyForUser: (userId: string, data: CreateApiKeyDto) =>
     api.post<CreateApiKeyResponse>(`/admin/users/${userId}/api-keys`, data),
@@ -730,13 +741,13 @@ export const adminApi = {
 
   // Merchant Transactions
   getMerchantTransactionsOnramp: (merchantId: string, page: number = 1, limit: number = 10) =>
-    api.get<TransactionsResponse>(`/merchants/${merchantId}/transactions/onramp?page=${page}&limit=${limit}`),
+    api.get<PaginatedResponse<Transaction>>(`/merchants/${merchantId}/transactions/onramp?page=${page}&limit=${limit}`),
 
   getMerchantTransactionsOfframp: (merchantId: string, page: number = 1, limit: number = 10) =>
-    api.get<TransactionsResponse>(`/merchants/${merchantId}/transactions/offramp?page=${page}&limit=${limit}`),
+    api.get<PaginatedResponse<Transaction>>(`/merchants/${merchantId}/transactions/offramp?page=${page}&limit=${limit}`),
 
   getMerchantTransactionsSwap: (merchantId: string, page: number = 1, limit: number = 10) =>
-    api.get<TransactionsResponse>(`/merchants/${merchantId}/transactions/swap?page=${page}&limit=${limit}`),
+    api.get<PaginatedResponse<SwapTransaction>>(`/merchants/${merchantId}/transactions/swap?page=${page}&limit=${limit}`),
 
   getMerchantTransactionsSummary: (merchantId: string) =>
     api.get<any>(`/merchants/${merchantId}/transactions/summary`),
