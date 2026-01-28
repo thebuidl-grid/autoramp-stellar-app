@@ -2,8 +2,11 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { KYBForm } from "@/components/merchant/kyb-form";
 import { useAuthStore, useIsAuthenticated } from "@/lib/store";
+import { AlertCircle, ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import Image from "next/image";
 
 export default function MerchantKYBPage() {
@@ -13,7 +16,48 @@ export default function MerchantKYBPage() {
 
     // Authenticated session check
     if (!_hasHydrated) {
-        return null;
+        return (
+            <div className="min-h-screen bg-black flex items-center justify-center">
+                <div className="h-12 w-12 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) {
+        return (
+            <div className="min-h-screen bg-black text-white selection:bg-primary/30 flex items-center justify-center p-4">
+                {/* Background Decor */}
+                <div className="fixed inset-0 overflow-hidden pointer-events-none">
+                    <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px]" />
+                    <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-secondary/10 rounded-full blur-[120px]" />
+                </div>
+
+                <div className="relative z-10 max-w-md w-full bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-8 md:p-12 text-center space-y-8">
+                    <div className="flex flex-col items-center space-y-4">
+                        <div className="p-4 bg-red-500/10 rounded-2xl">
+                            <AlertCircle className="h-12 w-12 text-red-500" />
+                        </div>
+                        <h2 className="text-3xl font-black tracking-tighter">Access Denied</h2>
+                        <p className="text-zinc-400">
+                            You must be logged in to access the merchant onboarding portal. Please sign in to continue with your application.
+                        </p>
+                    </div>
+
+                    <div className="space-y-4">
+                        <Button asChild className="w-full py-6 rounded-2xl font-bold text-lg">
+                            <Link href="/">
+                                Return to Homepage
+                            </Link>
+                        </Button>
+                        <Button asChild variant="ghost" className="w-full text-zinc-400 hover:text-white">
+                            <Link href="/auth/signup" className="flex items-center gap-2">
+                                <ArrowLeft className="h-4 w-4" /> Go to Login
+                            </Link>
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        );
     }
 
     return (
