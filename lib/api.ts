@@ -1,4 +1,5 @@
 import axios, { AxiosError } from "axios";
+import { useAuthStore } from "./store";
 
 /**
  * API Configuration
@@ -19,10 +20,26 @@ export const api = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    // Get token from global store (synced with localStorage)
+    const storeToken = useAuthStore.getState().token;
+
+    // Fallback to direct localStorage if store is not yet initialized 
+    const token = storeToken || (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      if (config.headers) {
+        // Use the standard set method for AxiosHeaders in Axios 1.x
+        if (typeof config.headers.set === 'function') {
+          config.headers.set('Authorization', `Bearer ${token}`);
+        } else {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    } else {
+      // Debug log for missing token scenarios (only in dev)
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`[API] No token found in store or localStorage for: ${config.url}`);
+      }
     }
     return config;
   },
@@ -33,17 +50,8 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      // Clear token and auth storage
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("token");
-        localStorage.removeItem("auth-storage");
-        // Only redirect if not already on auth page
-        if (!window.location.pathname.startsWith("/auth") && window.location.pathname !== "/") {
-          window.location.href = "/";
-        }
-      }
-    }
+    // Rely on AuthProvider and store for global logout handling
+    // Direct localStorage manipulation here causes synchronization issues
     return Promise.reject(error);
   },
 );
@@ -92,12 +100,22 @@ export interface SignInDto {
   password: string;
 }
 
+// ============== User API ==============
+
+export interface User {
+  id: string;
+  email: string;
+  phoneNumber?: string;
+  walletAddress?: string;
+  role: string;
+  isMerchant?: boolean;
+  isApiAccessApproved?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuthResponse {
-  user: {
-    id: string;
-    email: string;
-    role: string;
-  };
+  user: User;
   accessToken: string;
 }
 
@@ -118,16 +136,68 @@ export const authApi = {
     api.post<{ success: boolean; message: string }>("/auth/otp/verify", data),
 };
 
-// ============== User API ==============
+// ============== Saved Accounts & Wallets Types ==============
 
-export interface User {
+export interface SavedAccountNumber {
   id: string;
-  email: string;
-  phoneNumber?: string;
-  walletAddress?: string;
-  role: string;
+  userId: string;
+  accountNumber: string;
+  bankCode: string;
+  bankName: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CreateSavedAccountDto {
+  accountNumber: string;
+  bankCode: string;
+  bankName: string;
+}
+
+export interface UpdateSavedAccountDto {
+  bankName?: string;
+}
+
+export interface UserWallet {
+  id: string;
+  userId: string;
+  walletAddress: string;
+  network: string;
+  name?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateUserWalletDto {
+  walletAddress: string;
+  network: string;
+  name?: string;
+}
+
+export interface UpdateUserWalletDto {
+  name?: string;
+}
+
+// OTP verification for adding saved accounts
+export interface InitiateAddAccountDto {
+  accountNumber: string;
+  bankCode: string;
+}
+
+export interface InitiateAddAccountResponse {
+  success: boolean;
+  message: string;
+  accountName: string;
+  accountNumber: string;
+  bankCode: string;
+  bankName: string;
+}
+
+export interface VerifyAndAddAccountDto {
+  accountNumber: string;
+  bankCode: string;
+  bankName: string;
+  otpCode: string;
 }
 
 export const userApi = {
@@ -138,7 +208,7 @@ export const userApi = {
   getUserApiKeys: () => api.get<ApiKey[]>("/user/api-keys"),
 
   createApiKey: (data: CreateApiKeyDto) =>
-    api.post<CreateApiKeyResponse>("/user/api-keys", data),
+    api.post<CreateApiKeyResponse>("/merchants/api-keys", data),
 
   getUserApiKeyStats: () =>
     api.get<UserApiKeyStatsResponse>("/user/api-keys/stats"),
@@ -147,6 +217,41 @@ export const userApi = {
     api.get<UserApiKeyAnalyticsDataPoint[]>(
       `/user/api-keys/analytics?period=${period}`,
     ),
+
+  // Saved Bank Accounts with OTP verification
+  initiateAddAccount: (data: InitiateAddAccountDto) =>
+    api.post<InitiateAddAccountResponse>("/user/saved-accounts/initiate", data),
+
+  verifyAndAddAccount: (data: VerifyAndAddAccountDto) =>
+    api.post<SavedAccountNumber>("/user/saved-accounts/verify-and-add", data),
+
+  getSavedAccounts: () =>
+    api.get<SavedAccountNumber[]>("/user/saved-accounts"),
+
+  getSavedAccountById: (id: string) =>
+    api.get<SavedAccountNumber>(`/user/saved-accounts/${id}`),
+
+  updateSavedAccount: (id: string, data: UpdateSavedAccountDto) =>
+    api.patch<SavedAccountNumber>(`/user/saved-accounts/${id}`, data),
+
+  deleteSavedAccount: (id: string) =>
+    api.delete(`/user/saved-accounts/${id}`),
+
+  // User Wallets
+  createUserWallet: (data: CreateUserWalletDto) =>
+    api.post<UserWallet>("/user/wallets", data),
+
+  getUserWallets: () =>
+    api.get<UserWallet[]>("/user/wallets"),
+
+  getUserWalletById: (id: string) =>
+    api.get<UserWallet>(`/user/wallets/${id}`),
+
+  updateUserWallet: (id: string, data: UpdateUserWalletDto) =>
+    api.patch<UserWallet>(`/user/wallets/${id}`, data),
+
+  deleteUserWallet: (id: string) =>
+    api.delete(`/user/wallets/${id}`),
 };
 
 // ============== API Keys API ==============
@@ -389,12 +494,18 @@ export interface AdminTransactionsResponse {
 
 
 export interface CreateMerchantDto {
-  email: string;
+  userId: string;
   name: string;
-  businessName: string;
+  natureOfBusiness?: string;
+  description?: string;
   websiteUrl: string;
-  trafficEstimate?: string;
-  requestLimit?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+  metadata?: any;
 }
 
 // Response from backend ApproveMerchant
@@ -402,6 +513,122 @@ export interface ApproveMerchantResponse {
   user: User;
   message: string;
 }
+
+export interface Director {
+  id: string;
+  firstName: string;
+  lastName: string;
+  nationality: string;
+  bvn?: string;
+  idType?: string;
+  idUrl?: string;
+  proofOfAddress?: string;
+  metadata?: {
+    role?: string;
+    [key: string]: any;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Shareholder {
+  id: string;
+  firstName: string;
+  lastName: string;
+  nationality: string;
+  bvn?: string;
+  idType?: string;
+  idUrl?: string;
+  proofOfAddress?: string;
+  metadata?: any;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MerchantBankAccount {
+  id: string;
+  merchantId: string;
+  bankCode: string;
+  accountNumber: string;
+  accountName: string;
+  bankName: string;
+  metadata?: any;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MerchantDocumentation {
+  id: string;
+  merchantId: string;
+  cacCertificate?: string | null;
+  cacEStatus?: string | null;
+  memart?: string | null;
+  memorandum?: string | null;
+  proofOfAddress?: string | null;
+  capitalSource?: string | null;
+  tradingName?: string | null;
+  taxIdentificationNumber?: string | null;
+  tin?: string | null;
+  proofOfFunds?: string | null;
+  directorProofOfAddress?: string | null;
+  idDocument?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContactPerson {
+  name: string;
+  phone: string;
+  bvn: string;
+  tin?: string;
+  taxIdentificationNumber?: string;
+}
+
+export interface MerchantUser {
+  id: string;
+  userId: string;
+  name: string;
+  natureOfBusiness: string;
+  description: string;
+  websiteUrl: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  country: string;
+  postalCode: string;
+  status: "PENDING" | "REJECTED" | "VERIFIED";
+  verifiedAt: string | null;
+  rejectionReason: string | null;
+  metadata: {
+    industry?: string;
+    contactPerson?: string;
+    [key: string]: any;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    email: string;
+    contactName: string | null;
+  };
+  isApiAccessApproved?: boolean;
+  documentations?: MerchantDocumentation[];
+  directors?: Director[];
+  shareholders?: Shareholder[];
+  bankAccounts?: MerchantBankAccount[];
+  contactPerson?: ContactPerson;
+}
+
+export interface MerchantsResponse {
+  merchants: MerchantUser[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 
 export const adminApi = {
   getMe: () =>
@@ -413,8 +640,27 @@ export const adminApi = {
   getUserById: (id: string) =>
     api.get<AdminUser>(`/admin/users/${id}`),
 
-  approveMerchantAccess: (data: CreateMerchantDto) =>
-    api.post<ApproveMerchantResponse>("/admin/approve-access", data),
+  createUser: (data: {
+    email: string;
+    phone_number?: string;
+    wallet_address?: string;
+    is_merchant?: boolean;
+    is_api_access_approved?: boolean;
+    contact_name?: string;
+  }) => api.post<AdminUser>(`/admin/users`, data),
+
+  updateUserProfile: (userId: string, data: Partial<{
+    email: string;
+    phone_number?: string;
+    wallet_address?: string;
+    contact_name?: string;
+  }>) => api.patch<AdminUser>(`/admin/user/${userId}/profile`, data),
+
+  suspendUser: (userId: string, data: { suspended: boolean }) =>
+    api.patch<{ message: string }>(`/admin/user/${userId}/suspend`, data),
+
+  updateUserFlags: (userId: string, data: { is_merchant?: boolean; is_api_access_approved?: boolean }) =>
+    api.patch<AdminUser>(`/admin/user/${userId}/flags`, data),
 
   // API Key Management
   getAllApiKeys: (page: number = 1, limit: number = 10) =>
@@ -449,7 +695,54 @@ export const adminApi = {
     api.get<TransactionAnalyticsDataPoint[]>(
       `/admin/transactions/analytics?period=${period}`,
     ),
+
+  // Merchant Management
+  getMerchants: () =>
+    api.get<MerchantUser[]>("/merchants/onboarding"),
+
+  getMerchantById: (id: string) =>
+    api.get<MerchantUser>(`/merchants/onboarding/${id}`),
+
+  updateMerchant: (id: string, data: any) =>
+    api.patch<MerchantUser>(`/merchants/onboarding/${id}`, data),
+
+  updateMerchantStatus: (id: string, data: { status: string; rejectionReason?: string }) =>
+    api.patch<{ message: string; merchant?: MerchantUser }>(`/merchants/onboarding/${id}`, data),
+
+  deleteMerchant: (id: string) =>
+    api.delete(`/merchants/onboarding/${id}`),
+
+  approveMerchantAccess: (data: CreateMerchantDto) =>
+    api.post<ApproveMerchantResponse>("/admin/approve-access", data),
+
+  // Merchant Sub-resource Management
+  getMerchantDocumentation: (merchantId: string) =>
+    api.get<any>(`/merchants/documentations/${merchantId}`),
+
+  getMerchantDirectors: (merchantId: string) =>
+    api.get<Director[]>(`/merchants/directors/${merchantId}`),
+
+  getMerchantShareholders: (merchantId: string) =>
+    api.get<Shareholder[]>(`/merchants/shareholders/${merchantId}`),
+
+  getMerchantBankAccounts: (merchantId: string) =>
+    api.get<MerchantBankAccount[]>(`/merchants/bank-accounts/${merchantId}`),
+
+  // Merchant Transactions
+  getMerchantTransactionsOnramp: (merchantId: string, page: number = 1, limit: number = 10) =>
+    api.get<TransactionsResponse>(`/merchants/${merchantId}/transactions/onramp?page=${page}&limit=${limit}`),
+
+  getMerchantTransactionsOfframp: (merchantId: string, page: number = 1, limit: number = 10) =>
+    api.get<TransactionsResponse>(`/merchants/${merchantId}/transactions/offramp?page=${page}&limit=${limit}`),
+
+  getMerchantTransactionsSwap: (merchantId: string, page: number = 1, limit: number = 10) =>
+    api.get<TransactionsResponse>(`/merchants/${merchantId}/transactions/swap?page=${page}&limit=${limit}`),
+
+  getMerchantTransactionsSummary: (merchantId: string) =>
+    api.get<any>(`/merchants/${merchantId}/transactions/summary`),
 };
+
+// Redundant public merchant definitions moved to merchant.ts
 
 export interface AdminTransactionSummaryResponse {
   onRamps: {
@@ -570,3 +863,5 @@ export const swapApi = {
       `/swap/estimate-ngn?cngnAmount=${cngnAmount}`,
     ),
 };
+
+// Redundant merchant definitions moved to merchant.ts
