@@ -53,5 +53,10 @@
     "eslint-config-next": "16.0.10",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "resolutions": {
+    "@floating-ui/dom": "1.7.5",
+    "@floating-ui/react-dom": "2.1.7",
+    "@floating-ui/utils": "0.2.10"
   }
 }
