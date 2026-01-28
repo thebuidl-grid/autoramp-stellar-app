@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, Transaction, SwapTransaction, PaginatedResponse } from "./api";
 
 /**
  * Merchant API Client
@@ -118,7 +118,7 @@ export const merchantApi = {
 
     // Status & Profile
     getMerchantStatus: () =>
-        api.get<{ onboardingStatus: "VERIFIED" | "PENDING" | "REJECTED" | null; hasMerchantRecord: boolean; merchantId: string | null }>("/merchants/status"),
+        api.get<{ onboardingStaus: "VERIFIED" | "PENDING" | "REJECTED" | null; hasMerchantRecord: boolean; merchantId: string | null }>("/merchants/status"),
 
     getIsOnboarded: () =>
         api.get<{ isOnboarded: boolean }>("/merchants/onboarded"),
@@ -145,6 +145,15 @@ export const merchantApi = {
 
     getTransactionsAnalytics: (merchantId: string, period: string = "daily") =>
         api.get<any>(`/merchants/${merchantId}/transactions/analytics?period=${period}`),
+
+    getTransactionsOnramp: (merchantId: string, page: number = 1, limit: number = 10) =>
+        api.get<PaginatedResponse<Transaction>>(`/merchants/${merchantId}/transactions/onramp?page=${page}&limit=${limit}`),
+
+    getTransactionsOfframp: (merchantId: string, page: number = 1, limit: number = 10) =>
+        api.get<PaginatedResponse<Transaction>>(`/merchants/${merchantId}/transactions/offramp?page=${page}&limit=${limit}`),
+
+    getTransactionsSwap: (merchantId: string, page: number = 1, limit: number = 10) =>
+        api.get<PaginatedResponse<SwapTransaction>>(`/merchants/${merchantId}/transactions/swap?page=${page}&limit=${limit}`),
 };
 
 // ============== Public Merchant API Object ==============

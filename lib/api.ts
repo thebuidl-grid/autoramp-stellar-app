@@ -738,21 +738,7 @@ export const adminApi = {
 
   getMerchantBankAccounts: (merchantId: string) =>
     api.get<MerchantBankAccount[]>(`/merchants/bank-accounts/${merchantId}`),
-
-  // Merchant Transactions
-  getMerchantTransactionsOnramp: (merchantId: string, page: number = 1, limit: number = 10) =>
-    api.get<PaginatedResponse<Transaction>>(`/merchants/${merchantId}/transactions/onramp?page=${page}&limit=${limit}`),
-
-  getMerchantTransactionsOfframp: (merchantId: string, page: number = 1, limit: number = 10) =>
-    api.get<PaginatedResponse<Transaction>>(`/merchants/${merchantId}/transactions/offramp?page=${page}&limit=${limit}`),
-
-  getMerchantTransactionsSwap: (merchantId: string, page: number = 1, limit: number = 10) =>
-    api.get<PaginatedResponse<SwapTransaction>>(`/merchants/${merchantId}/transactions/swap?page=${page}&limit=${limit}`),
-
-  getMerchantTransactionsSummary: (merchantId: string) =>
-    api.get<any>(`/merchants/${merchantId}/transactions/summary`),
 };
-
 // Redundant public merchant definitions moved to merchant.ts
 
 export interface AdminTransactionSummaryResponse {
