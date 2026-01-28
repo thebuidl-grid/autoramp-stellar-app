@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAuthStore, useIsAuthenticated } from "@/lib/store";
+import { useMerchantStatus } from "@/lib/hooks/use-auth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,8 +22,24 @@ interface HeaderProps {
 
 export function Header({ onOpenAuthModal }: HeaderProps) {
   const isAuthenticated = useIsAuthenticated();
-  const { user, logout } = useAuthStore();
+  const { user, logout, updateUser } = useAuthStore();
   const router = useRouter();
+
+
+  const { data: merchantStatus } = useMerchantStatus();
+
+
+  // Sync merchant status to store when fetched
+  useEffect(() => {
+    if (merchantStatus?.data) {
+      const isVerifiedMerchant = merchantStatus.data.onboardingStatus === "VERIFIED";
+      if (user?.isMerchant !== isVerifiedMerchant) {
+        updateUser({
+          isMerchant: isVerifiedMerchant,
+        });
+      }
+    }
+  }, [merchantStatus, user, updateUser]);
 
   const handleLogout = () => {
     logout();
@@ -34,6 +52,7 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
       onOpenAuthModal();
     }
   };
+
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50">
@@ -55,6 +74,14 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                   className="text-sm text-white/60 hover:text-secondary transition-colors duration-300"
                 >
                   History
+                </Link>
+              )}
+              {isAuthenticated && user?.isMerchant && (
+                <Link
+                  href="/merchant/dashboard"
+                  className="text-sm text-white/60 hover:text-secondary transition-colors duration-300"
+                >
+                  Merchant Dashboard
                 </Link>
               )}
               <Link
@@ -89,6 +116,13 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                         Profile
                       </Link>
                     </DropdownMenuItem>
+                    {user?.isMerchant && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/merchant/dashboard" className="cursor-pointer">
+                          Merchant Dashboard
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={handleLogout}

@@ -13,7 +13,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { wagmiConfig } from '@/lib/wagmi-config';
 import { ReactNode } from 'react';
 
-// Create a client for React Query
+interface WagmiProviderWrapperProps {
+  children: ReactNode;
+}
+
+// Create QueryClient outside component to avoid hydration issues
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -22,19 +26,16 @@ const queryClient = new QueryClient({
   },
 });
 
-interface WagmiProviderWrapperProps {
-  children: ReactNode;
-}
-
 export function WagmiProviderWrapper({ children }: WagmiProviderWrapperProps) {
+
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider theme={darkTheme({
-              accentColor: "#00F9C7",
-              accentColorForeground: "#000",
-            })}
-  >
+          accentColor: "#00F9C7",
+          accentColorForeground: "#000",
+        })}
+        >
           {children}
         </RainbowKitProvider>
       </QueryClientProvider>

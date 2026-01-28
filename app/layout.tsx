@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
-import { QueryProvider } from "@/lib/query-provider";
-import { Toaster } from "@/components/ui/toast";
-import { AuthProvider } from "@/components/auth/auth-provider";
-import { WagmiProviderWrapper } from "@/components/providers/wagmi-provider";
+import { RootProvider } from "@/components/providers/root-provider";
 import { TopLoader } from "@/components/providers/top-loader";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -40,14 +37,9 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <TopLoader />
-        <WagmiProviderWrapper>
-          <QueryProvider>
-            <AuthProvider>
-              {children}
-              <Toaster />
-            </AuthProvider>
-          </QueryProvider>
-        </WagmiProviderWrapper>
+        <RootProvider>
+          {children}
+        </RootProvider>
       </body>
     </html>
   );

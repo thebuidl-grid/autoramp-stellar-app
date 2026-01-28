@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Key, History, Menu, X, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, Key, History, Menu, X, LogOut, Building2 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,9 @@ import { useAuthStore } from "@/lib/store";
 const sidebarLinks = [
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
     { name: "Users", href: "/admin/users", icon: Users },
-    { name: "API Keys", href: "/admin/api-keys", icon: Key },
     { name: "Transactions", href: "/admin/transactions", icon: History },
+    { name: "Merchants", href: "/admin/merchants", icon: Building2 },
+    // { name: "API Keys", href: "/admin/api-keys", icon: Key },
 ];
 
 export function AdminSidebar() {

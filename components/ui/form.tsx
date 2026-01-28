@@ -77,10 +77,19 @@ const FormItem = React.forwardRef<
     React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
     const id = React.useId()
+    const { error } = useFormField()
 
     return (
         <FormItemContext.Provider value={{ id }}>
-            <div ref={ref} className={cn("space-y-2", className)} {...props} />
+            <div
+                ref={ref}
+                className={cn(
+                    "space-y-2 transition-all duration-300 rounded-lg",
+                    error && "animate-shake bg-destructive/5 ring-1 ring-destructive/20 p-2 -m-2",
+                    className
+                )}
+                {...props}
+            />
         </FormItemContext.Provider>
     )
 })
