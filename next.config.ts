@@ -13,6 +13,10 @@ const nextConfig: NextConfig = {
 		// Alias @floating-ui/utils to its ESM bundle to avoid resolver issues
 		config.resolve.alias = {
 			...(config.resolve?.alias ?? {}),
+			"@floating-ui/utils/dom": path.resolve(
+				__dirname,
+				"node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs"
+			),
 			"@floating-ui/utils": path.resolve(
 				__dirname,
 				"node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs"
