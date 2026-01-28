@@ -118,7 +118,7 @@ export const merchantApi = {
 
     // Status & Profile
     getMerchantStatus: () =>
-        api.get<{ isMerchant: boolean; hasMerchantRecord: boolean; merchantId: string | null }>("/merchants/status"),
+        api.get<{ onboardingStatus: "VERIFIED" | "PENDING" | "REJECTED" | null; hasMerchantRecord: boolean; merchantId: string | null }>("/merchants/status"),
 
     getIsOnboarded: () =>
         api.get<{ isOnboarded: boolean }>("/merchants/onboarded"),
