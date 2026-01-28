@@ -27,7 +27,7 @@ export default function MerchantApiKeysPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [apiKeys, setApiKeys] = useState<MerchantApiKey[]>([]);
     const [isMerchant, setIsMerchant] = useState<boolean | null>(null);
-    const [isOnboarded, setIsOnboarded] = useState<boolean | null>(null);
+    const [onboardingStatus, setOnboardingStatus] = useState<"VERIFIED" | "PENDING" | "REJECTED" | null>(null);
 
     const router = useRouter();
     const { toast } = useToast();
@@ -43,31 +43,31 @@ export default function MerchantApiKeysPage() {
     useEffect(() => {
         const checkAccess = async () => {
             try {
-                const [statusRes, onboardedRes] = await Promise.all([
-                    merchantApi.getMerchantStatus(),
-                    merchantApi.getIsOnboarded()
-                ]);
+                try {
+                    // Only need getMerchantStatus now as it contains all info
+                    const { data } = await merchantApi.getMerchantStatus();
 
-                setIsMerchant(statusRes.data.hasMerchantRecord);
-                setIsOnboarded(onboardedRes.data.isOnboarded);
+                    const hasRecord = data.hasMerchantRecord;
+                    setIsMerchant(hasRecord);
+                    setOnboardingStatus(data.onboardingStatus);
 
-                if (statusRes.data.hasMerchantRecord) {
-                    await fetchApiKeys();
+                    if (hasRecord && data.onboardingStatus === "VERIFIED") {
+                        await fetchApiKeys();
+                    }
+                } catch (error) {
+                    console.error("Access check failed:", error);
+                    toast({
+                        title: "Authentication Error",
+                        description: "Failed to verify merchant status. Please login again.",
+                        variant: "destructive",
+                    });
+                } finally {
+                    setIsLoading(false);
                 }
-            } catch (error) {
-                console.error("Access check failed:", error);
-                toast({
-                    title: "Authentication Error",
-                    description: "Failed to verify merchant status. Please login again.",
-                    variant: "destructive",
-                });
-            } finally {
-                setIsLoading(false);
-            }
-        };
+            };
 
-        checkAccess();
-    }, []);
+            checkAccess();
+        }, []);
 
     const fetchApiKeys = async () => {
         try {
@@ -161,16 +161,52 @@ export default function MerchantApiKeysPage() {
         );
     }
 
-    if (!isOnboarded) {
+    if (onboardingStatus === "PENDING") {
         return (
             <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 bg-white/5 border border-white/10 rounded-xl">
                 <div className="p-4 bg-amber-500/10 rounded-full text-amber-500">
-                    <Loader2 className="h-12 w-12" />
+                    <Loader2 className="h-12 w-12 animate-spin" />
                 </div>
                 <div className="space-y-2">
                     <h1 className="text-2xl font-bold text-white">Onboarding in Progress</h1>
                     <p className="text-zinc-500 max-w-sm">
-                        Your merchant application is being reviewed. API keys will be available once your onboarding is complete.
+                        Your merchant application is currently being reviewed. API functionality will be unlocked once your account is verified.
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    if (onboardingStatus === "REJECTED") {
+        return (
+            <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 bg-white/5 border border-white/10 rounded-xl">
+                <div className="p-4 bg-red-500/10 rounded-full text-red-500">
+                    <AlertCircle className="h-12 w-12" />
+                </div>
+                <div className="space-y-2">
+                    <h1 className="text-2xl font-bold text-white">Application Rejected</h1>
+                    <p className="text-zinc-500 max-w-sm">
+                        Unfortunately, your merchant application was not approved. Please contact support for more information or to re-apply.
+                    </p>
+                </div>
+                <Button asChild variant="outline" className="border-white/10 text-white">
+                    <Link href="/merchant/support">Contact Support</Link>
+                </Button>
+            </div>
+        );
+    }
+
+    if (onboardingStatus !== "VERIFIED") {
+        // Fallback for null or unknown status, treat as not onboarded/restricted
+        return (
+            <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 bg-white/5 border border-white/10 rounded-xl">
+                <div className="p-4 bg-red-500/10 rounded-full text-red-500">
+                    <AlertCircle className="h-12 w-12" />
+                </div>
+                <div className="space-y-2">
+                    <h1 className="text-2xl font-bold text-white">Access Restricted</h1>
+                    <p className="text-zinc-500 max-w-sm">
+                        You need to be a verified merchant to access API keys.
                     </p>
                 </div>
             </div>
