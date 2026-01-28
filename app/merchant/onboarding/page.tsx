@@ -23,6 +23,12 @@ export default function MerchantKYBPage() {
         );
     }
 
+    // Redirect if already a merchant
+    if (isAuthenticated && user?.isMerchant) {
+        router.push("/merchant/dashboard");
+        return null;
+    }
+
     if (!isAuthenticated) {
         return (
             <div className="min-h-screen bg-black text-white selection:bg-primary/30 flex items-center justify-center p-4">
@@ -37,21 +43,22 @@ export default function MerchantKYBPage() {
                         <div className="p-4 bg-red-500/10 rounded-2xl">
                             <AlertCircle className="h-12 w-12 text-red-500" />
                         </div>
-                        <h2 className="text-3xl font-black tracking-tighter">Access Denied</h2>
+                        <h2 className="text-3xl font-black tracking-tighter">Please Login</h2>
                         <p className="text-zinc-400">
-                            You must be logged in to access the merchant onboarding portal. Please sign in to continue with your application.
+                            You must be logged in to view this page. Please sign in to continue with your application.
                         </p>
                     </div>
 
                     <div className="space-y-4">
                         <Button asChild className="w-full py-6 rounded-2xl font-bold text-lg">
-                            <Link href="/">
-                                Return to Homepage
+                            <Link href="/auth/login" className="flex items-center justify-center gap-2">
+                                Go to Login
                             </Link>
                         </Button>
-                        <Button asChild variant="ghost" className="w-full text-zinc-400 hover:text-white">
-                            <Link href="/auth/signup" className="flex items-center gap-2">
-                                <ArrowLeft className="h-4 w-4" /> Go to Login
+                        <Button asChild variant="outline" className="w-full py-6 rounded-2xl font-bold text-lg border-white/10 hover:bg-white/5">
+                            <Link href="/">
+                                <ArrowLeft className="h-4 w-4 mr-2" />
+                                Return Home
                             </Link>
                         </Button>
                     </div>
