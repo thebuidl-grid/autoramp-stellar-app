@@ -24,11 +24,22 @@ api.interceptors.request.use(
     const storeToken = useAuthStore.getState().token;
 
     // Fallback to direct localStorage if store is not yet initialized 
-    // (though in current setup, store is the source of truth)
     const token = storeToken || (typeof window !== "undefined" ? localStorage.getItem("token") : null);
 
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      if (config.headers) {
+        // Use the standard set method for AxiosHeaders in Axios 1.x
+        if (typeof config.headers.set === 'function') {
+          config.headers.set('Authorization', `Bearer ${token}`);
+        } else {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    } else {
+      // Debug log for missing token scenarios (only in dev)
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`[API] No token found in store or localStorage for: ${config.url}`);
+      }
     }
     return config;
   },
@@ -503,29 +514,74 @@ export interface ApproveMerchantResponse {
   message: string;
 }
 
-export interface MerchantKYB {
-  status: "PENDING" | "APPROVED" | "REJECTED";
-  businessName: string;
-  tradingName: string;
-  email: string;
-  websiteUrl: string;
-  natureOfBusiness: string;
-  contactPerson: string;
-  contactPhone?: string;
+export interface Director {
+  id: string;
+  firstName: string;
+  lastName: string;
+  nationality: string;
   bvn?: string;
-  tin?: string;
-  numberOfDirectors?: string;
-  capitalSource?: string;
-  companyDirectors?: string;
   idType?: string;
+  idUrl?: string;
+  proofOfAddress?: string;
+  metadata?: {
+    role?: string;
+    [key: string]: any;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Shareholder {
+  id: string;
+  firstName: string;
+  lastName: string;
+  nationality: string;
+  bvn?: string;
+  idType?: string;
+  idUrl?: string;
+  proofOfAddress?: string;
+  metadata?: any;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MerchantBankAccount {
+  id: string;
+  merchantId: string;
+  bankCode: string;
+  accountNumber: string;
+  accountName: string;
+  bankName: string;
+  metadata?: any;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MerchantDocumentation {
+  id: string;
+  merchantId: string;
   cacCertificate?: string | null;
   cacEStatus?: string | null;
   memart?: string | null;
   memorandum?: string | null;
   proofOfAddress?: string | null;
+  capitalSource?: string | null;
+  tradingName?: string | null;
+  taxIdentificationNumber?: string | null;
+  tin?: string | null;
   proofOfFunds?: string | null;
   directorProofOfAddress?: string | null;
   idDocument?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContactPerson {
+  name: string;
+  phone: string;
+  bvn: string;
+  tin?: string;
+  taxIdentificationNumber?: string;
 }
 
 export interface MerchantUser {
@@ -541,7 +597,7 @@ export interface MerchantUser {
   state: string;
   country: string;
   postalCode: string;
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  status: "PENDING" | "REJECTED" | "VERIFIED";
   verifiedAt: string | null;
   rejectionReason: string | null;
   metadata: {
@@ -556,7 +612,11 @@ export interface MerchantUser {
     contactName: string | null;
   };
   isApiAccessApproved?: boolean;
-  kyb?: MerchantKYB;
+  documentations?: MerchantDocumentation[];
+  directors?: Director[];
+  shareholders?: Shareholder[];
+  bankAccounts?: MerchantBankAccount[];
+  contactPerson?: ContactPerson;
 }
 
 export interface MerchantsResponse {
@@ -579,6 +639,28 @@ export const adminApi = {
 
   getUserById: (id: string) =>
     api.get<AdminUser>(`/admin/users/${id}`),
+
+  createUser: (data: {
+    email: string;
+    phone_number?: string;
+    wallet_address?: string;
+    is_merchant?: boolean;
+    is_api_access_approved?: boolean;
+    contact_name?: string;
+  }) => api.post<AdminUser>(`/admin/users`, data),
+
+  updateUserProfile: (userId: string, data: Partial<{
+    email: string;
+    phone_number?: string;
+    wallet_address?: string;
+    contact_name?: string;
+  }>) => api.patch<AdminUser>(`/admin/user/${userId}/profile`, data),
+
+  suspendUser: (userId: string, data: { suspended: boolean }) =>
+    api.patch<{ message: string }>(`/admin/user/${userId}/suspend`, data),
+
+  updateUserFlags: (userId: string, data: { is_merchant?: boolean; is_api_access_approved?: boolean }) =>
+    api.patch<AdminUser>(`/admin/user/${userId}/flags`, data),
 
   // API Key Management
   getAllApiKeys: (page: number = 1, limit: number = 10) =>
@@ -624,11 +706,40 @@ export const adminApi = {
   updateMerchant: (id: string, data: any) =>
     api.patch<MerchantUser>(`/merchants/onboarding/${id}`, data),
 
+  updateMerchantStatus: (id: string, data: { status: string; rejectionReason?: string }) =>
+    api.patch<{ message: string; merchant?: MerchantUser }>(`/merchants/onboarding/${id}`, data),
+
   deleteMerchant: (id: string) =>
     api.delete(`/merchants/onboarding/${id}`),
 
   approveMerchantAccess: (data: CreateMerchantDto) =>
     api.post<ApproveMerchantResponse>("/admin/approve-access", data),
+
+  // Merchant Sub-resource Management
+  getMerchantDocumentation: (merchantId: string) =>
+    api.get<any>(`/merchants/documentations/${merchantId}`),
+
+  getMerchantDirectors: (merchantId: string) =>
+    api.get<Director[]>(`/merchants/directors/${merchantId}`),
+
+  getMerchantShareholders: (merchantId: string) =>
+    api.get<Shareholder[]>(`/merchants/shareholders/${merchantId}`),
+
+  getMerchantBankAccounts: (merchantId: string) =>
+    api.get<MerchantBankAccount[]>(`/merchants/bank-accounts/${merchantId}`),
+
+  // Merchant Transactions
+  getMerchantTransactionsOnramp: (merchantId: string, page: number = 1, limit: number = 10) =>
+    api.get<TransactionsResponse>(`/merchants/${merchantId}/transactions/onramp?page=${page}&limit=${limit}`),
+
+  getMerchantTransactionsOfframp: (merchantId: string, page: number = 1, limit: number = 10) =>
+    api.get<TransactionsResponse>(`/merchants/${merchantId}/transactions/offramp?page=${page}&limit=${limit}`),
+
+  getMerchantTransactionsSwap: (merchantId: string, page: number = 1, limit: number = 10) =>
+    api.get<TransactionsResponse>(`/merchants/${merchantId}/transactions/swap?page=${page}&limit=${limit}`),
+
+  getMerchantTransactionsSummary: (merchantId: string) =>
+    api.get<any>(`/merchants/${merchantId}/transactions/summary`),
 };
 
 // Redundant public merchant definitions moved to merchant.ts

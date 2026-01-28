@@ -8,7 +8,8 @@ import {
     Users,
     Clock,
     CheckCircle2,
-    TrendingUp
+    TrendingUp,
+    XCircle
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -63,19 +64,19 @@ export default function AdminMerchantsPage() {
             bg: "bg-amber-500/10"
         },
         {
-            title: "Approved",
-            value: merchants.filter(m => m.status === "APPROVED").length,
+            title: "Verified",
+            value: merchants.filter(m => m.status === "VERIFIED").length,
             icon: CheckCircle2,
             color: "text-green-500",
             bg: "bg-green-500/10"
         },
         {
-            title: "Growth",
-            value: "+12%",
-            icon: TrendingUp,
-            color: "text-primary",
-            bg: "bg-primary/10"
-        }
+            title: "Inactive",
+            value: merchants.filter(m => m.status === "REJECTED").length,
+            icon: XCircle,
+            color: "text-red-500",
+            bg: "bg-red-500/10"
+        },
     ];
 
 

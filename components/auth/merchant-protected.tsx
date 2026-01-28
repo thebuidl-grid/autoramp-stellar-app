@@ -21,8 +21,13 @@ export function MerchantProtected({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         if (!_hasHydrated) return;
 
-        // Skip restriction for login page
-        if (pathname === "/merchant/login") {
+        // Skip restriction for login, onboarding and KYB pages
+        const isPublicMerchantRoute =
+            pathname === "/merchant/login" ||
+            pathname === "/merchant/onboarding" ||
+            pathname === "/merchant/kyb";
+
+        if (isPublicMerchantRoute) {
             setIsAuthorized(true);
             return;
         }
@@ -39,12 +44,8 @@ export function MerchantProtected({ children }: { children: React.ReactNode }) {
         }
 
         // If we have a user and they are a merchant, or if we just have a token
-        // (the latter case is temporary until AuthProvider hydrates the user)
         if (user?.isMerchant) {
             setIsAuthorized(true);
-        } else if (!user && token) {
-            // Wait for user to be loaded by AuthProvider
-            // But we don't set isAuthorized to true yet to prevent flashing non-merchant content
         }
     }, [_hasHydrated, user, token, router, pathname]);
 

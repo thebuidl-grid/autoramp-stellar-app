@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@floating-ui/utils": "^0.2.10",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -21,7 +22,7 @@
     "@radix-ui/react-toast": "^1.2.15",
     "@rainbow-me/rainbowkit": "^2.2.10",
     "@react-native-async-storage/async-storage": "^2.2.0",
-    "@tanstack/react-query": "^5.90.12",
+    "@tanstack/react-query": "^5.90.20",
     "axios": "^1.13.2",
     "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.9.0",

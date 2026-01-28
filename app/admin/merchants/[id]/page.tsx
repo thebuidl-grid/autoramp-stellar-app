@@ -7,6 +7,8 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api";
 import { MerchantKYBDetails } from "@/components/admin/merchants/MerchantKYBDetails";
+import { MerchantTransactions } from "@/components/admin/merchants/MerchantTransactions";
+import { MerchantApiKeys } from "@/components/admin/merchants/MerchantApiKeys";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface PageProps {
@@ -88,21 +90,11 @@ export default function MerchantDetailPage({ params }: PageProps) {
                 </TabsContent>
 
                 <TabsContent value="transactions" className="mt-0 outline-none">
-                    <div className="p-12 text-center bg-white/5 border border-white/10 rounded-xl border-dashed">
-                        <History className="h-12 w-12 text-zinc-600 mx-auto mb-4" />
-                        <h3 className="text-lg font-bold text-white mb-2">Merchant Transactions</h3>
-                        <p className="text-zinc-500 mb-6">View all onramp and offramp transactions associated with this merchant API key.</p>
-                        <Button variant="outline" className="border-white/10 text-white" disabled>Coming Soon</Button>
-                    </div>
+                    <MerchantTransactions merchantId={merchant.id} />
                 </TabsContent>
 
                 <TabsContent value="api-keys" className="mt-0 outline-none">
-                    <div className="p-12 text-center bg-white/5 border border-white/10 rounded-xl border-dashed">
-                        <User className="h-12 w-12 text-zinc-600 mx-auto mb-4" />
-                        <h3 className="text-lg font-bold text-white mb-2">API Access Tracking</h3>
-                        <p className="text-zinc-500 mb-6">Monitor API usage, request limits, and active keys for this business.</p>
-                        <Button variant="outline" className="border-white/10 text-white" disabled>Coming Soon</Button>
-                    </div>
+                    <MerchantApiKeys merchantId={merchant.id} userId={merchant.userId} />
                 </TabsContent>
             </Tabs>
         </div>

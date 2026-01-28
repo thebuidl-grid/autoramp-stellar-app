@@ -48,10 +48,10 @@ export default function MerchantApiKeysPage() {
                     merchantApi.getIsOnboarded()
                 ]);
 
-                setIsMerchant(statusRes.data.isMerchant);
+                setIsMerchant(statusRes.data.hasMerchantRecord);
                 setIsOnboarded(onboardedRes.data.isOnboarded);
 
-                if (statusRes.data.isMerchant) {
+                if (statusRes.data.hasMerchantRecord) {
                     await fetchApiKeys();
                 }
             } catch (error) {
@@ -173,9 +173,6 @@ export default function MerchantApiKeysPage() {
                         Your merchant application is being reviewed. API keys will be available once your onboarding is complete.
                     </p>
                 </div>
-                <Button asChild variant="outline" className="border-white/10 text-white">
-                    <Link href="/merchant/onboarding">Check Status</Link>
-                </Button>
             </div>
         );
     }
