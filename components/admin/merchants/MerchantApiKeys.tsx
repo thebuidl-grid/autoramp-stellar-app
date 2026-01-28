@@ -24,7 +24,11 @@ export function MerchantApiKeys({ merchantId, userId }: MerchantApiKeysProps) {
         queryKey: ["merchant-api-keys", userId],
         queryFn: async () => {
             const { data } = await adminApi.getUserApiKeys(userId);
-            return data;
+            // Handle potentially wrapped response
+            if (Array.isArray(data)) return data;
+            // Check for common wrapper patterns
+            const possibleArray = (data as any).apiKeys || (data as any).data || (data as any).keys;
+            return Array.isArray(possibleArray) ? possibleArray : [];
         },
     });
 
