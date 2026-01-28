@@ -38,10 +38,16 @@ export function MerchantProtected({ children }: { children: React.ReactNode }) {
         }
 
         // Check if user is a merchant
-        if (user && !user.isMerchant) {
-            router.replace("/");
-            return;
-        }
+        /* 
+         * Relaxing strict redirect to home. 
+         * Pages like MerchantApiKeysPage now handle "Access Restricted" or "Onboarding" states 
+         * explicitly for users who are logged in but not yet fully approved merchants.
+         */
+
+        // if (user && !user.isMerchant) {
+        //     router.replace("/");
+        //     return;
+        // }
 
         // If we have a user and they are a merchant, or if we just have a token
         if (user?.isMerchant) {
