@@ -8,7 +8,8 @@ import {
     MoreHorizontal,
     CheckCircle2,
     Clock,
-    XCircle
+    XCircle,
+    AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -120,6 +121,14 @@ export function MerchantTable({ merchants, isLoading }: MerchantTableProps) {
                                 <td className="p-4 align-middle">
                                     <div className="flex flex-col gap-1.5">
                                         {getStatusBadge(merchant.status || "")}
+                                        {merchant.status === "REJECTED" && merchant.rejectionReason && (
+                                            <div className="flex items-start gap-1 text-[10px] text-red-400/80 mt-1 max-w-[180px]" title={merchant.rejectionReason}>
+                                                <AlertCircle className="h-2.5 w-2.5 mt-0.5 shrink-0" />
+                                                <span className="line-clamp-2 italic leading-tight">
+                                                    {merchant.rejectionReason}
+                                                </span>
+                                            </div>
+                                        )}
                                         {merchant.isApiAccessApproved && (
                                             <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-500 border border-blue-500/20 w-fit">
                                                 API Active

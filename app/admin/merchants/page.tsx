@@ -8,7 +8,8 @@ import {
     Users,
     Clock,
     CheckCircle2,
-    TrendingUp
+    TrendingUp,
+    XCircle
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -68,6 +69,13 @@ export default function AdminMerchantsPage() {
             icon: CheckCircle2,
             color: "text-green-500",
             bg: "bg-green-500/10"
+        },
+        {
+            title: "Inactive",
+            value: merchants.filter(m => m.status === "REJECTED").length,
+            icon: XCircle,
+            color: "text-red-500",
+            bg: "bg-red-500/10"
         },
     ];
 
