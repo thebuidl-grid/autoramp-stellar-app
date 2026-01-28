@@ -23,7 +23,6 @@ export default function MerchantRootPage() {
         } else if (onboardedStatus?.data?.isOnboarded === false) {
             router.replace("/merchant/onboarding");
         } else {
-            // Only go to dashboard if confirmed onboarded
             if (onboardedStatus?.data?.isOnboarded) {
                 router.replace("/merchant/dashboard");
             }

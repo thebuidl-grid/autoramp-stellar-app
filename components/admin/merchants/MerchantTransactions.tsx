@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { adminApi, Transaction, SwapTransaction, TransactionsResponse } from "@/lib/api";
+import { merchantApi } from "@/lib/merchant";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,7 +41,7 @@ export function MerchantTransactions({ merchantId }: MerchantTransactionsProps) 
     const { data: onrampData, isLoading: isLoadingOnramp } = useQuery({
         queryKey: ["merchant-transactions-onramp", merchantId, page],
         queryFn: async () => {
-            const { data } = await adminApi.getMerchantTransactionsOnramp(merchantId, page, limit);
+            const { data } = await merchantApi.getTransactionsOnramp(merchantId, page, limit);
             return data;
         },
         enabled: activeTab === "all" || activeTab === "onramp",
@@ -49,7 +50,7 @@ export function MerchantTransactions({ merchantId }: MerchantTransactionsProps) 
     const { data: offrampData, isLoading: isLoadingOfframp } = useQuery({
         queryKey: ["merchant-transactions-offramp", merchantId, page],
         queryFn: async () => {
-            const { data } = await adminApi.getMerchantTransactionsOfframp(merchantId, page, limit);
+            const { data } = await merchantApi.getTransactionsOfframp(merchantId, page, limit);
             return data;
         },
         enabled: activeTab === "all" || activeTab === "offramp",
@@ -58,7 +59,7 @@ export function MerchantTransactions({ merchantId }: MerchantTransactionsProps) 
     const { data: swapData, isLoading: isLoadingSwap } = useQuery({
         queryKey: ["merchant-transactions-swap", merchantId, page],
         queryFn: async () => {
-            const { data } = await adminApi.getMerchantTransactionsSwap(merchantId, page, limit);
+            const { data } = await merchantApi.getTransactionsSwap(merchantId, page, limit);
             return data;
         },
         enabled: activeTab === "all" || activeTab === "swap",
@@ -67,7 +68,7 @@ export function MerchantTransactions({ merchantId }: MerchantTransactionsProps) 
     const { data: summary, isLoading: isLoadingSummary } = useQuery({
         queryKey: ["merchant-transactions-summary", merchantId],
         queryFn: async () => {
-            const { data } = await adminApi.getMerchantTransactionsSummary(merchantId);
+            const { data } = await merchantApi.getTransactionsSummary(merchantId);
             return data;
         },
     });
@@ -78,13 +79,13 @@ export function MerchantTransactions({ merchantId }: MerchantTransactionsProps) 
     const allTransactions: PlatformTransaction[] = [];
 
     if (onrampData?.data) {
-        allTransactions.push(...onrampData.data.map(tx => ({ ...tx, _type: "onramp" as const })));
+        allTransactions.push(...onrampData.data.map((tx: any) => ({ ...tx, _type: "onramp" as const })));
     }
     if (offrampData?.data) {
-        allTransactions.push(...offrampData.data.map(tx => ({ ...tx, _type: "offramp" as const })));
+        allTransactions.push(...offrampData.data.map((tx: any) => ({ ...tx, _type: "offramp" as const })));
     }
     if (swapData?.data) {
-        allTransactions.push(...swapData.data.map(tx => ({ ...tx, _type: "swap" as const })));
+        allTransactions.push(...swapData.data.map((tx: any) => ({ ...tx, _type: "swap" as const })));
     }
 
     const sortedTransactions = allTransactions.sort(
