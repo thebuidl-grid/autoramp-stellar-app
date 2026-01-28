@@ -43,31 +43,30 @@ export default function MerchantApiKeysPage() {
     useEffect(() => {
         const checkAccess = async () => {
             try {
-                try {
-                    // Only need getMerchantStatus now as it contains all info
-                    const { data } = await merchantApi.getMerchantStatus();
+                // Only need getMerchantStatus now as it contains all info
+                const { data } = await merchantApi.getMerchantStatus();
 
-                    const hasRecord = data.hasMerchantRecord;
-                    setIsMerchant(hasRecord);
-                    setOnboardingStatus(data.onboardingStatus);
+                const hasRecord = data.hasMerchantRecord;
+                setIsMerchant(hasRecord);
+                setOnboardingStatus(data.onboardingStatus);
 
-                    if (hasRecord && data.onboardingStatus === "VERIFIED") {
-                        await fetchApiKeys();
-                    }
-                } catch (error) {
-                    console.error("Access check failed:", error);
-                    toast({
-                        title: "Authentication Error",
-                        description: "Failed to verify merchant status. Please login again.",
-                        variant: "destructive",
-                    });
-                } finally {
-                    setIsLoading(false);
+                if (hasRecord && data.onboardingStatus === "VERIFIED") {
+                    await fetchApiKeys();
                 }
-            };
+            } catch (error) {
+                console.error("Access check failed:", error);
+                toast({
+                    title: "Authentication Error",
+                    description: "Failed to verify merchant status. Please login again.",
+                    variant: "destructive",
+                });
+            } finally {
+                setIsLoading(false);
+            }
+        };
 
-            checkAccess();
-        }, []);
+        checkAccess();
+    }, []);
 
     const fetchApiKeys = async () => {
         try {
