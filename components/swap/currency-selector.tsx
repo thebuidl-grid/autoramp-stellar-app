@@ -4,15 +4,12 @@ import Image from "next/image";
 import { ChevronRight } from "lucide-react";
 
 interface CurrencySelectorProps {
-  type: "NGN" | "CNGN" | "USDC";
+  type: "NGN" | "CNGN" | "USDC" | "USDT";
   onClick?: () => void;
   showBaseLogo?: boolean;
 }
 
-export function CurrencySelector({
-  type,
-  onClick
-}: CurrencySelectorProps) {
+export function CurrencySelector({ type, onClick }: CurrencySelectorProps) {
   const getLogo = () => {
     switch (type) {
       case "NGN":
@@ -21,6 +18,8 @@ export function CurrencySelector({
         return "/cngn-logo.png";
       case "USDC":
         return "/usdc-logo.png";
+      case "USDT":
+        return "/usdt-logo.png";
     }
   };
 
@@ -32,6 +31,8 @@ export function CurrencySelector({
         return "CNGN";
       case "USDC":
         return "USDC";
+      case "USDT":
+        return "USDT";
     }
   };
 
@@ -42,10 +43,9 @@ export function CurrencySelector({
       type="button"
       onClick={onClick}
       disabled={!isClickable}
-      className={`flex items-center gap-3 px-3 py-1.5 md:px-4 md:py-2.5 rounded-xl border border-white/10 bg-white/5 transition-colors ${isClickable
-          ? "hover:bg-white/10 cursor-pointer"
-          : "cursor-default"
-        }`}
+      className={`flex items-center gap-3 px-3 py-1.5 md:px-4 md:py-2.5 rounded-xl border border-white/10 bg-white/5 transition-colors ${
+        isClickable ? "hover:bg-white/10 cursor-pointer" : "cursor-default"
+      }`}
     >
       <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
         <img
@@ -64,4 +64,3 @@ export function CurrencySelector({
     </button>
   );
 }
-

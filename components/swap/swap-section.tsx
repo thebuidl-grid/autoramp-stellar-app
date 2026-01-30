@@ -8,7 +8,7 @@ interface SwapSectionProps {
   label: string;
   amount: string;
   onAmountChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  currencyType: "NGN" | "CNGN" | "USDC";
+  currencyType: "NGN" | "CNGN" | "USDC" | "USDT";
   onCurrencyClick?: () => void;
   showBaseLogo?: boolean;
   disabled?: boolean;
@@ -59,10 +59,10 @@ export function SwapSection({
                 onClick={() => handlePercent(percent)}
                 className={cn(
                   "text-[10px] font-medium px-2 py-1 rounded-md transition-colors",
-                  "bg-white/5 hover:bg-white/10 text-white/70 hover:text-white"
+                  "bg-white/5 hover:bg-white/10 text-white/70 hover:text-white",
                 )}
               >
-                {percent === 1 ? "MAX" : `${percent * 100}%`}
+                {percent === 1 ? "100%" : `${percent * 100}%`}
               </button>
             ))}
           </div>

@@ -7,7 +7,7 @@ import { useAuthStore } from "./store";
  * Base API client for communicating with the backend.
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 // Create axios instance with default config
 export const api = axios.create({
@@ -23,22 +23,26 @@ api.interceptors.request.use(
     // Get token from global store (synced with localStorage)
     const storeToken = useAuthStore.getState().token;
 
-    // Fallback to direct localStorage if store is not yet initialized 
-    const token = storeToken || (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+    // Fallback to direct localStorage if store is not yet initialized
+    const token =
+      storeToken ||
+      (typeof window !== "undefined" ? localStorage.getItem("token") : null);
 
     if (token) {
       if (config.headers) {
         // Use the standard set method for AxiosHeaders in Axios 1.x
-        if (typeof config.headers.set === 'function') {
-          config.headers.set('Authorization', `Bearer ${token}`);
+        if (typeof config.headers.set === "function") {
+          config.headers.set("Authorization", `Bearer ${token}`);
         } else {
           config.headers.Authorization = `Bearer ${token}`;
         }
       }
     } else {
       // Debug log for missing token scenarios (only in dev)
-      if (process.env.NODE_ENV === 'development') {
-        console.warn(`[API] No token found in store or localStorage for: ${config.url}`);
+      if (process.env.NODE_ENV === "development") {
+        console.warn(
+          `[API] No token found in store or localStorage for: ${config.url}`,
+        );
       }
     }
     return config;
@@ -120,11 +124,9 @@ export interface AuthResponse {
 }
 
 export const authApi = {
-  signUp: (data: SignUpDto) =>
-    api.post<AuthResponse>("/auth/signup", data),
+  signUp: (data: SignUpDto) => api.post<AuthResponse>("/auth/signup", data),
 
-  signIn: (data: SignInDto) =>
-    api.post<AuthResponse>("/auth/signin", data),
+  signIn: (data: SignInDto) => api.post<AuthResponse>("/auth/signin", data),
 
   adminLogin: (data: SignInDto) =>
     api.post<AuthResponse>("/auth/admin/login", data),
@@ -201,11 +203,10 @@ export interface VerifyAndAddAccountDto {
 }
 
 export const userApi = {
-  getProfile: () =>
-    api.get<User>("/user/profile"),
+  getProfile: () => api.get<User>("/user/profile"),
 
   // User API Keys
-  getUserApiKeys: () => api.get<ApiKey[]>("/user/api-keys"),
+  getMerchantApiKeys: () => api.get<ApiKey[]>("/user/api-keys"),
 
   createApiKey: (data: CreateApiKeyDto) =>
     api.post<CreateApiKeyResponse>("/merchants/api-keys", data),
@@ -225,8 +226,7 @@ export const userApi = {
   verifyAndAddAccount: (data: VerifyAndAddAccountDto) =>
     api.post<SavedAccountNumber>("/user/saved-accounts/verify-and-add", data),
 
-  getSavedAccounts: () =>
-    api.get<SavedAccountNumber[]>("/user/saved-accounts"),
+  getSavedAccounts: () => api.get<SavedAccountNumber[]>("/user/saved-accounts"),
 
   getSavedAccountById: (id: string) =>
     api.get<SavedAccountNumber>(`/user/saved-accounts/${id}`),
@@ -234,24 +234,20 @@ export const userApi = {
   updateSavedAccount: (id: string, data: UpdateSavedAccountDto) =>
     api.patch<SavedAccountNumber>(`/user/saved-accounts/${id}`, data),
 
-  deleteSavedAccount: (id: string) =>
-    api.delete(`/user/saved-accounts/${id}`),
+  deleteSavedAccount: (id: string) => api.delete(`/user/saved-accounts/${id}`),
 
   // User Wallets
   createUserWallet: (data: CreateUserWalletDto) =>
     api.post<UserWallet>("/user/wallets", data),
 
-  getUserWallets: () =>
-    api.get<UserWallet[]>("/user/wallets"),
+  getUserWallets: () => api.get<UserWallet[]>("/user/wallets"),
 
-  getUserWalletById: (id: string) =>
-    api.get<UserWallet>(`/user/wallets/${id}`),
+  getUserWalletById: (id: string) => api.get<UserWallet>(`/user/wallets/${id}`),
 
   updateUserWallet: (id: string, data: UpdateUserWalletDto) =>
     api.patch<UserWallet>(`/user/wallets/${id}`, data),
 
-  deleteUserWallet: (id: string) =>
-    api.delete(`/user/wallets/${id}`),
+  deleteUserWallet: (id: string) => api.delete(`/user/wallets/${id}`),
 };
 
 // ============== API Keys API ==============
@@ -401,6 +397,7 @@ export interface Transaction {
   accountNumber?: string;
   accountName?: string;
   bankName?: string;
+  tokenType?: string;
 }
 
 export interface SwapTransaction {
@@ -432,6 +429,16 @@ export interface TransactionsResponse {
   totalPages: number;
 }
 
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export type MerchantTransactionsResponse = PaginatedResponse<Transaction>;
+
 export interface ResolveAccountResponse {
   status?: string;
   message?: string;
@@ -444,28 +451,37 @@ export interface ResolveAccountResponse {
 
 export const stablestackApi = {
   getBanks: () =>
-    api.get<{ status: string; message: string; data: Bank[] }>("/stablestack/banks"),
+    api.get<{ status: string; message: string; data: Bank[] }>(
+      "/stablestack/banks",
+    ),
 
   resolveAccount: (bankCode: string, accountNumber: string) => {
     const params = new URLSearchParams();
     params.append("bankCode", bankCode);
     params.append("accountNumber", accountNumber);
-    return api.get<ResolveAccountResponse>(`/stablestack/resolve-account?${params.toString()}`);
+    return api.get<ResolveAccountResponse>(
+      `/stablestack/resolve-account?${params.toString()}`,
+    );
   },
 
-  onRamp: (data: OnRampDto) =>
-    api.post("/stablestack/onramp", data),
+  onRamp: (data: OnRampDto) => api.post("/stablestack/onramp", data),
 
-  offRamp: (data: OffRampDto) =>
-    api.post("/stablestack/offramp", data),
+  offRamp: (data: OffRampDto) => api.post("/stablestack/offramp", data),
 
-  getTransactions: (id?: string, reference?: string, page?: number, limit?: number) => {
+  getTransactions: (
+    id?: string,
+    reference?: string,
+    page?: number,
+    limit?: number,
+  ) => {
     const params = new URLSearchParams();
     if (id) params.append("id", id);
     if (reference) params.append("reference", reference);
     if (page) params.append("page", page.toString());
     if (limit) params.append("limit", limit.toString());
-    return api.get<TransactionsResponse>(`/stablestack/transactions?${params.toString()}`);
+    return api.get<TransactionsResponse>(
+      `/stablestack/transactions?${params.toString()}`,
+    );
   },
 };
 
@@ -491,7 +507,6 @@ export interface UsersResponse {
 export interface AdminTransactionsResponse {
   transactions: Transaction[]; // Unified transactions
 }
-
 
 export interface CreateMerchantDto {
   userId: string;
@@ -629,16 +644,13 @@ export interface MerchantsResponse {
   };
 }
 
-
 export const adminApi = {
-  getMe: () =>
-    api.get<AdminUser>("/admin/me"),
+  getMe: () => api.get<AdminUser>("/admin/me"),
 
   getUsers: (page: number = 1, limit: number = 10) =>
     api.get<UsersResponse>(`/admin/users?page=${page}&limit=${limit}`),
 
-  getUserById: (id: string) =>
-    api.get<AdminUser>(`/admin/users/${id}`),
+  getUserById: (id: string) => api.get<AdminUser>(`/admin/users/${id}`),
 
   createUser: (data: {
     email: string;
@@ -649,26 +661,30 @@ export const adminApi = {
     contact_name?: string;
   }) => api.post<AdminUser>(`/admin/users`, data),
 
-  updateUserProfile: (userId: string, data: Partial<{
-    email: string;
-    phone_number?: string;
-    wallet_address?: string;
-    contact_name?: string;
-  }>) => api.patch<AdminUser>(`/admin/user/${userId}/profile`, data),
+  updateUserProfile: (
+    userId: string,
+    data: Partial<{
+      email: string;
+      phone_number?: string;
+      wallet_address?: string;
+      contact_name?: string;
+    }>,
+  ) => api.patch<AdminUser>(`/admin/user/${userId}/profile`, data),
 
   suspendUser: (userId: string, data: { suspended: boolean }) =>
     api.patch<{ message: string }>(`/admin/user/${userId}/suspend`, data),
 
-  updateUserFlags: (userId: string, data: { is_merchant?: boolean; is_api_access_approved?: boolean }) =>
-    api.patch<AdminUser>(`/admin/user/${userId}/flags`, data),
+  updateUserFlags: (
+    userId: string,
+    data: { is_merchant?: boolean; is_api_access_approved?: boolean },
+  ) => api.patch<AdminUser>(`/admin/user/${userId}/flags`, data),
 
   // API Key Management
   getAllApiKeys: (page: number = 1, limit: number = 10) =>
     api.get<ApiKeysResponse>(`/admin/api-keys?page=${page}&limit=${limit}`),
 
-
-  getUserApiKeys: (userId: string) =>
-    api.get<ApiKey[]>(`/admin/users/${userId}/api-keys`),
+  getMerchantApiKeys: (merchantId: string) =>
+    api.get<ApiKey[]>(`/merchants/api-keys/?merchantId=${merchantId}`),
 
   createApiKeyForUser: (userId: string, data: CreateApiKeyDto) =>
     api.post<CreateApiKeyResponse>(`/admin/users/${userId}/api-keys`, data),
@@ -686,19 +702,22 @@ export const adminApi = {
     ),
 
   getTransactions: (page: number = 1, limit: number = 10, status?: string) =>
-    api.get<TransactionsResponse>(`/admin/platform-transactions?page=${page}&limit=${limit}${status ? `&status=${status}` : ""}`),
+    api.get<TransactionsResponse>(
+      `/admin/platform-transactions?page=${page}&limit=${limit}${status ? `&status=${status}` : ""}`,
+    ),
 
   getTransactionsSummary: () =>
     api.get<TransactionsSummaryResponse>("/admin/transactions/summary"),
 
-  getTransactionsAnalytics: (period: "daily" | "weekly" | "monthly" = "daily") =>
+  getTransactionsAnalytics: (
+    period: "daily" | "weekly" | "monthly" = "daily",
+  ) =>
     api.get<TransactionAnalyticsDataPoint[]>(
       `/admin/transactions/analytics?period=${period}`,
     ),
 
   // Merchant Management
-  getMerchants: () =>
-    api.get<MerchantUser[]>("/merchants/onboarding"),
+  getMerchants: () => api.get<MerchantUser[]>("/merchants/onboarding"),
 
   getMerchantById: (id: string) =>
     api.get<MerchantUser>(`/merchants/onboarding/${id}`),
@@ -706,11 +725,16 @@ export const adminApi = {
   updateMerchant: (id: string, data: any) =>
     api.patch<MerchantUser>(`/merchants/onboarding/${id}`, data),
 
-  updateMerchantStatus: (id: string, data: { status: string; rejectionReason?: string }) =>
-    api.post<{ message: string; merchant?: MerchantUser }>(`admin/merchants/${id}/status`, data),
+  updateMerchantStatus: (
+    id: string,
+    data: { status: string; rejectionReason?: string },
+  ) =>
+    api.post<{ message: string; merchant?: MerchantUser }>(
+      `admin/merchants/${id}/status`,
+      data,
+    ),
 
-  deleteMerchant: (id: string) =>
-    api.delete(`/merchants/onboarding/${id}`),
+  deleteMerchant: (id: string) => api.delete(`/merchants/onboarding/${id}`),
 
   approveMerchantAccess: (data: CreateMerchantDto) =>
     api.post<ApproveMerchantResponse>("/admin/approve-access", data),
@@ -727,21 +751,7 @@ export const adminApi = {
 
   getMerchantBankAccounts: (merchantId: string) =>
     api.get<MerchantBankAccount[]>(`/merchants/bank-accounts/${merchantId}`),
-
-  // Merchant Transactions
-  getMerchantTransactionsOnramp: (merchantId: string, page: number = 1, limit: number = 10) =>
-    api.get<TransactionsResponse>(`/merchants/${merchantId}/transactions/onramp?page=${page}&limit=${limit}`),
-
-  getMerchantTransactionsOfframp: (merchantId: string, page: number = 1, limit: number = 10) =>
-    api.get<TransactionsResponse>(`/merchants/${merchantId}/transactions/offramp?page=${page}&limit=${limit}`),
-
-  getMerchantTransactionsSwap: (merchantId: string, page: number = 1, limit: number = 10) =>
-    api.get<TransactionsResponse>(`/merchants/${merchantId}/transactions/swap?page=${page}&limit=${limit}`),
-
-  getMerchantTransactionsSummary: (merchantId: string) =>
-    api.get<any>(`/merchants/${merchantId}/transactions/summary`),
 };
-
 // Redundant public merchant definitions moved to merchant.ts
 
 export interface AdminTransactionSummaryResponse {

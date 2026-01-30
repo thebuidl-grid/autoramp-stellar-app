@@ -47,7 +47,7 @@ import {
   SWAP_ROUTER_ABI,
   ERC20_ABI,
 } from "@/lib/constants/swap-constants";
-import { parseUnits, formatUnits } from "viem";
+import { parseUnits, formatUnits, encodePacked } from "viem";
 import { useTransactionStore } from "@/lib/store";
 import { QUOTER_ABI, QUOTER_ADDRESS } from "@/lib/constants/quoter-constants";
 
@@ -66,13 +66,13 @@ export default function HomePage() {
   const fromCryptoType = useTransactionStore((state) => state.fromCryptoType);
   const toCryptoType = useTransactionStore((state) => state.toCryptoType);
   const isCryptoModalOpen = useTransactionStore(
-    (state) => state.isCryptoModalOpen
+    (state) => state.isCryptoModalOpen,
   );
   const isFromCryptoModalOpen = useTransactionStore(
-    (state) => state.isFromCryptoModalOpen
+    (state) => state.isFromCryptoModalOpen,
   );
   const isToCryptoModalOpen = useTransactionStore(
-    (state) => state.isToCryptoModalOpen
+    (state) => state.isToCryptoModalOpen,
   );
   const sellAmount = useTransactionStore((state) => state.sellAmount);
   const buyAmount = useTransactionStore((state) => state.buyAmount);
@@ -87,33 +87,33 @@ export default function HomePage() {
   const setActiveTab = useTransactionStore((state) => state.setActiveTab);
   const setCryptoType = useTransactionStore((state) => state.setCryptoType);
   const setFromCryptoType = useTransactionStore(
-    (state) => state.setFromCryptoType
+    (state) => state.setFromCryptoType,
   );
   const setToCryptoType = useTransactionStore((state) => state.setToCryptoType);
   const setIsCryptoModalOpen = useTransactionStore(
-    (state) => state.setIsCryptoModalOpen
+    (state) => state.setIsCryptoModalOpen,
   );
   const setIsFromCryptoModalOpen = useTransactionStore(
-    (state) => state.setIsFromCryptoModalOpen
+    (state) => state.setIsFromCryptoModalOpen,
   );
   const setIsToCryptoModalOpen = useTransactionStore(
-    (state) => state.setIsToCryptoModalOpen
+    (state) => state.setIsToCryptoModalOpen,
   );
   const setSellAmount = useTransactionStore((state) => state.setSellAmount);
   const setBuyAmount = useTransactionStore((state) => state.setBuyAmount);
   const setBankCode = useTransactionStore((state) => state.setBankCode);
   const setAccountNumber = useTransactionStore(
-    (state) => state.setAccountNumber
+    (state) => state.setAccountNumber,
   );
   const setWalletAddress = useTransactionStore(
-    (state) => state.setWalletAddress
+    (state) => state.setWalletAddress,
   );
   const setIsAuthModalOpen = useTransactionStore(
-    (state) => state.setIsAuthModalOpen
+    (state) => state.setIsAuthModalOpen,
   );
   const setStep = useTransactionStore((state) => state.setStep);
   const setTransactionData = useTransactionStore(
-    (state) => state.setTransactionData
+    (state) => state.setTransactionData,
   );
   const setSwapData = useTransactionStore((state) => state.setSwapData);
   const resetForm = useTransactionStore((state) => state.resetForm);
@@ -183,7 +183,7 @@ export default function HomePage() {
         });
       }
     },
-    [toast]
+    [toast],
   );
 
   const reference =
@@ -220,8 +220,20 @@ export default function HomePage() {
       enabled:
         !!address &&
         isConnected &&
-        ((activeTab === "sell" && cryptoType === "USDC") ||
-          (activeTab === "swap" && fromCryptoType === "USDC")),
+        (activeTab === "sell" || activeTab === "swap"),
+    },
+  });
+
+  const { data: usdtBalance } = useReadContract({
+    address: SWAP_CONSTANTS.USDT as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: address ? [address as `0x${string}`] : undefined,
+    query: {
+      enabled:
+        !!address &&
+        isConnected &&
+        (activeTab === "sell" || activeTab === "swap"),
     },
   });
 
@@ -245,9 +257,9 @@ export default function HomePage() {
     args:
       address && SWAP_CONSTANTS.SWAP_ROUTER
         ? ([
-          address as `0x${string}`,
-          SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
-        ] as const)
+            address as `0x${string}`,
+            SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
+          ] as const)
         : undefined,
     query: {
       enabled:
@@ -307,7 +319,7 @@ export default function HomePage() {
           onError: () => {
             hasUpdatedSwap.current = false;
           },
-        }
+        },
       );
     }
   }, [
@@ -366,24 +378,32 @@ export default function HomePage() {
     setBuyAmount(formatted);
   };
 
-  const handleCryptoSelect = (type: "CNGN" | "USDC") => {
+  const handleCryptoSelect = (type: "CNGN" | "USDC" | "USDT") => {
     setCryptoType(type);
     setIsCryptoModalOpen(false);
   };
 
-  const handleFromCryptoSelect = (type: "CNGN" | "USDC") => {
+  const handleFromCryptoSelect = (type: "CNGN" | "USDC" | "USDT") => {
     setFromCryptoType(type);
     setIsFromCryptoModalOpen(false);
     if (type === toCryptoType) {
-      setToCryptoType(type === "CNGN" ? "USDC" : "CNGN");
+      if (type === "CNGN") {
+        setToCryptoType("USDC"); // Default to USDC if CNGN selected
+      } else {
+        setToCryptoType("CNGN"); // Default to CNGN
+      }
     }
   };
 
-  const handleToCryptoSelect = (type: "CNGN" | "USDC") => {
+  const handleToCryptoSelect = (type: "CNGN" | "USDC" | "USDT") => {
     setToCryptoType(type);
     setIsToCryptoModalOpen(false);
     if (type === fromCryptoType) {
-      setFromCryptoType(type === "CNGN" ? "USDC" : "CNGN");
+      if (type === "CNGN") {
+        setFromCryptoType("USDC");
+      } else {
+        setFromCryptoType("CNGN");
+      }
     }
   };
 
@@ -485,7 +505,7 @@ export default function HomePage() {
                 // Reset ref on error so we can retry if user changes and types again
                 lastResolvedRef.current = null;
               },
-            }
+            },
           );
         }
       }
@@ -502,8 +522,9 @@ export default function HomePage() {
 
   // 1. Determine if we need a quote
   const isSwapMode = activeTab === "swap";
-  const isSellUsdcMode = activeTab === "sell" && cryptoType === "USDC";
-  const shouldFetchQuote = (isSwapMode || isSellUsdcMode) && !!sellAmount;
+  const isSellQuoteMode =
+    activeTab === "sell" && (cryptoType === "USDC" || cryptoType === "USDT");
+  const shouldFetchQuote = (isSwapMode || isSellQuoteMode) && !!sellAmount;
 
   // 2. Determine Tokens for the Quote
   let quoteTokenIn: string | undefined;
@@ -511,23 +532,87 @@ export default function HomePage() {
   let quoteDecimalsIn = 18; // Default
   let quoteDecimalsOut = 18; // Default
 
+  // Helper to resolve token address
+  const getTokenAddress = (type: string) => {
+    if (type === "USDC") return SWAP_CONSTANTS.USDC;
+    if (type === "USDT") return SWAP_CONSTANTS.USDT;
+    return SWAP_CONSTANTS.CNGN;
+  };
+
+  const getTokenDecimals = (type: string) => {
+    if (type === "USDC") return SWAP_CONSTANTS.USDC_DECIMALS;
+    if (type === "USDT") return SWAP_CONSTANTS.USDT_DECIMALS;
+    return SWAP_CONSTANTS.CNGN_DECIMALS;
+  };
+
   if (isSwapMode) {
-    const isFromUSDC = fromCryptoType === "USDC";
-    quoteTokenIn = isFromUSDC ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN;
-    quoteTokenOut = isFromUSDC ? SWAP_CONSTANTS.CNGN : SWAP_CONSTANTS.USDC;
-    quoteDecimalsIn = isFromUSDC
-      ? SWAP_CONSTANTS.USDC_DECIMALS
-      : SWAP_CONSTANTS.CNGN_DECIMALS;
-    quoteDecimalsOut = isFromUSDC
-      ? SWAP_CONSTANTS.CNGN_DECIMALS
-      : SWAP_CONSTANTS.USDC_DECIMALS;
-  } else if (isSellUsdcMode) {
-    // Sell Mode: Always USDC -> CNGN
-    quoteTokenIn = SWAP_CONSTANTS.USDC;
+    quoteTokenIn = getTokenAddress(fromCryptoType);
+    quoteTokenOut = getTokenAddress(toCryptoType);
+    quoteDecimalsIn = getTokenDecimals(fromCryptoType);
+    quoteDecimalsOut = getTokenDecimals(toCryptoType);
+  } else if (isSellQuoteMode) {
+    // Sell Mode: USDC -> CNGN or USDT -> CNGN
+    quoteTokenIn = getTokenAddress(cryptoType);
     quoteTokenOut = SWAP_CONSTANTS.CNGN;
-    quoteDecimalsIn = SWAP_CONSTANTS.USDC_DECIMALS;
+    quoteDecimalsIn = getTokenDecimals(cryptoType);
     quoteDecimalsOut = SWAP_CONSTANTS.CNGN_DECIMALS;
   }
+
+  // Determine if we need a multi-hop swap (USDT <-> CNGN)
+  // Logic: If USDT is involved with CNGN, we route through USDC
+  // Path: USDT -> USDC -> CNGN (fee 100 for stable, 500 for usdc-cngn)
+  // V3 Fee tiers: 100 (0.01%), 500 (0.05%), 3000 (0.3%), 10000 (1%)
+  const isMultiHop =
+    (quoteTokenIn === SWAP_CONSTANTS.USDT &&
+      quoteTokenOut === SWAP_CONSTANTS.CNGN) ||
+    (quoteTokenIn === SWAP_CONSTANTS.CNGN &&
+      quoteTokenOut === SWAP_CONSTANTS.USDT);
+
+  // Construct path for multi-hop
+  // USDT -> USDC -> CNGN
+  // USDT (6) -- 100 --> USDC (6) -- 500 --> CNGN (6)
+  // Encoded as: [TokenIn][Fee][TokenInter][Fee][TokenOut]
+  // Address is 20 bytes, Fee is 3 bytes (uint24)
+  let multiHopPath: `0x${string}` | undefined;
+
+  if (isMultiHop && quoteTokenIn && quoteTokenOut) {
+    if (
+      quoteTokenIn === SWAP_CONSTANTS.USDT &&
+      quoteTokenOut === SWAP_CONSTANTS.CNGN
+    ) {
+      multiHopPath = encodePacked(
+        ["address", "uint24", "address", "uint24", "address"],
+        [
+          SWAP_CONSTANTS.USDT as `0x${string}`,
+          100, // Fee for USDT-USDC (stable) - usually 0.01%
+          SWAP_CONSTANTS.USDC as `0x${string}`,
+          500, // Fee for USDC-CNGN - assuming 0.05%
+          SWAP_CONSTANTS.CNGN as `0x${string}`,
+        ],
+      );
+    } else {
+      // CNGN -> USDC -> USDT
+      multiHopPath = encodePacked(
+        ["address", "uint24", "address", "uint24", "address"],
+        [
+          SWAP_CONSTANTS.CNGN as `0x${string}`,
+          500,
+          SWAP_CONSTANTS.USDC as `0x${string}`,
+          100,
+          SWAP_CONSTANTS.USDT as `0x${string}`,
+        ],
+      );
+    }
+  }
+
+  // Determine tick spacing (Only for single hop)
+  // 1 if stable-stable (USDC-USDT), 10 otherwise
+  const isStableSwap =
+    (quoteTokenIn === SWAP_CONSTANTS.USDC &&
+      quoteTokenOut === SWAP_CONSTANTS.USDT) ||
+    (quoteTokenIn === SWAP_CONSTANTS.USDT &&
+      quoteTokenOut === SWAP_CONSTANTS.USDC);
+  const tickSpacing = isStableSwap ? 1 : 10;
 
   // 3. Parse the amount
   const parsedQuoteAmount = sellAmount
@@ -535,39 +620,72 @@ export default function HomePage() {
     : 0n;
 
   // 4. Update the Hook
-  const { data: quoteResult, isLoading: isQuoteLoading } = useReadContract({
-    address: QUOTER_ADDRESS,
-    abi: QUOTER_ABI,
-    functionName: "quoteExactInputSingle",
-    args:
-      quoteTokenIn && quoteTokenOut
-        ? [
-          {
-            tokenIn: quoteTokenIn as `0x${string}`,
-            tokenOut: quoteTokenOut as `0x${string}`,
-            amountIn: parsedQuoteAmount,
-            tickSpacing: 10,
-            sqrtPriceLimitX96: 0n,
-          },
-        ]
-        : undefined,
-    query: {
-      enabled: shouldFetchQuote && parsedQuoteAmount > 0n && !!quoteTokenIn,
-      staleTime: 10_000,
-    },
-  });
+  // We need two hooks: one for single hop, one for multi hop
+  const { data: quoteResultSingle, isLoading: isQuoteSingleLoading } =
+    useReadContract({
+      address: QUOTER_ADDRESS,
+      abi: QUOTER_ABI,
+      functionName: "quoteExactInputSingle",
+      args:
+        !isMultiHop && quoteTokenIn && quoteTokenOut
+          ? [
+              {
+                tokenIn: quoteTokenIn as `0x${string}`,
+                tokenOut: quoteTokenOut as `0x${string}`,
+                amountIn: parsedQuoteAmount,
+                tickSpacing: tickSpacing,
+                sqrtPriceLimitX96: 0n,
+              },
+            ]
+          : undefined,
+      query: {
+        enabled:
+          shouldFetchQuote &&
+          !isMultiHop &&
+          parsedQuoteAmount > 0n &&
+          !!quoteTokenIn,
+        staleTime: 10_000,
+      },
+    });
+
+  const { data: quoteResultMulti, isLoading: isQuoteMultiLoading } =
+    useReadContract({
+      address: QUOTER_ADDRESS,
+      abi: QUOTER_ABI,
+      functionName: "quoteExactInput",
+      args:
+        isMultiHop && multiHopPath
+          ? [multiHopPath, parsedQuoteAmount]
+          : undefined,
+      query: {
+        enabled:
+          shouldFetchQuote &&
+          isMultiHop &&
+          parsedQuoteAmount > 0n &&
+          !!multiHopPath,
+        staleTime: 10_000,
+      },
+    });
+
+  const isQuoteLoading = isMultiHop
+    ? isQuoteMultiLoading
+    : isQuoteSingleLoading;
 
   // 5. Extract Result
   // Cast strictly to tuple [amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate]
-  const quoteAmountOut = quoteResult
-    ? (quoteResult as [bigint, bigint, number, bigint])[0]
-    : 0n;
+  const quoteAmountOut = isMultiHop
+    ? quoteResultMulti
+      ? (quoteResultMulti as [bigint, bigint[], number[], bigint])[0]
+      : 0n
+    : quoteResultSingle
+      ? (quoteResultSingle as [bigint, bigint, number, bigint])[0]
+      : 0n;
 
   // Helper to calculate rate from raw contract data
   const calculateExchangeRate = (
     amountIn: number,
     amountOutBigInt: bigint,
-    decimalsOut: number
+    decimalsOut: number,
   ) => {
     if (amountIn <= 0 || amountOutBigInt === 0n) {
       return { toAmount: 0, exchangeRate: 0 };
@@ -641,9 +759,9 @@ export default function HomePage() {
             setTransactionData(response.data);
             setStep("pending");
           },
-        }
+        },
       );
-    } else if (cryptoType === "USDC") {
+    } else if (cryptoType === "USDC" || cryptoType === "USDT") {
       if (!isConnected || !address) {
         toast({
           title: "Wallet not connected",
@@ -663,7 +781,7 @@ export default function HomePage() {
       }
 
       const projectedNgnAmount = parseFloat(
-        formatUnits(quoteAmountOut, SWAP_CONSTANTS.CNGN_DECIMALS)
+        formatUnits(quoteAmountOut, SWAP_CONSTANTS.CNGN_DECIMALS),
       );
 
       console.log(projectedNgnAmount, "projected");
@@ -672,13 +790,15 @@ export default function HomePage() {
         toast({
           title: "Amount too low",
           description: `Minimum withdrawal is 100 NGN. Estimated output: ${projectedNgnAmount.toFixed(
-            2
+            2,
           )} NGN`,
           variant: "destructive",
         });
         return;
       }
 
+      // Re-using initializeSwap which currently expects usdcAmount.
+      // We will pass the amount as usdcAmount even if it is USDT, assuming backend logic or just variable reuse.
       initializeSwap.mutate(
         {
           amount: projectedNgnAmount,
@@ -690,10 +810,18 @@ export default function HomePage() {
         {
           onSuccess: (response) => {
             console.log(response, "response from init");
-            setSwapData(response.data);
+            // FORCE override tokenIn if it's USDT, because backend might return USDC by default?
+            // Safe bet: Update the local state with correct tokenIn if we know it.
+            const updatedResponse = { ...response.data };
+            if (cryptoType === "USDT") {
+              if (updatedResponse.swapParams) {
+                updatedResponse.swapParams.tokenIn = SWAP_CONSTANTS.USDT;
+              }
+            }
+            setSwapData(updatedResponse);
             setStep("execute");
           },
-        }
+        },
       );
     }
   };
@@ -747,7 +875,7 @@ export default function HomePage() {
           setTransactionData(response.data);
           setStep("pending");
         },
-      }
+      },
     );
   };
 
@@ -756,14 +884,24 @@ export default function HomePage() {
     if (!swapData || !address) return;
     try {
       // 1. Setup Tokens
-      const isUSDC =
-        swapData.swapParams.tokenIn.toLowerCase() ===
-        SWAP_CONSTANTS.USDC.toLowerCase();
+      const tokenInAddress = swapData.swapParams.tokenIn;
 
-      const tokenAddress = isUSDC ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN;
+      const isUSDC =
+        tokenInAddress.toLowerCase() === SWAP_CONSTANTS.USDC.toLowerCase();
+      const isUSDT =
+        tokenInAddress.toLowerCase() === SWAP_CONSTANTS.USDT.toLowerCase();
+
+      const tokenAddress = isUSDC
+        ? SWAP_CONSTANTS.USDC
+        : isUSDT
+          ? SWAP_CONSTANTS.USDT
+          : SWAP_CONSTANTS.CNGN;
+
       const decimals = isUSDC
         ? SWAP_CONSTANTS.USDC_DECIMALS
-        : SWAP_CONSTANTS.CNGN_DECIMALS;
+        : isUSDT
+          ? SWAP_CONSTANTS.USDT_DECIMALS
+          : SWAP_CONSTANTS.CNGN_DECIMALS;
 
       // 2. Parse Amount Safely
       // DIRECTLY use the string from the DB/State. Do not convert to number first.
@@ -771,7 +909,7 @@ export default function HomePage() {
       const tokenAmount = parseUnits(rawAmountString, decimals);
 
       console.log(
-        `Approving ${rawAmountString} (${tokenAmount}) for ${tokenAddress}`
+        `Approving ${rawAmountString} (${tokenAmount}) for ${tokenAddress}`,
       );
 
       approveToken({
@@ -797,16 +935,28 @@ export default function HomePage() {
     const isTokenInUSDC =
       swapData.swapParams.tokenIn.toLowerCase() ===
       SWAP_CONSTANTS.USDC.toLowerCase();
+    const isTokenInUSDT =
+      swapData.swapParams.tokenIn.toLowerCase() ===
+      SWAP_CONSTANTS.USDT.toLowerCase();
+
     const isTokenOutUSDC =
       swapData.swapParams.tokenOut.toLowerCase() ===
       SWAP_CONSTANTS.USDC.toLowerCase();
+    const isTokenOutUSDT =
+      swapData.swapParams.tokenOut.toLowerCase() ===
+      SWAP_CONSTANTS.USDT.toLowerCase();
 
     const tokenInDecimals = isTokenInUSDC
       ? SWAP_CONSTANTS.USDC_DECIMALS
-      : SWAP_CONSTANTS.CNGN_DECIMALS;
+      : isTokenInUSDT
+        ? SWAP_CONSTANTS.USDT_DECIMALS
+        : SWAP_CONSTANTS.CNGN_DECIMALS;
+
     const tokenOutDecimals = isTokenOutUSDC
       ? SWAP_CONSTANTS.USDC_DECIMALS
-      : SWAP_CONSTANTS.CNGN_DECIMALS;
+      : isTokenOutUSDT
+        ? SWAP_CONSTANTS.USDT_DECIMALS
+        : SWAP_CONSTANTS.CNGN_DECIMALS;
 
     // 2. Parse Inputs
     // We re-parse amountIn to ensure it matches the decimals exactly
@@ -828,37 +978,106 @@ export default function HomePage() {
     // We use toFixed to avoid scientific notation bugs (e.g. 1e-7)
     const amountOutMinimum = parseUnits(
       safeMinAmount.toFixed(tokenOutDecimals),
-      tokenOutDecimals
+      tokenOutDecimals,
     );
 
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 120); // 2 mins
+
+    const isTokenInCNGN =
+      swapData.swapParams.tokenIn.toLowerCase() ===
+      SWAP_CONSTANTS.CNGN.toLowerCase();
+    const isTokenOutCNGN =
+      swapData.swapParams.tokenOut.toLowerCase() ===
+      SWAP_CONSTANTS.CNGN.toLowerCase();
+
+    // Determine tick spacing (for single hop)
+    // 1 if stable-stable (USDC-USDT), 10 otherwise
+    const isStableSwap =
+      (isTokenInUSDC && isTokenOutUSDT) || (isTokenInUSDT && isTokenOutUSDC);
+    const tickSpacing = isStableSwap ? 1 : 10;
+
+    // Check for Multi-Hop (USDT <-> CNGN)
+    const isMultiHop =
+      (isTokenInUSDT && isTokenOutCNGN) || (isTokenInCNGN && isTokenOutUSDT);
+
+    let multiHopPath: `0x${string}` | undefined;
+
+    if (isMultiHop) {
+      if (isTokenInUSDT && isTokenOutCNGN) {
+        // USDT -> USDC -> CNGN
+        multiHopPath = encodePacked(
+          ["address", "uint24", "address", "uint24", "address"],
+          [
+            SWAP_CONSTANTS.USDT as `0x${string}`,
+            100, // Fee 0.01%
+            SWAP_CONSTANTS.USDC as `0x${string}`,
+            500, // Fee 0.05%
+            SWAP_CONSTANTS.CNGN as `0x${string}`,
+          ],
+        );
+      } else {
+        // CNGN -> USDC -> USDT
+        multiHopPath = encodePacked(
+          ["address", "uint24", "address", "uint24", "address"],
+          [
+            SWAP_CONSTANTS.CNGN as `0x${string}`,
+            500,
+            SWAP_CONSTANTS.USDC as `0x${string}`,
+            100,
+            SWAP_CONSTANTS.USDT as `0x${string}`,
+          ],
+        );
+      }
+    }
 
     try {
       console.log("Executing Swap with params:", {
         tokenIn: swapData.swapParams.tokenIn,
         tokenOut: swapData.swapParams.tokenOut,
+        tickSpacing,
+        isMultiHop,
+        multiHopPath,
         amountIn: amountIn.toString(),
         amountOutMinimum: amountOutMinimum.toString(),
         expectedOutput: expectedOutput,
       });
 
-      executeSwap({
-        address: SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
-        abi: SWAP_ROUTER_ABI,
-        functionName: "exactInputSingle",
-        args: [
-          {
-            tokenIn: swapData.swapParams.tokenIn as `0x${string}`,
-            tokenOut: swapData.swapParams.tokenOut as `0x${string}`,
-            tickSpacing: 10,
-            recipient: swapData.swapParams.recipient as `0x${string}`,
-            deadline,
-            amountIn,
-            amountOutMinimum,
-            sqrtPriceLimitX96: BigInt(0),
-          },
-        ],
-      });
+      if (isMultiHop && multiHopPath) {
+        // Execute Multi-Hop Swap
+        executeSwap({
+          address: SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
+          abi: SWAP_ROUTER_ABI,
+          functionName: "exactInput",
+          args: [
+            {
+              path: multiHopPath,
+              recipient: swapData.swapParams.recipient as `0x${string}`,
+              deadline,
+              amountIn,
+              amountOutMinimum,
+            },
+          ],
+        });
+      } else {
+        // Execute Single-Hop Swap
+        executeSwap({
+          address: SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
+          abi: SWAP_ROUTER_ABI,
+          functionName: "exactInputSingle",
+          args: [
+            {
+              tokenIn: swapData.swapParams.tokenIn as `0x${string}`,
+              tokenOut: swapData.swapParams.tokenOut as `0x${string}`,
+              tickSpacing: tickSpacing,
+              recipient: swapData.swapParams.recipient as `0x${string}`,
+              deadline,
+              amountIn,
+              amountOutMinimum,
+              sqrtPriceLimitX96: BigInt(0),
+            },
+          ],
+        });
+      }
     } catch (error: any) {
       console.error("Swap execution error:", error);
       toast({
@@ -892,12 +1111,9 @@ export default function HomePage() {
 
     const parsedAmount = parseFormattedNumber(sellAmount);
 
-    // Amount Limits
-    if (
-      fromCryptoType === "CNGN" &&
-      toCryptoType === "USDC" &&
-      parsedAmount < 100
-    ) {
+    // Amount Limits - Generic check?
+    // CNGN minimums
+    if (fromCryptoType === "CNGN" && parsedAmount < 100) {
       toast({
         title: "Invalid amount",
         description: "Minimum amount is 100 CNGN",
@@ -905,10 +1121,9 @@ export default function HomePage() {
       });
       return;
     }
-    if (
-      fromCryptoType === "USDC" &&
-      toCryptoType === "CNGN"
-    ) {
+
+    // For USDC/USDT to CNGN, check estimated output
+    if (toCryptoType === "CNGN") {
       // Calculate estimated CNGN amount from quote
       const estimatedCngn = quoteAmountOut
         ? parseFloat(formatUnits(quoteAmountOut, SWAP_CONSTANTS.CNGN_DECIMALS))
@@ -918,12 +1133,13 @@ export default function HomePage() {
       if (estimatedCngn < 100) {
         toast({
           title: "Amount too low",
-          description: `Minimum amount is 100 CNGN equivalent (approx. ${(100 / (estimatedCngn / parsedAmount)).toFixed(4)} USDC)`,
+          description: `Minimum amount is 100 CNGN equivalent`,
           variant: "destructive",
         });
         return;
       }
     }
+
     if (parsedAmount <= 0) {
       toast({
         title: "Invalid amount",
@@ -946,15 +1162,24 @@ export default function HomePage() {
 
     // 2. Preparation
     const isToUSDC = toCryptoType === "USDC";
+    const isToUSDT = toCryptoType === "USDT";
     const tokenOutDecimals = isToUSDC
       ? SWAP_CONSTANTS.USDC_DECIMALS
-      : SWAP_CONSTANTS.CNGN_DECIMALS;
+      : isToUSDT
+        ? SWAP_CONSTANTS.USDT_DECIMALS
+        : SWAP_CONSTANTS.CNGN_DECIMALS;
 
     const { toAmount, exchangeRate } = calculateExchangeRate(
       parsedAmount,
       quoteAmountOut,
-      tokenOutDecimals
+      tokenOutDecimals,
     );
+
+    const getTokenAddress = (type: string) => {
+      if (type === "USDC") return SWAP_CONSTANTS.USDC;
+      if (type === "USDT") return SWAP_CONSTANTS.USDT;
+      return SWAP_CONSTANTS.CNGN;
+    };
 
     const swapResponseData = {
       swap: {
@@ -968,10 +1193,8 @@ export default function HomePage() {
       },
       recipientAddress: address,
       swapParams: {
-        tokenIn:
-          fromCryptoType === "USDC" ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN,
-        tokenOut:
-          toCryptoType === "USDC" ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN,
+        tokenIn: getTokenAddress(fromCryptoType),
+        tokenOut: getTokenAddress(toCryptoType),
         amountIn: parsedAmount.toString(),
         recipient: address,
         slippage: 0.05,
@@ -1008,7 +1231,7 @@ export default function HomePage() {
             variant: "destructive",
           });
         },
-      }
+      },
     );
   };
 
@@ -1032,9 +1255,16 @@ export default function HomePage() {
       const isUSDC =
         swapData.swapParams.tokenIn.toLowerCase() ===
         SWAP_CONSTANTS.USDC.toLowerCase();
+      const isUSDT =
+        swapData.swapParams.tokenIn.toLowerCase() ===
+        SWAP_CONSTANTS.USDT.toLowerCase();
+
       const decimals = isUSDC
         ? SWAP_CONSTANTS.USDC_DECIMALS
-        : SWAP_CONSTANTS.CNGN_DECIMALS;
+        : isUSDT
+          ? SWAP_CONSTANTS.USDT_DECIMALS
+          : SWAP_CONSTANTS.CNGN_DECIMALS;
+
       const amountIn = parseUnits(parsedAmount.toString(), decimals);
       return amountIn > allowance;
     })();
@@ -1057,23 +1287,31 @@ export default function HomePage() {
   let activeBalance: number | undefined = undefined;
 
   if (activeTab === "sell") {
-    if (cryptoType === "USDC" && usdcBalance) {
+    if (cryptoType === "USDC" && usdcBalance !== undefined) {
       activeBalance = parseFloat(
-        formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS)
+        formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS),
       );
-    } else if (cryptoType === "CNGN" && cngnBalance) {
+    } else if (cryptoType === "CNGN" && cngnBalance !== undefined) {
       activeBalance = parseFloat(
-        formatUnits(cngnBalance, SWAP_CONSTANTS.CNGN_DECIMALS)
+        formatUnits(cngnBalance, SWAP_CONSTANTS.CNGN_DECIMALS),
+      );
+    } else if (cryptoType === "USDT" && usdtBalance !== undefined) {
+      activeBalance = parseFloat(
+        formatUnits(usdtBalance, SWAP_CONSTANTS.USDT_DECIMALS),
       );
     }
   } else if (activeTab === "swap") {
-    if (fromCryptoType === "USDC" && usdcBalance) {
+    if (fromCryptoType === "USDC" && usdcBalance !== undefined) {
       activeBalance = parseFloat(
-        formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS)
+        formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS),
       );
-    } else if (fromCryptoType === "CNGN" && cngnBalance) {
+    } else if (fromCryptoType === "CNGN" && cngnBalance !== undefined) {
       activeBalance = parseFloat(
-        formatUnits(cngnBalance, SWAP_CONSTANTS.CNGN_DECIMALS)
+        formatUnits(cngnBalance, SWAP_CONSTANTS.CNGN_DECIMALS),
+      );
+    } else if (fromCryptoType === "USDT" && usdtBalance !== undefined) {
+      activeBalance = parseFloat(
+        formatUnits(usdtBalance, SWAP_CONSTANTS.USDT_DECIMALS),
       );
     }
   }
@@ -1119,7 +1357,7 @@ export default function HomePage() {
                 ? "NGN"
                 : activeTab === "swap"
                   ? (fromCryptoType as "CNGN" | "USDC")
-                  : (cryptoType as "CNGN" | "USDC")
+                  : (cryptoType as "CNGN" | "USDC" | "USDT")
             }
             onCurrencyClick={
               activeTab === "buy"
@@ -1139,10 +1377,10 @@ export default function HomePage() {
               onClick={
                 activeTab === "swap"
                   ? () => {
-                    const temp = fromCryptoType;
-                    setFromCryptoType(toCryptoType);
-                    setToCryptoType(temp);
-                  }
+                      const temp = fromCryptoType;
+                      setFromCryptoType(toCryptoType);
+                      setToCryptoType(temp);
+                    }
                   : undefined
               }
             >
@@ -1159,51 +1397,51 @@ export default function HomePage() {
             amount={
               activeTab === "buy"
                 ? (() => {
-                  if (!buyAmount) return "";
-                  const parsed = parseFormattedNumber(buyAmount);
-                  return parsed.toLocaleString("en-NG");
-                })()
-                : activeTab === "swap" ||
-                  (activeTab === "sell" && cryptoType === "USDC")
-                  ? (() => {
-                    // --- SHARED LOGIC FOR SWAP AND SELL (USDC) ---
-                    if (!sellAmount) return "";
-
-                    if (isQuoteLoading) return "..."; // Optional: Show loading state
-
-                    if (quoteAmountOut > 0n) {
-                      // Use the decimals determined in Step 1
-                      const formatted = formatUnits(
-                        quoteAmountOut,
-                        quoteDecimalsOut
-                      );
-
-                      // For Sell tab (CNGN/NGN), we usually want 0 decimals (NGN is fiat-like here)
-                      // For Swap tab (USDC/CNGN), we might want decimals.
-                      // Adjust formatting based on context if needed.
-
-                      return parseFloat(formatted).toLocaleString("en-US", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      });
-                    }
-                    return "0.00";
-                    // ---------------------------------------------
-                  })()
-                  : (() => {
-                    // --- LOGIC FOR SELL (CNGN ONLY) ---
-                    // CNGN to NGN is 1:1, no swap needed
-                    if (!sellAmount) return "";
-                    const parsed = parseFormattedNumber(sellAmount);
+                    if (!buyAmount) return "";
+                    const parsed = parseFormattedNumber(buyAmount);
                     return parsed.toLocaleString("en-NG");
                   })()
+                : activeTab === "swap" ||
+                    (activeTab === "sell" && cryptoType === "USDC")
+                  ? (() => {
+                      // --- SHARED LOGIC FOR SWAP AND SELL (USDC) ---
+                      if (!sellAmount) return "";
+
+                      if (isQuoteLoading) return "..."; // Optional: Show loading state
+
+                      if (quoteAmountOut > 0n) {
+                        // Use the decimals determined in Step 1
+                        const formatted = formatUnits(
+                          quoteAmountOut,
+                          quoteDecimalsOut,
+                        );
+
+                        // For Sell tab (CNGN/NGN), we usually want 0 decimals (NGN is fiat-like here)
+                        // For Swap tab (USDC/CNGN), we might want decimals.
+                        // Adjust formatting based on context if needed.
+
+                        return parseFloat(formatted).toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        });
+                      }
+                      return "0.00";
+                      // ---------------------------------------------
+                    })()
+                  : (() => {
+                      // --- LOGIC FOR SELL (CNGN ONLY) ---
+                      // CNGN to NGN is 1:1, no swap needed
+                      if (!sellAmount) return "";
+                      const parsed = parseFormattedNumber(sellAmount);
+                      return parsed.toLocaleString("en-NG");
+                    })()
             }
-            onAmountChange={() => { }}
+            onAmountChange={() => {}}
             currencyType={
               activeTab === "buy"
                 ? "CNGN"
                 : activeTab === "swap"
-                  ? (toCryptoType as "CNGN" | "USDC")
+                  ? (toCryptoType as "CNGN" | "USDC" | "USDT")
                   : "NGN"
             }
             onCurrencyClick={
@@ -1318,7 +1556,10 @@ export default function HomePage() {
                       </span>
                       <span className="text-sm font-medium text-white">
                         {parseFloat(
-                          formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS)
+                          formatUnits(
+                            usdcBalance,
+                            SWAP_CONSTANTS.USDC_DECIMALS,
+                          ),
                         ).toLocaleString("en-US", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 6,
@@ -1326,13 +1567,35 @@ export default function HomePage() {
                         USDC
                       </span>
                     </div>
+                    {usdtBalance !== undefined && (
+                      <div className="mt-2 flex items-center justify-between">
+                        <span className="text-xs text-white/50">
+                          USDT Balance
+                        </span>
+                        <span className="text-sm font-medium text-white">
+                          {parseFloat(
+                            formatUnits(
+                              usdtBalance,
+                              SWAP_CONSTANTS.USDT_DECIMALS,
+                            ),
+                          ).toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 6,
+                          })}{" "}
+                          USDT
+                        </span>
+                      </div>
+                    )}
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-xs text-white/50">
                         CNGN Balance
                       </span>
                       <span className="text-sm font-medium text-white">
                         {parseFloat(
-                          formatUnits(cngnBalance, SWAP_CONSTANTS.CNGN_DECIMALS)
+                          formatUnits(
+                            cngnBalance,
+                            SWAP_CONSTANTS.CNGN_DECIMALS,
+                          ),
                         ).toLocaleString("en-US", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 6,
@@ -1398,12 +1661,19 @@ export default function HomePage() {
       const isFromUSDC =
         swapData.swapParams?.tokenIn?.toLowerCase() ===
         SWAP_CONSTANTS.USDC.toLowerCase();
+      const isFromUSDT =
+        swapData.swapParams?.tokenIn?.toLowerCase() ===
+        SWAP_CONSTANTS.USDT.toLowerCase();
+
       const isToUSDC =
         swapData.swapParams?.tokenOut?.toLowerCase() ===
         SWAP_CONSTANTS.USDC.toLowerCase();
+      const isToUSDT =
+        swapData.swapParams?.tokenOut?.toLowerCase() ===
+        SWAP_CONSTANTS.USDT.toLowerCase();
 
-      const fromToken = isFromUSDC ? "USDC" : "CNGN";
-      const toToken = isToUSDC ? "USDC" : "CNGN";
+      const fromToken = isFromUSDC ? "USDC" : isFromUSDT ? "USDT" : "CNGN";
+      const toToken = isToUSDC ? "USDC" : isToUSDT ? "USDT" : "CNGN";
 
       // 3. DETERMINE DISPLAY CONTEXT
       // If we are in the "Sell" tab (USDC -> CNGN), the user expects to see "NGN"
@@ -1434,7 +1704,7 @@ export default function HomePage() {
         );
       }
 
-      const tokenToApprove = isFromUSDC ? "USDC" : "CNGN";
+      const tokenToApprove = fromToken;
 
       return (
         <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl p-4 lg:p-6 space-y-4">
@@ -1596,7 +1866,7 @@ export default function HomePage() {
                     <button
                       onClick={async () => {
                         const success = await copyToClipboard(
-                          transactionData.data.depositAccount.accountNumber
+                          transactionData.data.depositAccount.accountNumber,
                         );
                         if (success) {
                           setCopied(true);
@@ -1703,7 +1973,7 @@ export default function HomePage() {
                     <button
                       onClick={async () => {
                         const success = await copyToClipboard(
-                          transactionData.data.depositAddress
+                          transactionData.data.depositAddress,
                         );
                         if (success) {
                           setCopied(true);
@@ -1787,7 +2057,7 @@ export default function HomePage() {
           open={isCryptoModalOpen}
           onOpenChange={setIsCryptoModalOpen}
           selectedCrypto="CNGN"
-          onSelect={() => { }}
+          onSelect={() => {}}
           showComingSoon={true}
         />
       ) : (
