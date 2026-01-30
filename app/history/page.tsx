@@ -98,7 +98,7 @@ export default function HistoryPage() {
         undefined,
         undefined,
         page,
-        ITEMS_PER_PAGE
+        ITEMS_PER_PAGE,
       );
       return response.data;
     },
@@ -106,7 +106,7 @@ export default function HistoryPage() {
   });
 
   // Combine onramp, offramp, and swap transactions and add type
-  const transactions: AllTransaction[] = [
+  const allTransactions: AllTransaction[] = [
     ...(transactionsData?.onramp?.map((tx) => ({
       ...tx,
       type: "onramp" as const,
@@ -119,9 +119,27 @@ export default function HistoryPage() {
       ...tx,
       type: "swap" as const,
     })) || []),
-  ].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+  ];
+
+  // Filter out swaps that are part of an offramp flow (same reference)
+  // We only want to show the final offramp transaction in the history
+  const uniqueTransactions = allTransactions
+    .filter((tx) => {
+      if (tx.type === "swap") {
+        // Check if there is an offramp with the same reference
+        const hasMatchingOfframp = allTransactions.some(
+          (t) => t.type === "offramp" && t.reference === tx.reference,
+        );
+        return !hasMatchingOfframp;
+      }
+      return true;
+    })
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+  const transactions = uniqueTransactions;
 
   const totalPages = transactionsData?.totalPages || 1;
   const total = transactionsData?.total || 0;
@@ -239,8 +257,8 @@ export default function HistoryPage() {
                                 {isOnramp
                                   ? "Onramp"
                                   : isSwap
-                                  ? "Swap"
-                                  : "Offramp"}
+                                    ? "Swap"
+                                    : "Offramp"}
                               </div>
                               <div className="text-white/60 text-xs md:text-sm mt-0.5">
                                 {formatDate(tx.createdAt)}
@@ -259,7 +277,7 @@ export default function HistoryPage() {
                                 {getStatusIcon(tx.status)}
                                 <span
                                   className={`text-xs md:text-sm font-medium ${getStatusColor(
-                                    tx.status
+                                    tx.status,
                                   )}`}
                                 >
                                   {tx.status}
