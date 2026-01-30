@@ -243,7 +243,10 @@ export default function HomePage() {
     ? swapData.swapParams.tokenIn.toLowerCase() ===
       SWAP_CONSTANTS.USDC.toLowerCase()
       ? SWAP_CONSTANTS.USDC
-      : SWAP_CONSTANTS.CNGN
+      : swapData.swapParams.tokenIn.toLowerCase() ===
+          SWAP_CONSTANTS.USDT.toLowerCase()
+        ? SWAP_CONSTANTS.USDT
+        : SWAP_CONSTANTS.CNGN
     : SWAP_CONSTANTS.USDC; // Default to USDC
 
   const {
@@ -1356,7 +1359,8 @@ export default function HomePage() {
                     return parsed.toLocaleString("en-NG");
                   })()
                 : activeTab === "swap" ||
-                    (activeTab === "sell" && cryptoType === "USDC")
+                    (activeTab === "sell" &&
+                      (cryptoType === "USDC" || cryptoType === "USDT"))
                   ? (() => {
                       // --- SHARED LOGIC FOR SWAP AND SELL (USDC) ---
                       if (!sellAmount) return "";
