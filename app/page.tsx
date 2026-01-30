@@ -568,118 +568,127 @@ export default function HomePage() {
     (quoteTokenIn === SWAP_CONSTANTS.CNGN &&
       quoteTokenOut === SWAP_CONSTANTS.USDT);
 
-  // Construct path for multi-hop
-  // USDT -> USDC -> CNGN
-  // USDT (6) -- 100 --> USDC (6) -- 500 --> CNGN (6)
-  // Encoded as: [TokenIn][Fee][TokenInter][Fee][TokenOut]
-  // Address is 20 bytes, Fee is 3 bytes (uint24)
-  let multiHopPath: `0x${string}` | undefined;
+  // Helper for swap path (Unified)
+  const getSwapPath = (tokenIn: string, tokenOut: string) => {
+    const isUSDT = tokenIn.toLowerCase() === SWAP_CONSTANTS.USDT.toLowerCase();
+    const isUSDC = tokenIn.toLowerCase() === SWAP_CONSTANTS.USDC.toLowerCase();
+    const isCNGN = tokenIn.toLowerCase() === SWAP_CONSTANTS.CNGN.toLowerCase();
 
-  if (isMultiHop && quoteTokenIn && quoteTokenOut) {
-    if (
-      quoteTokenIn === SWAP_CONSTANTS.USDT &&
-      quoteTokenOut === SWAP_CONSTANTS.CNGN
-    ) {
-      multiHopPath = encodePacked(
-        ["address", "uint24", "address", "uint24", "address"],
+    const outUSDT =
+      tokenOut.toLowerCase() === SWAP_CONSTANTS.USDT.toLowerCase();
+    const outUSDC =
+      tokenOut.toLowerCase() === SWAP_CONSTANTS.USDC.toLowerCase();
+    const outCNGN =
+      tokenOut.toLowerCase() === SWAP_CONSTANTS.CNGN.toLowerCase();
+
+    // Multi-Hop: USDT -> USDC -> CNGN
+    if (isUSDT && outCNGN) {
+      return encodePacked(
+        ["address", "int24", "address", "int24", "address"],
         [
           SWAP_CONSTANTS.USDT as `0x${string}`,
-          100, // Fee for USDT-USDC (stable) - usually 0.01%
+          1, // tickSpacing 1
           SWAP_CONSTANTS.USDC as `0x${string}`,
-          500, // Fee for USDC-CNGN - assuming 0.05%
+          10, // tickSpacing 10
           SWAP_CONSTANTS.CNGN as `0x${string}`,
         ],
       );
-    } else {
-      // CNGN -> USDC -> USDT
-      multiHopPath = encodePacked(
-        ["address", "uint24", "address", "uint24", "address"],
+    }
+    // Multi-Hop: CNGN -> USDC -> USDT
+    if (isCNGN && outUSDT) {
+      return encodePacked(
+        ["address", "int24", "address", "int24", "address"],
         [
           SWAP_CONSTANTS.CNGN as `0x${string}`,
-          500,
+          10,
           SWAP_CONSTANTS.USDC as `0x${string}`,
-          100,
+          1,
           SWAP_CONSTANTS.USDT as `0x${string}`,
         ],
       );
     }
-  }
 
-  // Determine tick spacing (Only for single hop)
-  // 1 if stable-stable (USDC-USDT), 10 otherwise
-  const isStableSwap =
-    (quoteTokenIn === SWAP_CONSTANTS.USDC &&
-      quoteTokenOut === SWAP_CONSTANTS.USDT) ||
-    (quoteTokenIn === SWAP_CONSTANTS.USDT &&
-      quoteTokenOut === SWAP_CONSTANTS.USDC);
-  const tickSpacing = isStableSwap ? 1 : 10;
+    // Direct: USDC -> USDT (Stable)
+    if (isUSDC && outUSDT) {
+      return encodePacked(
+        ["address", "int24", "address"],
+        [
+          SWAP_CONSTANTS.USDC as `0x${string}`,
+          1,
+          SWAP_CONSTANTS.USDT as `0x${string}`,
+        ],
+      );
+    }
+    // Direct: USDT -> USDC (Stable)
+    if (isUSDT && outUSDC) {
+      return encodePacked(
+        ["address", "int24", "address"],
+        [
+          SWAP_CONSTANTS.USDT as `0x${string}`,
+          1,
+          SWAP_CONSTANTS.USDC as `0x${string}`,
+        ],
+      );
+    }
+
+    // Direct: USDC -> CNGN (Normal)
+    if (isUSDC && outCNGN) {
+      return encodePacked(
+        ["address", "int24", "address"],
+        [
+          SWAP_CONSTANTS.USDC as `0x${string}`,
+          10,
+          SWAP_CONSTANTS.CNGN as `0x${string}`,
+        ],
+      );
+    }
+    // Direct: CNGN -> USDC (Normal)
+    if (isCNGN && outUSDC) {
+      return encodePacked(
+        ["address", "int24", "address"],
+        [
+          SWAP_CONSTANTS.CNGN as `0x${string}`,
+          10,
+          SWAP_CONSTANTS.USDC as `0x${string}`,
+        ],
+      );
+    }
+
+    return undefined;
+  };
+
+  // Construct path (Unified)
+  let swapPath: `0x${string}` | undefined;
+
+  if (shouldFetchQuote && quoteTokenIn && quoteTokenOut) {
+    swapPath = getSwapPath(quoteTokenIn, quoteTokenOut);
+  }
 
   // 3. Parse the amount
   const parsedQuoteAmount = sellAmount
     ? parseUnits(parseFormattedNumber(sellAmount).toString(), quoteDecimalsIn)
     : 0n;
 
-  // 4. Update the Hook
-  // We need two hooks: one for single hop, one for multi hop
-  const { data: quoteResultSingle, isLoading: isQuoteSingleLoading } =
-    useReadContract({
-      address: QUOTER_ADDRESS,
-      abi: QUOTER_ABI,
-      functionName: "quoteExactInputSingle",
-      args:
-        !isMultiHop && quoteTokenIn && quoteTokenOut
-          ? [
-              {
-                tokenIn: quoteTokenIn as `0x${string}`,
-                tokenOut: quoteTokenOut as `0x${string}`,
-                amountIn: parsedQuoteAmount,
-                tickSpacing: tickSpacing,
-                sqrtPriceLimitX96: 0n,
-              },
-            ]
-          : undefined,
-      query: {
-        enabled:
-          shouldFetchQuote &&
-          !isMultiHop &&
-          parsedQuoteAmount > 0n &&
-          !!quoteTokenIn,
-        staleTime: 10_000,
-      },
-    });
-
-  const { data: quoteResultMulti, isLoading: isQuoteMultiLoading } =
-    useReadContract({
-      address: QUOTER_ADDRESS,
-      abi: QUOTER_ABI,
-      functionName: "quoteExactInput",
-      args:
-        isMultiHop && multiHopPath
-          ? [multiHopPath, parsedQuoteAmount]
-          : undefined,
-      query: {
-        enabled:
-          shouldFetchQuote &&
-          isMultiHop &&
-          parsedQuoteAmount > 0n &&
-          !!multiHopPath,
-        staleTime: 10_000,
-      },
-    });
-
-  const isQuoteLoading = isMultiHop
-    ? isQuoteMultiLoading
-    : isQuoteSingleLoading;
+  // 4. Update the Hook (Unified Quote Fetching)
+  const { data: quoteResult, isLoading: isQuoteLoading } = useReadContract({
+    address: QUOTER_ADDRESS,
+    abi: QUOTER_ABI,
+    functionName: "quoteExactInput",
+    args:
+      swapPath && parsedQuoteAmount > 0n
+        ? [swapPath, parsedQuoteAmount]
+        : undefined,
+    query: {
+      enabled: shouldFetchQuote && parsedQuoteAmount > 0n && !!swapPath,
+      staleTime: 10_000,
+    },
+  });
 
   // 5. Extract Result
-  // Cast strictly to tuple [amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate]
-  const quoteAmountOut = isMultiHop
-    ? quoteResultMulti
-      ? (quoteResultMulti as [bigint, bigint[], number[], bigint])[0]
-      : 0n
-    : quoteResultSingle
-      ? (quoteResultSingle as [bigint, bigint, number, bigint])[0]
-      : 0n;
+  // Cast strictly to tuple [amountOut, sqrtPriceX96AfterList, initializedTicksCrossedList, gasEstimate]
+  const quoteAmountOut = quoteResult
+    ? (quoteResult as [bigint, bigint[], number[], bigint])[0]
+    : 0n;
 
   // Helper to calculate rate from raw contract data
   const calculateExchangeRate = (
@@ -983,74 +992,31 @@ export default function HomePage() {
 
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 120); // 2 mins
 
-    const isTokenInCNGN =
-      swapData.swapParams.tokenIn.toLowerCase() ===
-      SWAP_CONSTANTS.CNGN.toLowerCase();
-    const isTokenOutCNGN =
-      swapData.swapParams.tokenOut.toLowerCase() ===
-      SWAP_CONSTANTS.CNGN.toLowerCase();
-
-    // Determine tick spacing (for single hop)
-    // 1 if stable-stable (USDC-USDT), 10 otherwise
-    const isStableSwap =
-      (isTokenInUSDC && isTokenOutUSDT) || (isTokenInUSDT && isTokenOutUSDC);
-    const tickSpacing = isStableSwap ? 1 : 10;
-
-    // Check for Multi-Hop (USDT <-> CNGN)
-    const isMultiHop =
-      (isTokenInUSDT && isTokenOutCNGN) || (isTokenInCNGN && isTokenOutUSDT);
-
-    let multiHopPath: `0x${string}` | undefined;
-
-    if (isMultiHop) {
-      if (isTokenInUSDT && isTokenOutCNGN) {
-        // USDT -> USDC -> CNGN
-        multiHopPath = encodePacked(
-          ["address", "uint24", "address", "uint24", "address"],
-          [
-            SWAP_CONSTANTS.USDT as `0x${string}`,
-            100, // Fee 0.01%
-            SWAP_CONSTANTS.USDC as `0x${string}`,
-            500, // Fee 0.05%
-            SWAP_CONSTANTS.CNGN as `0x${string}`,
-          ],
-        );
-      } else {
-        // CNGN -> USDC -> USDT
-        multiHopPath = encodePacked(
-          ["address", "uint24", "address", "uint24", "address"],
-          [
-            SWAP_CONSTANTS.CNGN as `0x${string}`,
-            500,
-            SWAP_CONSTANTS.USDC as `0x${string}`,
-            100,
-            SWAP_CONSTANTS.USDT as `0x${string}`,
-          ],
-        );
-      }
-    }
+    // Get Path (Unified)
+    const swapPath = getSwapPath(
+      swapData.swapParams.tokenIn,
+      swapData.swapParams.tokenOut,
+    );
 
     try {
       console.log("Executing Swap with params:", {
         tokenIn: swapData.swapParams.tokenIn,
         tokenOut: swapData.swapParams.tokenOut,
-        tickSpacing,
-        isMultiHop,
-        multiHopPath,
+        path: swapPath,
         amountIn: amountIn.toString(),
         amountOutMinimum: amountOutMinimum.toString(),
         expectedOutput: expectedOutput,
       });
 
-      if (isMultiHop && multiHopPath) {
-        // Execute Multi-Hop Swap
+      if (swapPath) {
+        // Execute Swap (Unified - exactInput)
         executeSwap({
           address: SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
           abi: SWAP_ROUTER_ABI,
           functionName: "exactInput",
           args: [
             {
-              path: multiHopPath,
+              path: swapPath,
               recipient: swapData.swapParams.recipient as `0x${string}`,
               deadline,
               amountIn,
@@ -1059,23 +1025,11 @@ export default function HomePage() {
           ],
         });
       } else {
-        // Execute Single-Hop Swap
-        executeSwap({
-          address: SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
-          abi: SWAP_ROUTER_ABI,
-          functionName: "exactInputSingle",
-          args: [
-            {
-              tokenIn: swapData.swapParams.tokenIn as `0x${string}`,
-              tokenOut: swapData.swapParams.tokenOut as `0x${string}`,
-              tickSpacing: tickSpacing,
-              recipient: swapData.swapParams.recipient as `0x${string}`,
-              deadline,
-              amountIn,
-              amountOutMinimum,
-              sqrtPriceLimitX96: BigInt(0),
-            },
-          ],
+        console.error("Invalid swap path");
+        toast({
+          title: "Swap Failed",
+          description: "Could not determine swap path",
+          variant: "destructive",
         });
       }
     } catch (error: any) {
