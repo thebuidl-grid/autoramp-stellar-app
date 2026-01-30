@@ -32,7 +32,7 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
   // Sync merchant status to store when fetched
   useEffect(() => {
     if (merchantStatus?.data) {
-      const isVerifiedMerchant = merchantStatus.data.onboardingStatus === "VERIFIED";
+      const isVerifiedMerchant = merchantStatus.data.onboardingStaus === "VERIFIED";
       if (user?.isMerchant !== isVerifiedMerchant) {
         updateUser({
           isMerchant: isVerifiedMerchant,

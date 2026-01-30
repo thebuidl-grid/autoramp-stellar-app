@@ -15,7 +15,7 @@ export default function UserApiKeysPage() {
     const { data: keys, isLoading: isKeysLoading } = useQuery({
         queryKey: ["user-api-keys"],
         queryFn: async () => {
-            const { data } = await userApi.getUserApiKeys();
+            const { data } = await userApi.getMerchantApiKeys();
             return data;
         },
     });
