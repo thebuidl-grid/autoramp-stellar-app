@@ -19,7 +19,6 @@ import { useToast } from "@/components/ui/toast";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, CheckCircle2, ChevronRight, ChevronLeft, Upload, Building2, User, FileText, Landmark, X, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import axios from "axios";
 import { publicMerchantApi } from "@/lib/merchant";
 import { useAuthStore } from "@/lib/store";
 import { Badge } from "@/components/ui/badge";
@@ -62,9 +61,9 @@ const kybSchema = z.object({
         lastName: z.string().min(2, "Last name is required"),
         nationality: z.string().min(2, "Nationality is required"),
         bvn: z.string().length(11, "BVN must be 11 digits"),
-        proofOfAddress: z.any(),
+        proofOfAddress: z.union([z.string().min(1, "Proof of address is required"), z.any()]).refine(val => val !== undefined && val !== null && val !== "", "Proof of address is required"),
         idType: z.string().min(2, "ID type is required"),
-        idUrl: z.any(),
+        idUrl: z.union([z.string().min(1, "ID document is required"), z.any()]).refine(val => val !== undefined && val !== null && val !== "", "ID document is required"),
         role: z.string().min(2, "Role is required"),
     })).min(1, "At least one director is required"),
 });
@@ -118,6 +117,16 @@ export function KYBForm() {
     const handleAutoUpload = async (file: File, fieldName: string) => {
         if (!file) return;
 
+        // 10MB limit check
+        if (file.size > 10 * 1024 * 1024) {
+            toast({
+                title: "File too large",
+                description: "The selected file exceeds the 10MB limit. Please upload a smaller file.",
+                variant: "destructive",
+            });
+            return;
+        }
+
         setUploadingFields(prev => ({ ...prev, [fieldName]: true }));
         try {
             const url = await uploadFile(file);
@@ -140,6 +149,14 @@ export function KYBForm() {
     };
 
     const handleCloudinaryUpload = async (file: File) => {
+        if (file.size > 10 * 1024 * 1024) {
+            toast({
+                title: "File too large",
+                description: "The selected file exceeds the 10MB limit.",
+                variant: "destructive",
+            });
+            throw new Error("File too large");
+        }
         return await uploadFile(file);
     };
 
@@ -969,16 +986,6 @@ export function KYBForm() {
                         Back
                     </Button>
 
-                    {currentStep === 2 && (
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setCurrentStep((prev) => prev + 1)}
-                            className="mr-2 border-white/10 text-white/60 hover:text-white"
-                        >
-                            Skip for now
-                        </Button>
-                    )}
 
                     {currentStep === STEPS.length - 1 ? (
                         <Button
