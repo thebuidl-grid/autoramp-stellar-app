@@ -634,6 +634,7 @@ export interface MerchantUser {
   shareholders?: Shareholder[];
   bankAccounts?: MerchantBankAccount[];
   contactPerson?: ContactPerson;
+  webhookUrl?: string;
 }
 
 export interface MerchantsResponse {
@@ -867,8 +868,13 @@ export const swapApi = {
     api.get<Record<string, string>>(
       `/swap/balances${address ? `?address=${address}` : ""}`,
     ),
+};
 
-  getUsdNgnRate: () => api.get<{ rate: number }>("/swap/usd-ngn-rate"),
+export const miscApi = {
+  getUsdNgnRate: (amount?: number) =>
+    api.get<{ rate: number }>(
+      `/swap/usd-ngn-rate${amount ? `?amount=${amount}` : ""}`,
+    ),
 
   estimateNgn: (cngnAmount: number) =>
     api.get<{ estimatedNgn: number; usdNgnRate: number; usdValue: number }>(
