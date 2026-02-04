@@ -82,7 +82,7 @@ export function SavedWalletsManager() {
                                             {wallet.name || "Wallet"}
                                         </h3>
                                         <p className="text-sm text-zinc-400 font-mono mt-1">
-                                            {formatAddress(wallet.walletAddress)}
+                                            {formatAddress(wallet.address)}
                                         </p>
                                         <div className="flex items-center gap-3 mt-1">
                                             <span className="text-xs text-zinc-500 capitalize">
@@ -98,7 +98,7 @@ export function SavedWalletsManager() {
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handleDelete(wallet.id, wallet.walletAddress)}
+                                    onClick={() => handleDelete(wallet.id, wallet.address)}
                                     disabled={deleteWallet.isPending}
                                     className="text-red-400 hover:text-red-300 hover:bg-red-400/10"
                                 >
