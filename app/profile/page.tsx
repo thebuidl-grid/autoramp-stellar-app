@@ -116,19 +116,6 @@ export default function ProfilePage() {
                         {user?.walletAddress || "Not connected"}
                       </div>
                     </div>
-
-                    {/* User ID (for debugging/admin purposes) */}
-                    {user?.id && (
-                      <div className="space-y-2">
-                        <label className="text-sm text-white/70 flex items-center gap-2">
-                          <User size={16} />
-                          User ID
-                        </label>
-                        <div className="px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white font-mono text-sm">
-                          {user.id}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
