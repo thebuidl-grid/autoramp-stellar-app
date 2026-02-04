@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { format } from "date-fns";
 import {
     CheckCircle2,
@@ -16,7 +16,8 @@ import {
     Loader2
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { Transaction, SwapTransaction, PaginatedResponse } from "@/lib/api";
+import { useMerchantStatus } from "@/lib/hooks";
+import { Transaction, SwapTransaction } from "@/lib/api";
 import { merchantApi } from "@/lib/merchant";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,31 +32,13 @@ type PlatformTransaction =
     | (SwapTransaction & { _type: "swap"; userEmail?: string });
 
 export default function MerchantTransactionsPage() {
-    const [merchantId, setMerchantId] = useState<string | null>(null);
+    const { data: status } = useMerchantStatus();
+    const merchantId = status?.merchantId || null;
     const [searchTerm, setSearchTerm] = useState("");
     const [page, setPage] = useState(1);
     const limit = 10;
     const [activeTab, setActiveTab] = useState("all");
     const { toast } = useToast();
-
-    useEffect(() => {
-        const fetchStatus = async () => {
-            try {
-                const { data } = await merchantApi.getMerchantStatus();
-                if (data.merchantId) {
-                    setMerchantId(data.merchantId);
-                }
-            } catch (error) {
-                console.error("Failed to fetch merchant status:", error);
-                toast({
-                    title: "Error",
-                    description: "Failed to load merchant information",
-                    variant: "destructive",
-                });
-            }
-        };
-        fetchStatus();
-    }, [toast]);
 
     const { data: onrampData, isLoading: isLoadingOnramp } = useQuery({
         queryKey: ["merchant-transactions-onramp", merchantId, page],
@@ -65,6 +48,7 @@ export default function MerchantTransactionsPage() {
             return data;
         },
         enabled: !!merchantId && (activeTab === "all" || activeTab === "onramp"),
+        staleTime: 60 * 1000, // 1 minute
     });
 
     const { data: offrampData, isLoading: isLoadingOfframp } = useQuery({
@@ -75,6 +59,7 @@ export default function MerchantTransactionsPage() {
             return data;
         },
         enabled: !!merchantId && (activeTab === "all" || activeTab === "offramp"),
+        staleTime: 60 * 1000, // 1 minute
     });
 
     const { data: swapData, isLoading: isLoadingSwap } = useQuery({
@@ -85,6 +70,7 @@ export default function MerchantTransactionsPage() {
             return data;
         },
         enabled: !!merchantId && (activeTab === "all" || activeTab === "swap"),
+        staleTime: 60 * 1000, // 1 minute
     });
 
     const { data: summary, isLoading: isLoadingSummary } = useQuery({
@@ -95,9 +81,10 @@ export default function MerchantTransactionsPage() {
             return data;
         },
         enabled: !!merchantId,
+        staleTime: 5 * 60 * 1000, // 5 minutes
     });
 
-    const isLoading = !merchantId || isLoadingOnramp || isLoadingOfframp || isLoadingSwap;
+    const isLoading = (!!status && !merchantId) || isLoadingOnramp || isLoadingOfframp || isLoadingSwap;
 
     // Combine transactions based on available data
     const allTransactions: PlatformTransaction[] = [];
