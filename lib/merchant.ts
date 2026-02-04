@@ -21,6 +21,7 @@ export interface MerchantBusinessDetailsDto {
     state?: string;
     country?: string;
     postalCode?: string;
+    webhookUrl?: string;
     metadata?: any;
 }
 
@@ -190,6 +191,12 @@ export const merchantApi = {
 
     updateBankAccount: (id: string, data: Partial<MerchantBankAccountDto>) =>
         api.patch<{ message: string }>(`/merchants/bank-accounts/${id}`, data),
+
+    getWebhookUrl: (merchantId: string) =>
+        api.get<{ webhookUrl: string }>(`/merchants/${merchantId}/settings/webhook`),
+
+    updateWebhookUrl: (merchantId: string, webhookUrl: string) =>
+        api.patch<{ webhookUrl: string }>(`/merchants/${merchantId}/settings/webhook`, { webhookUrl }),
 };
 
 // ============== Public Merchant API Object ==============
