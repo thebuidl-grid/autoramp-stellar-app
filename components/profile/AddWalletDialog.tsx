@@ -20,7 +20,7 @@ export function AddWalletDialog({ open, onOpenChange }: AddWalletDialogProps) {
     const createWallet = useCreateWallet();
 
     const [walletAddress, setWalletAddress] = useState("");
-    const [network, setNetwork] = useState("ethereum");
+    const [network, setNetwork] = useState("base");
     const [name, setName] = useState("");
 
     const handleAdd = async () => {
@@ -28,6 +28,15 @@ export function AddWalletDialog({ open, onOpenChange }: AddWalletDialogProps) {
             toast({
                 title: "Missing wallet address",
                 description: "Please enter a wallet address",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (!name) {
+            toast({
+                title: "Missing wallet name",
+                description: "Please enter a name for this wallet",
                 variant: "destructive",
             });
             return;
@@ -45,9 +54,9 @@ export function AddWalletDialog({ open, onOpenChange }: AddWalletDialogProps) {
 
         createWallet.mutate(
             {
-                walletAddress,
+                address: walletAddress,
                 network,
-                name: name || undefined,
+                name,
             },
             {
                 onSuccess: () => {
@@ -71,7 +80,7 @@ export function AddWalletDialog({ open, onOpenChange }: AddWalletDialogProps) {
 
     const handleClose = () => {
         setWalletAddress("");
-        setNetwork("ethereum");
+        setNetwork("base");
         setName("");
         onOpenChange(false);
     };
@@ -110,17 +119,14 @@ export function AddWalletDialog({ open, onOpenChange }: AddWalletDialogProps) {
                             onChange={(e) => setNetwork(e.target.value)}
                             className="w-full h-10 rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white outline-none"
                         >
-                            <option value="ethereum">Ethereum</option>
-                            <option value="polygon">Polygon</option>
                             <option value="base">Base</option>
-                            <option value="arbitrum">Arbitrum</option>
-                            <option value="optimism">Optimism</option>
+                            <option value="bsc">BNB Smart Chain</option>
                         </select>
                     </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="name" className="text-zinc-200">
-                            Name (Optional)
+                            Wallet Name
                         </Label>
                         <Input
                             id="name"
@@ -130,7 +136,7 @@ export function AddWalletDialog({ open, onOpenChange }: AddWalletDialogProps) {
                             className="bg-zinc-800 border-zinc-700 text-white"
                         />
                         <p className="text-xs text-zinc-400">
-                            Give this wallet a friendly name for easy identification
+                            Give this wallet a name for easy identification
                         </p>
                     </div>
                 </div>
