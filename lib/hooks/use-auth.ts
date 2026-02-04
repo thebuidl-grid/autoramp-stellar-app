@@ -105,8 +105,12 @@ export function useMerchantStatus() {
 
   return useQuery({
     queryKey: ["merchantStatus", user?.id],
-    queryFn: () => merchantApi.getMerchantStatus(),
+    queryFn: async () => {
+      const response = await merchantApi.getMerchantStatus();
+      return response.data;
+    },
     enabled: !!user,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
 
@@ -118,8 +122,12 @@ export function useIsOnboarded() {
 
   return useQuery({
     queryKey: ["merchantOnboarded", user?.id],
-    queryFn: () => merchantApi.getIsOnboarded(),
+    queryFn: async () => {
+      const response = await merchantApi.getIsOnboarded();
+      return response.data;
+    },
     enabled: !!user,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
 
