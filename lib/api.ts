@@ -144,10 +144,12 @@ export interface SavedAccountNumber {
   id: string;
   userId: string;
   accountNumber: string;
+  accountName?: string;
   bankCode: string;
   bankName: string;
   createdAt: string;
   updatedAt: string;
+  metadata?: any;
 }
 
 export interface CreateSavedAccountDto {
@@ -182,24 +184,24 @@ export interface UpdateUserWalletDto {
 
 // OTP verification for adding saved accounts
 export interface InitiateAddAccountDto {
-  accountNumber: string;
-  bankCode: string;
+  email: string;
 }
 
 export interface InitiateAddAccountResponse {
   success: boolean;
   message: string;
-  accountName: string;
-  accountNumber: string;
-  bankCode: string;
-  bankName: string;
 }
 
 export interface VerifyAndAddAccountDto {
-  accountNumber: string;
-  bankCode: string;
-  bankName: string;
-  otpCode: string;
+  code: string;
+  email: string;
+  bankAccount: {
+    bankCode: string;
+    accountNumber: string;
+    accountName: string;
+    bankName: string;
+    metadata?: any;
+  };
 }
 
 export const userApi = {
@@ -221,20 +223,20 @@ export const userApi = {
 
   // Saved Bank Accounts with OTP verification
   initiateAddAccount: (data: InitiateAddAccountDto) =>
-    api.post<InitiateAddAccountResponse>("/user/saved-accounts/initiate", data),
+    api.post<InitiateAddAccountResponse>("/user/bank-accounts/initiate-verification", data),
 
   verifyAndAddAccount: (data: VerifyAndAddAccountDto) =>
-    api.post<SavedAccountNumber>("/user/saved-accounts/verify-and-add", data),
+    api.post<SavedAccountNumber>("/user/bank-accounts/complete-verification", data),
 
-  getSavedAccounts: () => api.get<SavedAccountNumber[]>("/user/saved-accounts"),
+  getSavedAccounts: () => api.get<SavedAccountNumber[]>("/user/bank-accounts"),
 
   getSavedAccountById: (id: string) =>
-    api.get<SavedAccountNumber>(`/user/saved-accounts/${id}`),
+    api.get<SavedAccountNumber>(`/user/bank-accounts/${id}`),
 
   updateSavedAccount: (id: string, data: UpdateSavedAccountDto) =>
-    api.patch<SavedAccountNumber>(`/user/saved-accounts/${id}`, data),
+    api.patch<SavedAccountNumber>(`/user/bank-accounts/${id}`, data),
 
-  deleteSavedAccount: (id: string) => api.delete(`/user/saved-accounts/${id}`),
+  deleteSavedAccount: (id: string) => api.delete(`/user/bank-accounts/${id}`),
 
   // User Wallets
   createUserWallet: (data: CreateUserWalletDto) =>
