@@ -7,6 +7,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/lib/store";
 
 const sidebarLinks = [
     { name: "Dashboard", href: "/merchant/dashboard", icon: LayoutDashboard },
@@ -18,13 +19,11 @@ const sidebarLinks = [
 export function MerchantSidebar() {
     const pathname = usePathname();
     const router = useRouter();
+    const { logout } = useAuthStore();
     const [isMobileOpen, setIsMobileOpen] = useState(false);
 
     const handleLogout = () => {
-        if (typeof window !== "undefined") {
-            localStorage.removeItem("token");
-            localStorage.removeItem("auth-storage");
-        }
+        logout();
         router.push("/merchant/login");
     };
 

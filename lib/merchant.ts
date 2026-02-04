@@ -116,6 +116,20 @@ export const merchantApi = {
     submitBankAccount: (data: MerchantBankAccountDto) =>
         api.post("/merchants/bank-accounts", data),
 
+    // Directors Management
+    updateDirector: (id: string, data: Partial<MerchantDirectorDto>) =>
+        api.patch<{ message: string }>(`/merchants/directors/${id}`, data),
+
+    removeDirector: (id: string) =>
+        api.delete<{ message: string }>(`/merchants/directors/${id}`),
+
+    // Shareholders Management
+    updateShareholder: (id: string, data: Partial<MerchantShareholderDto>) =>
+        api.patch<{ message: string }>(`/merchants/shareholders/${id}`, data),
+
+    removeShareholder: (id: string) =>
+        api.delete<{ message: string }>(`/merchants/shareholders/${id}`),
+
     // Status & Profile
     getMerchantStatus: () =>
         api.get<{ onboardingStaus: "VERIFIED" | "PENDING" | "REJECTED" | null; hasMerchantRecord: boolean; merchantId: string | null }>("/merchants/status"),
@@ -123,8 +137,20 @@ export const merchantApi = {
     getIsOnboarded: () =>
         api.get<{ isOnboarded: boolean }>("/merchants/onboarded"),
 
-    getMerchantProfile: () =>
-        api.get<any>("/merchants/onboarding/profile"),
+    getMerchantProfile: (merchantId?: string) =>
+        api.get<any>(`/merchants/onboarding/profile${merchantId ? `?merchantId=${merchantId}` : ""}`),
+
+    getDocumentation: (merchantId: string) =>
+        api.get<any>(`/merchants/documentations?merchantId=${merchantId}`),
+
+    getDirectors: (merchantId: string) =>
+        api.get<any[]>(`/merchants/directors?merchantId=${merchantId}`),
+
+    getShareholders: (merchantId: string) =>
+        api.get<any[]>(`/merchants/shareholders?merchantId=${merchantId}`),
+
+    getBankAccounts: (merchantId: string) =>
+        api.get<any[]>(`/merchants/bank-accounts?merchantId=${merchantId}`),
 
     // API Key Management (Merchant Specific)
     getApiKeys: (merchantId?: string) =>
@@ -154,6 +180,16 @@ export const merchantApi = {
 
     getTransactionsSwap: (merchantId: string, page: number = 1, limit: number = 10) =>
         api.get<PaginatedResponse<SwapTransaction>>(`/merchants/${merchantId}/transactions/swap?page=${page}&limit=${limit}`),
+
+    // Profile Updates
+    updateBusinessDetails: (id: string, data: Partial<MerchantBusinessDetailsDto>) =>
+        api.patch<{ message: string }>(`/merchants/onboarding/${id}`, data),
+
+    updateDocumentation: (id: string, data: Partial<MerchantDocumentationDto>) =>
+        api.patch<{ message: string }>(`/merchants/documentations/${id}`, data),
+
+    updateBankAccount: (id: string, data: Partial<MerchantBankAccountDto>) =>
+        api.patch<{ message: string }>(`/merchants/bank-accounts/${id}`, data),
 };
 
 // ============== Public Merchant API Object ==============

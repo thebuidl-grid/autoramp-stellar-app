@@ -23,11 +23,15 @@ import { Loader2, Plus, Copy, Check, AlertCircle, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+import { useMerchantStatus, useMerchantApiKeys } from "@/lib/hooks";
+
 export default function MerchantApiKeysPage() {
-    const [isLoading, setIsLoading] = useState(true);
-    const [apiKeys, setApiKeys] = useState<MerchantApiKey[]>([]);
-    const [isMerchant, setIsMerchant] = useState<boolean | null>(null);
-    const [onboardingStatus, setOnboardingStatus] = useState<"VERIFIED" | "PENDING" | "REJECTED" | null>(null);
+    const { data: status, isLoading: isStatusLoading } = useMerchantStatus();
+    const { data: apiKeys = [], isLoading: isKeysLoading, refetch: fetchApiKeys } = useMerchantApiKeys();
+
+    const isMerchant = status?.hasMerchantRecord ?? null;
+    const onboardingStatus = status?.onboardingStaus ?? null;
+    const isLoading = isStatusLoading || (isMerchant && onboardingStatus === "VERIFIED" && isKeysLoading);
 
     const router = useRouter();
     const { toast } = useToast();
@@ -44,49 +48,6 @@ export default function MerchantApiKeysPage() {
     const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
     const [keyToRevoke, setKeyToRevoke] = useState<MerchantApiKey | null>(null);
     const [isRevoking, setIsRevoking] = useState(false);
-
-    useEffect(() => {
-        const checkAccess = async () => {
-            try {
-                // Only need getMerchantStatus now as it contains all info
-                const { data } = await merchantApi.getMerchantStatus();
-
-                const hasRecord = data.hasMerchantRecord;
-                setIsMerchant(hasRecord);
-                setOnboardingStatus(data.onboardingStaus);
-
-                if (hasRecord && data.onboardingStaus === "VERIFIED") {
-                    await fetchApiKeys();
-                }
-            } catch (error) {
-                console.error("Access check failed:", error);
-                toast({
-                    title: "Authentication Error",
-                    description: "Failed to verify merchant status. Please login again.",
-                    variant: "destructive",
-                });
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        checkAccess();
-    }, []);
-
-
-    const fetchApiKeys = async () => {
-        try {
-            const response = await merchantApi.getApiKeys();
-            setApiKeys(response.data);
-        } catch (error) {
-            console.error("Failed to fetch API keys:", error);
-            toast({
-                title: "Error",
-                description: "Failed to load API keys",
-                variant: "destructive",
-            });
-        }
-    };
 
     const handleCreateKey = async () => {
         if (!keyName) {

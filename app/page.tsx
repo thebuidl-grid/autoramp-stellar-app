@@ -244,7 +244,7 @@ export default function HomePage() {
       SWAP_CONSTANTS.USDC.toLowerCase()
       ? SWAP_CONSTANTS.USDC
       : swapData.swapParams.tokenIn.toLowerCase() ===
-          SWAP_CONSTANTS.USDT.toLowerCase()
+        SWAP_CONSTANTS.USDT.toLowerCase()
         ? SWAP_CONSTANTS.USDT
         : SWAP_CONSTANTS.CNGN
     : SWAP_CONSTANTS.USDC; // Default to USDC
@@ -260,9 +260,9 @@ export default function HomePage() {
     args:
       address && SWAP_CONSTANTS.SWAP_ROUTER
         ? ([
-            address as `0x${string}`,
-            SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
-          ] as const)
+          address as `0x${string}`,
+          SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
+        ] as const)
         : undefined,
     query: {
       enabled:
@@ -1334,10 +1334,10 @@ export default function HomePage() {
               onClick={
                 activeTab === "swap"
                   ? () => {
-                      const temp = fromCryptoType;
-                      setFromCryptoType(toCryptoType);
-                      setToCryptoType(temp);
-                    }
+                    const temp = fromCryptoType;
+                    setFromCryptoType(toCryptoType);
+                    setToCryptoType(temp);
+                  }
                   : undefined
               }
             >
@@ -1354,47 +1354,47 @@ export default function HomePage() {
             amount={
               activeTab === "buy"
                 ? (() => {
-                    if (!buyAmount) return "";
-                    const parsed = parseFormattedNumber(buyAmount);
+                  if (!buyAmount) return "";
+                  const parsed = parseFormattedNumber(buyAmount);
+                  return parsed.toLocaleString("en-NG");
+                })()
+                : activeTab === "swap" ||
+                  (activeTab === "sell" &&
+                    (cryptoType === "USDC" || cryptoType === "USDT"))
+                  ? (() => {
+                    // --- SHARED LOGIC FOR SWAP AND SELL (USDC) ---
+                    if (!sellAmount) return "";
+
+                    if (isQuoteLoading) return "..."; // Optional: Show loading state
+
+                    if (quoteAmountOut > 0n) {
+                      // Use the decimals determined in Step 1
+                      const formatted = formatUnits(
+                        quoteAmountOut,
+                        quoteDecimalsOut,
+                      );
+
+                      // For Sell tab (CNGN/NGN), we usually want 0 decimals (NGN is fiat-like here)
+                      // For Swap tab (USDC/CNGN), we might want decimals.
+                      // Adjust formatting based on context if needed.
+
+                      return parseFloat(formatted).toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      });
+                    }
+                    return "0.00";
+                    // ---------------------------------------------
+                  })()
+                  : (() => {
+                    // --- LOGIC FOR SELL (CNGN ONLY) ---
+                    // CNGN to NGN is 1:1, no swap needed
+                    if (!sellAmount) return "";
+                    const parsed = parseFormattedNumber(sellAmount);
                     return parsed.toLocaleString("en-NG");
                   })()
-                : activeTab === "swap" ||
-                    (activeTab === "sell" &&
-                      (cryptoType === "USDC" || cryptoType === "USDT"))
-                  ? (() => {
-                      // --- SHARED LOGIC FOR SWAP AND SELL (USDC) ---
-                      if (!sellAmount) return "";
-
-                      if (isQuoteLoading) return "..."; // Optional: Show loading state
-
-                      if (quoteAmountOut > 0n) {
-                        // Use the decimals determined in Step 1
-                        const formatted = formatUnits(
-                          quoteAmountOut,
-                          quoteDecimalsOut,
-                        );
-
-                        // For Sell tab (CNGN/NGN), we usually want 0 decimals (NGN is fiat-like here)
-                        // For Swap tab (USDC/CNGN), we might want decimals.
-                        // Adjust formatting based on context if needed.
-
-                        return parseFloat(formatted).toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        });
-                      }
-                      return "0.00";
-                      // ---------------------------------------------
-                    })()
-                  : (() => {
-                      // --- LOGIC FOR SELL (CNGN ONLY) ---
-                      // CNGN to NGN is 1:1, no swap needed
-                      if (!sellAmount) return "";
-                      const parsed = parseFormattedNumber(sellAmount);
-                      return parsed.toLocaleString("en-NG");
-                    })()
             }
-            onAmountChange={() => {}}
+            onAmountChange={() => { }}
             currencyType={
               activeTab === "buy"
                 ? "CNGN"
@@ -1440,6 +1440,10 @@ export default function HomePage() {
                 onSelect={(account) => {
                   setBankCode(account.bankCode);
                   setAccountNumber(account.accountNumber);
+                  if (account.accountName) {
+                    setAccountName(account.accountName);
+                    setAccountResolved(true);
+                  }
                 }}
               />
               <div className="grid grid-cols-6 gap-2 p-2 bg-black/50 rounded-xl border border-white/10">
@@ -2015,7 +2019,7 @@ export default function HomePage() {
           open={isCryptoModalOpen}
           onOpenChange={setIsCryptoModalOpen}
           selectedCrypto="CNGN"
-          onSelect={() => {}}
+          onSelect={() => { }}
           showComingSoon={true}
         />
       ) : (
