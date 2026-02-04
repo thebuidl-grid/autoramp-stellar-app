@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { userApi, UserApiKeyStatsResponse } from "@/lib/api";
+import { useMerchantApiKeyStats } from "@/lib/hooks";
 import { useToast } from "@/components/ui/toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Key, Activity, BarChart3, Settings } from "lucide-react";
@@ -10,28 +9,9 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 export default function MerchantDashboardPage() {
-    const [isLoading, setIsLoading] = useState(true);
-    const [stats, setStats] = useState<UserApiKeyStatsResponse | null>(null);
+    const { data: stats, isLoading } = useMerchantApiKeyStats();
     const router = useRouter();
     const { toast } = useToast();
-
-    useEffect(() => {
-        fetchStats();
-    }, []);
-
-    const fetchStats = async () => {
-        try {
-            const response = await userApi.getUserApiKeyStats();
-            setStats(response.data);
-        } catch (error) {
-            console.error("Failed to fetch dashboard stats:", error);
-            if ((error as any)?.response?.status === 401) {
-                router.push("/merchant/login");
-            }
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
     if (isLoading) {
         return (

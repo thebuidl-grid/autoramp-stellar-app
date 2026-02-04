@@ -1,33 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useBanks } from "@/lib/hooks";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { merchantApi } from "@/lib/merchant";
 import BusinessDetailsView from "@/components/merchant/settings/BusinessDetailsView";
 import DocumentationView from "@/components/merchant/settings/DocumentationView";
 import DirectorsView from "@/components/merchant/settings/DirectorsView";
 import ShareholdersView from "@/components/merchant/settings/ShareholdersView";
 import BankAccountView from "@/components/merchant/settings/BankAccountView";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
 
 export default function MerchantSettingsPage() {
-    const [profile, setProfile] = useState<any>(null);
-    const [isLoading, setIsLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchProfile = async () => {
-            try {
-                const response = await merchantApi.getMerchantProfile();
-                setProfile(response.data);
-            } catch (error) {
-                console.error("Failed to fetch merchant profile:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchProfile();
-    }, []);
+    const { data: banks = [], isLoading: isBanksLoading } = useBanks();
+    const isLoading = isBanksLoading;
+    const { toast } = useToast();
 
     if (isLoading) {
         return (
@@ -64,24 +51,24 @@ export default function MerchantSettingsPage() {
                     <CardHeader className="border-b border-white/5 bg-white/2">
                         <CardTitle>Merchant Profile Information</CardTitle>
                         <CardDescription>
-                            For security reasons, this information is read-only. Contact support to request updates.
+                            Keep your business profile and settlement details up to date.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="pt-8">
                         <TabsContent value="business" className="mt-0 outline-none">
-                            <BusinessDetailsView data={profile} />
+                            <BusinessDetailsView />
                         </TabsContent>
                         <TabsContent value="documentation" className="mt-0 outline-none">
-                            <DocumentationView data={profile} />
+                            <DocumentationView />
                         </TabsContent>
                         <TabsContent value="directors" className="mt-0 outline-none">
-                            <DirectorsView data={profile} />
+                            <DirectorsView />
                         </TabsContent>
                         <TabsContent value="shareholders" className="mt-0 outline-none">
-                            <ShareholdersView data={profile} />
+                            <ShareholdersView />
                         </TabsContent>
                         <TabsContent value="bank" className="mt-0 outline-none">
-                            <BankAccountView data={profile} />
+                            <BankAccountView banks={banks} />
                         </TabsContent>
                     </CardContent>
                 </Card>

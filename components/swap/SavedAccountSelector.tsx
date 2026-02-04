@@ -5,7 +5,7 @@ import { Building2, ChevronDown } from "lucide-react";
 import Link from "next/link";
 
 interface SavedAccountSelectorProps {
-    onSelect: (account: { bankCode: string; accountNumber: string; bankName: string }) => void;
+    onSelect: (account: { bankCode: string; accountNumber: string; bankName: string; accountName?: string }) => void;
 }
 
 export function SavedAccountSelector({ onSelect }: SavedAccountSelectorProps) {
@@ -35,6 +35,7 @@ export function SavedAccountSelector({ onSelect }: SavedAccountSelectorProps) {
                                 bankCode: selected.bankCode,
                                 accountNumber: selected.accountNumber,
                                 bankName: selected.bankName,
+                                accountName: selected.accountName,
                             });
                         }
                     }}

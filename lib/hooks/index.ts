@@ -9,3 +9,4 @@ export * from './use-transaction-form';
 export * from './use-account-resolution';
 export * from './use-swap-execution';
 export * from './use-transaction-handlers';
+export * from './use-merchant';

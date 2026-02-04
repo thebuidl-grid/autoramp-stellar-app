@@ -75,6 +75,11 @@ export function SavedAccountsManager() {
                                     </div>
                                     <div className="flex-1">
                                         <h3 className="font-medium text-white">{account.bankName}</h3>
+                                        {account.accountName && (
+                                            <p className="text-sm text-zinc-300 font-medium">
+                                                {account.accountName}
+                                            </p>
+                                        )}
                                         <p className="text-sm text-zinc-400 font-mono mt-1">
                                             {account.accountNumber}
                                         </p>
