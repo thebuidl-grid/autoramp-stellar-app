@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 
 /**
  * User State Management
- * 
+ *
  * Global state for user authentication and profile data.
  */
 
@@ -88,8 +88,8 @@ export const useAuthStore = create<AuthState>()(
           localStorage.setItem("token", state.token);
         }
       },
-    }
-  )
+    },
+  ),
 );
 
 /**
@@ -106,7 +106,7 @@ export const useIsAdmin = () => {
 
 /**
  * UI State Management
- * 
+ *
  * Global state for UI elements like toasts, modals, etc.
  */
 
@@ -156,12 +156,12 @@ export const useUIStore = create<UIState>((set, get) => ({
 
 /**
  * Transaction Form State Management
- * 
+ *
  * Global state for transaction form (buy, sell, swap)
  */
 
 export type TabType = "buy" | "sell" | "swap";
-export type CryptoType = "CNGN" | "USDC";
+export type CryptoType = "CNGN" | "USDC" | "USDT";
 export type StepType = "form" | "pending" | "completed" | "execute";
 
 interface TransactionFormState {
@@ -245,14 +245,15 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
   setIsFromCryptoModalOpen: (open) => set({ isFromCryptoModalOpen: open }),
   setIsToCryptoModalOpen: (open) => set({ isToCryptoModalOpen: open }),
   setIsAuthModalOpen: (open) => set({ isAuthModalOpen: open }),
-  resetForm: () => set({
-    step: "form",
-    transactionData: null,
-    swapData: null,
-    sellAmount: "",
-    buyAmount: "",
-    bankCode: "",
-    accountNumber: "",
-    walletAddress: "",
-  }),
+  resetForm: () =>
+    set({
+      step: "form",
+      transactionData: null,
+      swapData: null,
+      sellAmount: "",
+      buyAmount: "",
+      bankCode: "",
+      accountNumber: "",
+      walletAddress: "",
+    }),
 }));

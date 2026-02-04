@@ -11,8 +11,8 @@ import {
 interface CryptoSelectionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  selectedCrypto: "CNGN" | "USDC";
-  onSelect: (crypto: "CNGN" | "USDC") => void;
+  selectedCrypto: "CNGN" | "USDC" | "USDT";
+  onSelect: (crypto: "CNGN" | "USDC" | "USDT") => void;
   showComingSoon?: boolean;
 }
 
@@ -35,6 +35,13 @@ export function CryptoSelectionModal({
       id: "USDC" as const,
       logo: "/usdc-logo.png",
       alt: "USDC",
+      showSubtitle: true,
+      comingSoon: showComingSoon,
+    },
+    {
+      id: "USDT" as const,
+      logo: "/usdt-logo.png",
+      alt: "USDT",
       showSubtitle: true,
       comingSoon: showComingSoon,
     },
@@ -72,7 +79,9 @@ export function CryptoSelectionModal({
                 {crypto.showSubtitle && (
                   <div className="text-sm text-white/50">{crypto.id}</div>
                 )}
-                <div className="text-lg font-medium text-white">{crypto.id}</div>
+                <div className="text-lg font-medium text-white">
+                  {crypto.id}
+                </div>
                 {crypto.comingSoon && (
                   <div className="text-xs text-white/50 mt-1">Coming soon</div>
                 )}
@@ -89,4 +98,3 @@ export function CryptoSelectionModal({
     </Dialog>
   );
 }
-
