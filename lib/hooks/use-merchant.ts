@@ -163,14 +163,3 @@ export function useMerchantWebhook(merchantId?: string) {
         refetchOnWindowFocus: false,
     });
 }
-
-export function useMerchantStatus() {
-    return useQuery({
-        queryKey: ["merchantStatus"],
-        queryFn: async () => {
-            const response = await merchantApi.getMerchantStatus();
-            return response.data;
-        },
-        staleTime: 5 * 60 * 1000,
-    });
-}
