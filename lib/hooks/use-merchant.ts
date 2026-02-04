@@ -18,7 +18,8 @@ export function useMerchantProfile(merchantId?: string) {
             return response.data;
         },
         enabled: !!user || !!merchantId,
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: 30 * 60 * 1000, // 30 minutes
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -35,7 +36,8 @@ export function useMerchantApiKeyStats() {
             return response.data;
         },
         enabled: !!user,
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: 30 * 60 * 1000, // 30 minutes
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -54,7 +56,8 @@ export function useMerchantTransactionsSummary(merchantId?: string) {
             return response.data;
         },
         enabled: !!user && !!effectiveMerchantId,
-        staleTime: 2 * 60 * 1000, // 2 minutes
+        staleTime: 5 * 60 * 1000, // 5 minutes
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -71,7 +74,8 @@ export function useMerchantApiKeys() {
             return response.data;
         },
         enabled: !!user,
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: 30 * 60 * 1000, // 30 minutes
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -87,7 +91,8 @@ export function useMerchantDirectors(merchantId?: string) {
             return response.data;
         },
         enabled: !!merchantId,
-        staleTime: 2 * 60 * 1000,
+        staleTime: 30 * 60 * 1000, // 30 minutes
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -103,7 +108,8 @@ export function useMerchantShareholders(merchantId?: string) {
             return response.data;
         },
         enabled: !!merchantId,
-        staleTime: 2 * 60 * 1000,
+        staleTime: 30 * 60 * 1000, // 30 minutes
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -119,7 +125,8 @@ export function useMerchantBankAccounts(merchantId?: string) {
             return response.data;
         },
         enabled: !!merchantId,
-        staleTime: 2 * 60 * 1000,
+        staleTime: 30 * 60 * 1000, // 30 minutes
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -135,6 +142,7 @@ export function useMerchantDocumentation(merchantId?: string) {
             return response.data;
         },
         enabled: !!merchantId,
-        staleTime: 2 * 60 * 1000,
+        staleTime: 30 * 60 * 1000, // 30 minutes
+        refetchOnWindowFocus: false,
     });
 }
