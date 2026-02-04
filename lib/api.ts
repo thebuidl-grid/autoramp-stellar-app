@@ -173,7 +173,7 @@ export interface UserWallet {
 }
 
 export interface CreateUserWalletDto {
-  walletAddress: string;
+  address: string;
   network: string;
   name?: string;
 }
