@@ -20,10 +20,10 @@ export default function MerchantRootPage() {
             router.replace("/merchant/login");
         } else if (!user.isMerchant) {
             router.replace("/");
-        } else if (onboardedStatus?.data?.isOnboarded === false) {
+        } else if (onboardedStatus?.isOnboarded === false) {
             router.replace("/merchant/onboarding");
         } else {
-            if (onboardedStatus?.data?.isOnboarded) {
+            if (onboardedStatus?.isOnboarded) {
                 router.replace("/merchant/dashboard");
             }
         }
