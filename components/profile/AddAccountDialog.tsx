@@ -8,9 +8,11 @@ import { Label } from "@/components/ui/label";
 import { SearchableBankSelect } from "@/components/ui/searchable-bank-select";
 import { useInitiateAddAccount, useVerifyAndAddAccount } from "@/lib/hooks/use-saved-accounts";
 import { useBanks } from "@/lib/hooks";
+import { useAccountResolution } from "@/lib/hooks/use-account-resolution";
 import { useToast } from "@/components/ui/toast";
 import { getErrorMessage } from "@/lib/api";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { useAuthStore } from "@/lib/store";
+import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
 interface AddAccountDialogProps {
     open: boolean;
@@ -23,22 +25,25 @@ export function AddAccountDialog({ open, onOpenChange }: AddAccountDialogProps) 
     const initiateAddAccount = useInitiateAddAccount();
     const verifyAndAddAccount = useVerifyAndAddAccount();
 
+    const { user } = useAuthStore();
     const [step, setStep] = useState<"input" | "verify">("input");
     const [bankCode, setBankCode] = useState("");
     const [accountNumber, setAccountNumber] = useState("");
     const [otpCode, setOtpCode] = useState("");
-    const [accountDetails, setAccountDetails] = useState<{
-        accountName: string;
-        accountNumber: string;
-        bankCode: string;
-        bankName: string;
-    } | null>(null);
+    const [savedBankName, setSavedBankName] = useState("");
+
+    // Live account resolution
+    const { accountName: resolvedName, accountResolved, resolveAccount } = useAccountResolution({
+        activeTab: "sell",
+        bankCode,
+        accountNumber,
+    });
 
     const handleInitiate = async () => {
-        if (!bankCode || !accountNumber) {
+        if (!bankCode || !accountNumber || !user?.email) {
             toast({
                 title: "Missing fields",
-                description: "Please select a bank and enter account number",
+                description: "Please ensure you are logged in, select a bank and enter account number",
                 variant: "destructive",
             });
             return;
@@ -54,14 +59,13 @@ export function AddAccountDialog({ open, onOpenChange }: AddAccountDialogProps) 
         }
 
         initiateAddAccount.mutate(
-            { accountNumber, bankCode },
+            { email: user.email },
             {
-                onSuccess: (data) => {
-                    setAccountDetails(data);
+                onSuccess: () => {
                     setStep("verify");
                     toast({
                         title: "OTP Sent",
-                        description: `Check your email for verification code. Account: ${data.accountName}`,
+                        description: `Check your email for verification code. Account: ${resolvedName}`,
                     });
                 },
                 onError: (error) => {
@@ -76,14 +80,26 @@ export function AddAccountDialog({ open, onOpenChange }: AddAccountDialogProps) 
     };
 
     const handleVerifyAndAdd = async () => {
-        if (!otpCode || !accountDetails) return;
+        if (!otpCode || !user?.email || !resolvedName || !bankCode || !accountNumber) {
+            toast({
+                title: "Missing Details",
+                description: "Please ensure all details are complete",
+                variant: "destructive",
+            });
+            return;
+        }
 
         verifyAndAddAccount.mutate(
             {
-                accountNumber: accountDetails.accountNumber,
-                bankCode: accountDetails.bankCode,
-                bankName: accountDetails.bankName,
-                otpCode,
+                code: otpCode,
+                email: user.email,
+                bankAccount: {
+                    bankCode,
+                    accountNumber,
+                    accountName: resolvedName,
+                    bankName: savedBankName,
+                    metadata: { primary: false }
+                }
             },
             {
                 onSuccess: () => {
@@ -110,7 +126,7 @@ export function AddAccountDialog({ open, onOpenChange }: AddAccountDialogProps) 
         setBankCode("");
         setAccountNumber("");
         setOtpCode("");
-        setAccountDetails(null);
+        setSavedBankName("");
         onOpenChange(false);
     };
 
@@ -137,7 +153,11 @@ export function AddAccountDialog({ open, onOpenChange }: AddAccountDialogProps) 
                             <SearchableBankSelect
                                 banks={banks}
                                 value={bankCode}
-                                onValueChange={setBankCode}
+                                onValueChange={(code) => {
+                                    setBankCode(code);
+                                    const bank = banks.find(b => b.institutionCode === code);
+                                    if (bank) setSavedBankName(bank.institutionName);
+                                }}
                             />
                         </div>
 
@@ -153,6 +173,25 @@ export function AddAccountDialog({ open, onOpenChange }: AddAccountDialogProps) 
                                 maxLength={10}
                                 className="bg-zinc-800 border-zinc-700 text-white"
                             />
+                            {/* Account Resolution Feedback */}
+                            {resolveAccount.isPending && (
+                                <div className="flex items-center gap-2 text-xs text-zinc-400 mt-1">
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    <span>Resolving account...</span>
+                                </div>
+                            )}
+                            {accountResolved && resolvedName && (
+                                <div className="flex items-center gap-2 text-xs text-green-500 mt-1">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    <span>Account: {resolvedName}</span>
+                                </div>
+                            )}
+                            {resolveAccount.isError && accountNumber.length === 10 && (
+                                <div className="flex items-center gap-2 text-xs text-red-500 mt-1">
+                                    <AlertCircle className="h-3 w-3" />
+                                    <span>Could not resolve account</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 ) : (
@@ -160,12 +199,12 @@ export function AddAccountDialog({ open, onOpenChange }: AddAccountDialogProps) 
                         <div className="p-4 bg-zinc-800 rounded-lg space-y-2">
                             <div className="flex items-center gap-2 text-green-500">
                                 <CheckCircle2 size={20} />
-                                <span className="font-medium">Account Verified</span>
+                                <span className="font-medium">Account Resolved</span>
                             </div>
                             <div className="text-sm text-zinc-300">
-                                <p><strong>Account Name:</strong> {accountDetails?.accountName}</p>
-                                <p><strong>Account Number:</strong> {accountDetails?.accountNumber}</p>
-                                <p><strong>Bank:</strong> {accountDetails?.bankName}</p>
+                                <p><strong>Account Name:</strong> {resolvedName}</p>
+                                <p><strong>Account Number:</strong> {accountNumber}</p>
+                                <p><strong>Bank:</strong> {savedBankName}</p>
                             </div>
                         </div>
 
@@ -199,13 +238,13 @@ export function AddAccountDialog({ open, onOpenChange }: AddAccountDialogProps) 
                     {step === "input" ? (
                         <Button
                             onClick={handleInitiate}
-                            disabled={initiateAddAccount.isPending}
+                            disabled={initiateAddAccount.isPending || !accountResolved}
                             className="bg-primary hover:bg-primary/90"
                         >
                             {initiateAddAccount.isPending && (
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             )}
-                            Continue
+                            {accountResolved ? "Verify & Send OTP" : "Continue"}
                         </Button>
                     ) : (
                         <Button
