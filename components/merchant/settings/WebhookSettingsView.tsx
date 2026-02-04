@@ -7,11 +7,17 @@ import { Input } from "@/components/ui/input";
 import { useEffect, useState } from "react";
 import { merchantApi } from "@/lib/merchant";
 import { useToast } from "@/components/ui/toast";
-import { useMerchantStatus, useMerchantWebhook } from "@/lib/hooks";
+import { useMerchantStatus, useMerchantWebhook, useMerchantProfile } from "@/lib/hooks";
 
 export default function WebhookSettingsView() {
-    const { data: status } = useMerchantStatus();
-    const { data: webhookData, isLoading, refetch } = useMerchantWebhook(status?.merchantId || undefined);
+    const { data: status, isLoading: isStatusLoading } = useMerchantStatus();
+    const { data: profile, isLoading: isProfileLoading } = useMerchantProfile(status?.merchantId || undefined);
+
+    // Get the merchant ID from either status or profile
+    const rawProfile = Array.isArray(profile) ? profile[0] : profile;
+    const merchantId = rawProfile?.id || status?.merchantId;
+
+    const { data: webhookData, isLoading: isWebhookLoading, refetch } = useMerchantWebhook(merchantId);
 
     const initialWebhookUrl = webhookData?.webhookUrl || "";
 
@@ -27,8 +33,6 @@ export default function WebhookSettingsView() {
     }, [initialWebhookUrl]);
 
     const handleSave = async () => {
-        const merchantId = status?.merchantId;
-
         if (!merchantId) {
             toast({
                 title: "Error",
@@ -80,6 +84,8 @@ export default function WebhookSettingsView() {
             setIsSaving(false);
         }
     };
+
+    const isLoading = isStatusLoading || isProfileLoading || isWebhookLoading;
 
     if (isLoading && !webhookData) {
         return (
