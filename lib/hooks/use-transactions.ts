@@ -15,6 +15,7 @@ export function useTransactions(id?: string, reference?: string) {
       const response = await stablestackApi.getTransactions(id, reference);
       return response.data;
     },
+    staleTime: 30 * 1000, // 30 seconds
   });
 }
 
