@@ -165,7 +165,7 @@ export interface UpdateSavedAccountDto {
 export interface UserWallet {
   id: string;
   userId: string;
-  walletAddress: string;
+  address: string;
   network: string;
   name?: string;
   createdAt: string;
@@ -173,7 +173,7 @@ export interface UserWallet {
 }
 
 export interface CreateUserWalletDto {
-  walletAddress: string;
+  address: string;
   network: string;
   name?: string;
 }

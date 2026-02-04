@@ -17,6 +17,7 @@ import { SwapSection } from "@/components/swap/swap-section";
 import { CryptoSelectionModal } from "@/components/swap/crypto-selection-modal";
 import { SavedAccountSelector } from "@/components/swap/SavedAccountSelector";
 import { SavedWalletSelector } from "@/components/swap/SavedWalletSelector";
+import { AddWalletDialog } from "@/components/profile/AddWalletDialog";
 import { HeroBackground } from "@/components/hero/hero-background";
 import {
   useBanks,
@@ -129,6 +130,7 @@ export default function HomePage() {
   // Local UI state
   const [copied, setCopied] = useState(false);
   const [isAutoSwapping, setIsAutoSwapping] = useState(false);
+  const [isAddWalletDialogOpen, setIsAddWalletDialogOpen] = useState(false);
 
   const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
   const parsedBuyAmount = buyAmount ? parseFormattedNumber(buyAmount) : null;
@@ -1167,7 +1169,7 @@ export default function HomePage() {
         toAmount,
         exchangeRate,
         sourceAddress: address,
-        destinationAddress: address,
+        destinationAddress: walletAddress || address,
         network: "base",
       },
       {
@@ -1414,14 +1416,15 @@ export default function HomePage() {
             }
           />
 
-          {activeTab === "buy" && (
+          {(activeTab === "buy" || activeTab === "swap") && (
             <div className="space-y-4">
               <SavedWalletSelector
                 onSelect={(address) => setWalletAddress(address)}
+                onAddNew={() => setIsAddWalletDialogOpen(true)}
               />
               <div className="space-y-2">
                 <label className="text-sm text-white/70 mb-3 block">
-                  Wallet Address
+                  Destination Wallet Address
                 </label>
                 <Input
                   type="text"
@@ -2061,6 +2064,11 @@ export default function HomePage() {
             }, 100);
           }
         }}
+      />
+
+      <AddWalletDialog
+        open={isAddWalletDialogOpen}
+        onOpenChange={setIsAddWalletDialogOpen}
       />
     </div>
   );
