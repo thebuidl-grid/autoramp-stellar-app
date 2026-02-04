@@ -15,25 +15,10 @@ export default function WebhookSettingsView() {
     const { data: status, isLoading: isStatusLoading } = useMerchantStatus();
     const { data: profile, isLoading: isProfileLoading } = useMerchantProfile(status?.merchantId || undefined);
 
-    // Deep identification logic - check multiple paths for a valid ID
-    const getRobustMerchantId = () => {
-        // 1. Direct from status hook (most common)
-        if (status?.merchantId) return status.merchantId;
-        if (status?.id) return status.id;
+    // Get the merchant ID exactly how BusinessDetailsView does it, with a final fallback
+    const rawProfile = Array.isArray(profile) ? profile[0] : profile;
+    const merchantId = rawProfile?.id || status?.merchantId || user?.id;
 
-        // 2. From profile data
-        const rawProfile = Array.isArray(profile) ? profile[0] : profile;
-        if (rawProfile?.id) return rawProfile.id;
-        if (rawProfile?.merchantId) return rawProfile.merchantId;
-        if (rawProfile?.businessDetails?.id) return rawProfile.businessDetails.id;
-
-        // 3. Fallback to auth user ID if they are a merchant
-        if (user?.isMerchant && user?.id) return user.id;
-
-        return undefined;
-    };
-
-    const merchantId = getRobustMerchantId();
     const { data: webhookData, isLoading: isWebhookLoading, refetch } = useMerchantWebhook(merchantId);
 
     const initialWebhookUrl = webhookData?.webhookUrl || "";
