@@ -59,7 +59,7 @@ export function SavedWalletSelector({ onSelect, onAddNew }: SavedWalletSelectorP
                     onChange={(e) => {
                         const selected = wallets.find((wallet) => wallet.id === e.target.value);
                         if (selected) {
-                            onSelect(selected.walletAddress);
+                            onSelect(selected.address);
                         }
                     }}
                     className="w-full h-12 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white outline-none appearance-none pr-10 hover:bg-white/10 transition-colors font-mono"
@@ -67,7 +67,7 @@ export function SavedWalletSelector({ onSelect, onAddNew }: SavedWalletSelectorP
                     <option value="">Select a saved wallet...</option>
                     {wallets.map((wallet) => (
                         <option key={wallet.id} value={wallet.id} className="bg-zinc-900">
-                            {wallet.name || "Wallet"} - {formatAddress(wallet.walletAddress)} ({wallet.network})
+                            {wallet.name || "Wallet"} - {formatAddress(wallet.address)} ({wallet.network})
                         </option>
                     ))}
                 </select>
