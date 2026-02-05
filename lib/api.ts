@@ -873,12 +873,12 @@ export const swapApi = {
 export const miscApi = {
   getUsdNgnRate: (amount?: number) =>
     api.get<{ rate: number }>(
-      `/swap/usd-ngn-rate${amount ? `?amount=${amount}` : ""}`,
+      `/rates/usd-ngn-rate${amount ? `?amount=${amount}` : ""}`,
     ),
 
   estimateNgn: (cngnAmount: number) =>
     api.get<{ estimatedNgn: number; usdNgnRate: number; usdValue: number }>(
-      `/swap/estimate-ngn?cngnAmount=${cngnAmount}`,
+      `/rates/estimate-ngn?cngnAmount=${cngnAmount}`,
     ),
 };
 
