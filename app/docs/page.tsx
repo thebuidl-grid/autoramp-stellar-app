@@ -361,18 +361,75 @@ export default function DocsPage() {
                 {/* Webhooks */}
                 <section className="mb-12">
                     <h2 className="text-2xl font-bold text-white mb-4">Webhooks</h2>
-                    <div className="bg-white/5 border border-white/10 rounded-lg p-6 space-y-4">
+                    <div className="bg-white/5 border border-white/10 rounded-lg p-6 space-y-6">
                         <p className="text-white/70">
-                            Provide a <code className="text-purple-400">notifyUrl</code> when creating transactions to receive real-time status updates.
+                            Configure a <code className="text-purple-400">webhookUrl</code> in your dashboard settings to receive real-time notifications when a transaction status changes.
                         </p>
+
                         <div>
-                            <h4 className="text-white font-medium text-sm mb-2">Webhook Payload</h4>
+                            <h3 className="text-white font-medium mb-3">Event Types</h3>
+                            <div className="bg-black/40 rounded-lg overflow-hidden border border-white/5">
+                                <table className="w-full text-sm">
+                                    <thead className="border-b border-white/10 bg-white/5">
+                                        <tr>
+                                            <th className="text-left p-3 text-white">Event Name</th>
+                                            <th className="text-left p-3 text-white">Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="text-white/60">
+                                        <tr className="border-b border-white/5">
+                                            <td className="p-3 font-mono text-purple-400">onramp.updated</td>
+                                            <td className="p-3">Sent when an onramp transaction status changes.</td>
+                                        </tr>
+                                        <tr className="border-b border-white/5">
+                                            <td className="p-3 font-mono text-purple-400">offramp.updated</td>
+                                            <td className="p-3">Sent when an offramp transaction status changes.</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="p-3 font-mono text-purple-400">swap.updated</td>
+                                            <td className="p-3">Sent when a swap transaction status changes.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="text-white font-medium mb-3">Webhook Payload</h3>
+                            <p className="text-white/60 text-sm mb-3">
+                                Our server sends a POST request with the following JSON structure:
+                            </p>
                             <CodeBlock code={`{
-  "reference": "TXN_123456789",
-  "status": "COMPLETED",
-  "amount": 10000,
-  "timestamp": "2024-01-01T00:00:00Z"
+  "event": "transaction.type.updated",
+  "timestamp": "2024-02-04T12:34:56.789Z",
+  "data": {
+    "id": "transaction-uuid",
+    "reference": "TRX-123456",
+    "status": "COMPLETED",
+    "amount": 5000.00,
+    "currency": "NGN",
+    "tokenAmount": 4950.00,
+    "tokenType": "CNGN",
+    "network": "base"
+  }
 }`} />
+                        </div>
+
+                        <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                            <h4 className="text-blue-400 text-sm font-bold mb-2">Transaction Statuses</h4>
+                            <div className="flex flex-wrap gap-2">
+                                {["PENDING", "PROCESSING", "COMPLETED", "FAILED", "CANCELLED"].map(status => (
+                                    <span key={status} className="px-2 py-1 bg-white/10 rounded text-xs text-white/80 font-mono">
+                                        {status}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                            <p className="text-yellow-400 text-sm">
+                                <strong>Note:</strong> Currently, webhooks are sent as plain JSON. We recommend verifying the source of the request. Request signing will be implemented in a future update.
+                            </p>
                         </div>
                     </div>
                 </section>

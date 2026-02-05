@@ -146,3 +146,20 @@ export function useMerchantDocumentation(merchantId?: string) {
         refetchOnWindowFocus: false,
     });
 }
+
+/**
+ * Hook to fetch merchant webhook settings
+ */
+export function useMerchantWebhook(merchantId?: string) {
+    return useQuery({
+        queryKey: ["merchantWebhook", merchantId],
+        queryFn: async () => {
+            if (!merchantId) return null;
+            const response = await merchantApi.getWebhookUrl(merchantId);
+            return response.data;
+        },
+        enabled: !!merchantId,
+        staleTime: 5 * 60 * 1000, // 5 minutes
+        refetchOnWindowFocus: false,
+    });
+}
