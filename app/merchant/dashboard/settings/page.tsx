@@ -8,6 +8,7 @@ import DocumentationView from "@/components/merchant/settings/DocumentationView"
 import DirectorsView from "@/components/merchant/settings/DirectorsView";
 import ShareholdersView from "@/components/merchant/settings/ShareholdersView";
 import BankAccountView from "@/components/merchant/settings/BankAccountView";
+import WebhookSettingsView from "@/components/merchant/settings/WebhookSettingsView";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 
@@ -45,6 +46,7 @@ export default function MerchantSettingsPage() {
                     <TabsTrigger value="directors" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-black">Directors</TabsTrigger>
                     <TabsTrigger value="shareholders" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-black">Shareholders</TabsTrigger>
                     <TabsTrigger value="bank" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-black">Settlement Bank</TabsTrigger>
+                    <TabsTrigger value="webhooks" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-black">Webhooks</TabsTrigger>
                 </TabsList>
 
                 <Card className="bg-black/30 backdrop-blur-md border-white/10 rounded-2xl overflow-hidden">
@@ -69,6 +71,9 @@ export default function MerchantSettingsPage() {
                         </TabsContent>
                         <TabsContent value="bank" className="mt-0 outline-none">
                             <BankAccountView banks={banks} />
+                        </TabsContent>
+                        <TabsContent value="webhooks" className="mt-0 outline-none">
+                            <WebhookSettingsView />
                         </TabsContent>
                     </CardContent>
                 </Card>
