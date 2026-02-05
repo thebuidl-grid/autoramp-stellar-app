@@ -17,7 +17,7 @@ export default function WebhookSettingsView() {
 
     // Get the merchant ID exactly how BusinessDetailsView does it, with a final fallback
     const rawProfile = Array.isArray(profile) ? profile[0] : profile;
-    const merchantId = rawProfile?.id || status?.merchantId || user?.id;
+    const merchantId = (rawProfile?.id || status?.merchantId || user?.id) ?? undefined;
 
     const { data: webhookData, isLoading: isWebhookLoading, refetch } = useMerchantWebhook(merchantId);
 
