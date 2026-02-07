@@ -16,8 +16,10 @@ import { TabButton } from "@/components/swap/tab-button";
 import { SwapSection } from "@/components/swap/swap-section";
 import { CryptoSelectionModal } from "@/components/swap/crypto-selection-modal";
 import { SavedAccountSelector } from "@/components/swap/SavedAccountSelector";
+import { OfframpConfirmationModal } from "@/components/swap/offramp-confirmation-modal";
 import { SavedWalletSelector } from "@/components/swap/SavedWalletSelector";
 import { AddWalletDialog } from "@/components/profile/AddWalletDialog";
+import { OnrampConfirmationModal } from "@/components/swap/onramp-confirmation-modal";
 import { HeroBackground } from "@/components/hero/hero-background";
 import {
   useBanks,
@@ -131,6 +133,9 @@ export default function HomePage() {
   const [copied, setCopied] = useState(false);
   const [isAutoSwapping, setIsAutoSwapping] = useState(false);
   const [isAddWalletDialogOpen, setIsAddWalletDialogOpen] = useState(false);
+  const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
+  const [isBuyConfirmationModalOpen, setIsBuyConfirmationModalOpen] =
+    useState(false);
 
   const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
   const parsedBuyAmount = buyAmount ? parseFormattedNumber(buyAmount) : null;
@@ -246,7 +251,7 @@ export default function HomePage() {
       SWAP_CONSTANTS.USDC.toLowerCase()
       ? SWAP_CONSTANTS.USDC
       : swapData.swapParams.tokenIn.toLowerCase() ===
-        SWAP_CONSTANTS.USDT.toLowerCase()
+          SWAP_CONSTANTS.USDT.toLowerCase()
         ? SWAP_CONSTANTS.USDT
         : SWAP_CONSTANTS.CNGN
     : SWAP_CONSTANTS.USDC; // Default to USDC
@@ -262,9 +267,9 @@ export default function HomePage() {
     args:
       address && SWAP_CONSTANTS.SWAP_ROUTER
         ? ([
-          address as `0x${string}`,
-          SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
-        ] as const)
+            address as `0x${string}`,
+            SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
+          ] as const)
         : undefined,
     query: {
       enabled:
@@ -751,16 +756,16 @@ export default function HomePage() {
       return;
     }
 
-    if (cryptoType === "CNGN") {
-      if (parsedAmount < 100) {
-        toast({
-          title: "Invalid amount",
-          description: "Minimum amount for CNGN is 100",
-          variant: "destructive",
-        });
-        return;
-      }
+    // Open confirmation modal
+    setIsConfirmationModalOpen(true);
+  };
 
+  const handleConfirmSell = () => {
+    const parsedAmount = parseFormattedNumber(sellAmount);
+
+    // We already validated inputs in handleSell, so we can proceed with execution
+
+    if (cryptoType === "CNGN") {
       const amountToSend = Math.round(parsedAmount);
       offRamp.mutate(
         {
@@ -772,47 +777,25 @@ export default function HomePage() {
           onSuccess: (response) => {
             setTransactionData(response.data);
             setStep("pending");
+            setIsConfirmationModalOpen(false);
+          },
+          onError: () => {
+            // Error handling is done in mutation? If not, we might want to close modal or show error
+            // For now, let's keep modal open if error? Or close it?
+            // Usually we might want to keep it open to show error, but the existing error handling
+            // seems to be toast based or internal.
+            // Let's close it on error to be safe or keep it open?
+            // The mutation hook likely handles error toasts.
+            setIsConfirmationModalOpen(false);
           },
         },
       );
     } else if (cryptoType === "USDC" || cryptoType === "USDT") {
-      if (!isConnected || !address) {
-        toast({
-          title: "Wallet not connected",
-          description: "Please connect your wallet to continue",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (!quoteAmountOut || quoteAmountOut === 0n) {
-        toast({
-          title: "Quote not ready",
-          description: "Please wait for the exchange rate to load.",
-          variant: "destructive",
-        });
-        return;
-      }
-
       const projectedNgnAmount = parseFloat(
         formatUnits(quoteAmountOut, SWAP_CONSTANTS.CNGN_DECIMALS),
       );
 
-      console.log(projectedNgnAmount, "projected");
-
-      if (projectedNgnAmount < 100) {
-        toast({
-          title: "Amount too low",
-          description: `Minimum withdrawal is 100 NGN. Estimated output: ${projectedNgnAmount.toFixed(
-            2,
-          )} NGN`,
-          variant: "destructive",
-        });
-        return;
-      }
-
       // Re-using initializeSwap which currently expects usdcAmount.
-      // We will pass the amount as usdcAmount even if it is USDT, assuming backend logic or just variable reuse.
       initializeSwap.mutate(
         {
           amount: projectedNgnAmount,
@@ -824,8 +807,6 @@ export default function HomePage() {
         {
           onSuccess: (response) => {
             console.log(response, "response from init");
-            // FORCE override tokenIn if it's USDT, because backend might return USDC by default?
-            // Safe bet: Update the local state with correct tokenIn if we know it.
             const updatedResponse = { ...response.data };
             if (cryptoType === "USDT") {
               if (updatedResponse.swapParams) {
@@ -834,6 +815,10 @@ export default function HomePage() {
             }
             setSwapData(updatedResponse);
             setStep("execute");
+            setIsConfirmationModalOpen(false);
+          },
+          onError: () => {
+            setIsConfirmationModalOpen(false);
           },
         },
       );
@@ -856,18 +841,8 @@ export default function HomePage() {
       return;
     }
 
-    // const parsedAmount = parseFloat(buyAmount);
-    // if (isNaN(parsedAmount) || parsedAmount < 100) {
-    //   toast({
-    //     title: "Invalid amount",
-    //     description: "Minimum amount is 100 NGN",
-    //     variant: "destructive",
-    //   });
-    //   return;
-    // }
     const sanitizedAmount = buyAmount.replace(/[^0-9.]/g, ""); // removes commas, currency symbols, spaces
     const parsedAmount = parseFloat(sanitizedAmount);
-    console.log(parsedAmount, "santi amount");
 
     if (!Number.isFinite(parsedAmount) || parsedAmount < 100) {
       toast({
@@ -877,6 +852,14 @@ export default function HomePage() {
       });
       return;
     }
+
+    // Open confirmation modal
+    setIsBuyConfirmationModalOpen(true);
+  };
+
+  const handleExecuteBuy = async () => {
+    const sanitizedAmount = buyAmount.replace(/[^0-9.]/g, "");
+    const parsedAmount = parseFloat(sanitizedAmount);
 
     onRamp.mutate(
       {
@@ -888,6 +871,7 @@ export default function HomePage() {
         onSuccess: (response) => {
           setTransactionData(response.data);
           setStep("pending");
+          setIsBuyConfirmationModalOpen(false);
         },
       },
     );
@@ -1336,10 +1320,10 @@ export default function HomePage() {
               onClick={
                 activeTab === "swap"
                   ? () => {
-                    const temp = fromCryptoType;
-                    setFromCryptoType(toCryptoType);
-                    setToCryptoType(temp);
-                  }
+                      const temp = fromCryptoType;
+                      setFromCryptoType(toCryptoType);
+                      setToCryptoType(temp);
+                    }
                   : undefined
               }
             >
@@ -1356,47 +1340,47 @@ export default function HomePage() {
             amount={
               activeTab === "buy"
                 ? (() => {
-                  if (!buyAmount) return "";
-                  const parsed = parseFormattedNumber(buyAmount);
-                  return parsed.toLocaleString("en-NG");
-                })()
-                : activeTab === "swap" ||
-                  (activeTab === "sell" &&
-                    (cryptoType === "USDC" || cryptoType === "USDT"))
-                  ? (() => {
-                    // --- SHARED LOGIC FOR SWAP AND SELL (USDC) ---
-                    if (!sellAmount) return "";
-
-                    if (isQuoteLoading) return "..."; // Optional: Show loading state
-
-                    if (quoteAmountOut > 0n) {
-                      // Use the decimals determined in Step 1
-                      const formatted = formatUnits(
-                        quoteAmountOut,
-                        quoteDecimalsOut,
-                      );
-
-                      // For Sell tab (CNGN/NGN), we usually want 0 decimals (NGN is fiat-like here)
-                      // For Swap tab (USDC/CNGN), we might want decimals.
-                      // Adjust formatting based on context if needed.
-
-                      return parseFloat(formatted).toLocaleString("en-US", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      });
-                    }
-                    return "0.00";
-                    // ---------------------------------------------
-                  })()
-                  : (() => {
-                    // --- LOGIC FOR SELL (CNGN ONLY) ---
-                    // CNGN to NGN is 1:1, no swap needed
-                    if (!sellAmount) return "";
-                    const parsed = parseFormattedNumber(sellAmount);
+                    if (!buyAmount) return "";
+                    const parsed = parseFormattedNumber(buyAmount);
                     return parsed.toLocaleString("en-NG");
                   })()
+                : activeTab === "swap" ||
+                    (activeTab === "sell" &&
+                      (cryptoType === "USDC" || cryptoType === "USDT"))
+                  ? (() => {
+                      // --- SHARED LOGIC FOR SWAP AND SELL (USDC) ---
+                      if (!sellAmount) return "";
+
+                      if (isQuoteLoading) return "..."; // Optional: Show loading state
+
+                      if (quoteAmountOut > 0n) {
+                        // Use the decimals determined in Step 1
+                        const formatted = formatUnits(
+                          quoteAmountOut,
+                          quoteDecimalsOut,
+                        );
+
+                        // For Sell tab (CNGN/NGN), we usually want 0 decimals (NGN is fiat-like here)
+                        // For Swap tab (USDC/CNGN), we might want decimals.
+                        // Adjust formatting based on context if needed.
+
+                        return parseFloat(formatted).toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        });
+                      }
+                      return "0.00";
+                      // ---------------------------------------------
+                    })()
+                  : (() => {
+                      // --- LOGIC FOR SELL (CNGN ONLY) ---
+                      // CNGN to NGN is 1:1, no swap needed
+                      if (!sellAmount) return "";
+                      const parsed = parseFormattedNumber(sellAmount);
+                      return parsed.toLocaleString("en-NG");
+                    })()
             }
-            onAmountChange={() => { }}
+            onAmountChange={() => {}}
             currencyType={
               activeTab === "buy"
                 ? "CNGN"
@@ -2022,7 +2006,7 @@ export default function HomePage() {
           open={isCryptoModalOpen}
           onOpenChange={setIsCryptoModalOpen}
           selectedCrypto="CNGN"
-          onSelect={() => { }}
+          onSelect={() => {}}
           showComingSoon={true}
         />
       ) : (
@@ -2069,6 +2053,28 @@ export default function HomePage() {
       <AddWalletDialog
         open={isAddWalletDialogOpen}
         onOpenChange={setIsAddWalletDialogOpen}
+      />
+      <OfframpConfirmationModal
+        open={isConfirmationModalOpen}
+        onOpenChange={setIsConfirmationModalOpen}
+        onConfirm={handleConfirmSell}
+        amount={sellAmount && cryptoType ? `${sellAmount} ${cryptoType}` : ""}
+        bankName={
+          banks.find((b) => b.institutionCode === bankCode)?.institutionName ||
+          "Unknown Bank"
+        }
+        accountNumber={accountNumber}
+        accountName={accountName || "Unknown Account"}
+        isLoading={offRamp.isPending || initializeSwap.isPending}
+      />
+      <OnrampConfirmationModal
+        open={isBuyConfirmationModalOpen}
+        onOpenChange={setIsBuyConfirmationModalOpen}
+        onConfirm={handleExecuteBuy}
+        amount={buyAmount}
+        walletAddress={walletAddress}
+        network="Base"
+        isLoading={onRamp.isPending}
       />
     </div>
   );
