@@ -46,14 +46,14 @@ const kybSchema = z.object({
     contactPerson: z.string().min(2, "Contact person is required"),
 
     // Step 3: Documentation
-    cacCertificate: z.any(),
-    cacEStatus: z.any(),
-    memart: z.any(),
-    memorandum: z.any(),
-    proofOfAddress: z.any(),
+    cacCertificate: z.union([z.string().min(1, "CAC Certificate is required"), z.any()]).refine(val => val !== undefined && val !== null && val !== "", "CAC Certificate is required"),
+    cacEStatus: z.union([z.string().min(1, "CAC E-Status is required"), z.any()]).refine(val => val !== undefined && val !== null && val !== "", "CAC E-Status is required"),
+    memart: z.union([z.string().min(1, "Memart is required"), z.any()]).refine(val => val !== undefined && val !== null && val !== "", "Memart is required"),
+    memorandum: z.union([z.string().min(1, "Memorandum is required"), z.any()]).refine(val => val !== undefined && val !== null && val !== "", "Memorandum is required"),
+    proofOfAddress: z.union([z.string().min(1, "Proof of Address is required"), z.any()]).refine(val => val !== undefined && val !== null && val !== "", "Proof of Address is required"),
     capitalSource: z.string().min(5, "Capital source is required"),
     taxIdentificationNumber: z.string().min(8, "TIN is required"),
-    proofOfFunds: z.any(),
+    proofOfFunds: z.union([z.string().min(1, "Proof of Funds is required"), z.any()]).refine(val => val !== undefined && val !== null && val !== "", "Proof of Funds is required"),
 
     // Step 4: Directors
     directors: z.array(z.object({
@@ -416,13 +416,13 @@ export function KYBForm() {
         setCurrentStep((prev) => Math.max(prev - 1, 0));
     };
 
-    const handleSkipDocumentation = () => {
-        setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
-        toast({
-            title: "Documentation Skipped",
-            description: "You can provide your business documents later from the dashboard.",
-        });
-    };
+    //const handleSkipDocumentation = () => {
+    //    setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
+    //    toast({
+    //        title: "Documentation Skipped",
+    //        description: "You can provide your business documents later from the dashboard.",
+    //    });
+    //};
 
     const getFieldsForStep = (step: number) => {
         switch (step) {
@@ -1028,17 +1028,17 @@ export function KYBForm() {
                         Back
                     </Button>
 
-                    {currentStep === 2 && (
-                        <Button
-                            type="button"
-                            variant="link"
-                            onClick={handleSkipDocumentation}
-                            disabled={isSubmitting}
-                            className="text-zinc-400 hover:text-white"
-                        >
-                            Skip this section
-                        </Button>
-                    )}
+                    //{currentStep === 2 && (
+                    //    <Button
+                    //        type="button"
+                    //        variant="link"
+                    //        onClick={handleSkipDocumentation}
+                    //        disabled={isSubmitting}
+                    //        className="text-zinc-400 hover:text-white"
+                    //    >
+                    //        Skip this section
+                    //    </Button>
+                    //)}
 
 
                     {currentStep === STEPS.length - 1 ? (
