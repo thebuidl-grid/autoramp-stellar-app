@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -85,6 +85,7 @@ export function KYBForm() {
     const [uploadingFields, setUploadingFields] = useState<Record<string, boolean>>({});
     const { toast } = useToast();
     const { user } = useAuthStore();
+    const [isLoaded, setIsLoaded] = useState(false);
 
     const form = useForm<KYBFormValues>({
         resolver: zodResolver(kybSchema),
@@ -113,6 +114,38 @@ export function KYBForm() {
         control: form.control,
         name: "directors",
     });
+
+    // Persistence: Load progress on mount
+    useEffect(() => {
+        const savedProgress = localStorage.getItem("kyb_onboarding_progress");
+        if (savedProgress) {
+            try {
+                const { step, merchantId: savedMerchantId, formData } = JSON.parse(savedProgress);
+                setCurrentStep(step);
+                setMerchantId(savedMerchantId);
+                form.reset(formData);
+            } catch (error) {
+                console.error("Error loading KYB progress:", error);
+            }
+        }
+        setIsLoaded(true);
+    }, [form]);
+
+    // Persistence: Save progress on changes
+    useEffect(() => {
+        if (!isLoaded) return;
+
+        const timer = setTimeout(() => {
+            const formData = form.getValues();
+            localStorage.setItem("kyb_onboarding_progress", JSON.stringify({
+                step: currentStep,
+                merchantId,
+                formData
+            }));
+        }, 1000);
+
+        return () => clearTimeout(timer);
+    }, [currentStep, merchantId, form.watch(), isLoaded]);
 
     const handleAutoUpload = async (file: File, fieldName: string) => {
         if (!file) return;
@@ -329,6 +362,7 @@ export function KYBForm() {
                 variant: "success",
             });
             setCurrentStep(STEPS.length);
+            localStorage.removeItem("kyb_onboarding_progress");
         } catch (error: any) {
             console.error("Submit directors error", error);
             toast({
@@ -380,6 +414,14 @@ export function KYBForm() {
 
     const prevStep = () => {
         setCurrentStep((prev) => Math.max(prev - 1, 0));
+    };
+
+    const handleSkipDocumentation = () => {
+        setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
+        toast({
+            title: "Documentation Skipped",
+            description: "You can provide your business documents later from the dashboard.",
+        });
     };
 
     const getFieldsForStep = (step: number) => {
@@ -985,6 +1027,18 @@ export function KYBForm() {
                         <ChevronLeft className="w-4 h-4 mr-2" />
                         Back
                     </Button>
+
+                    {currentStep === 2 && (
+                        <Button
+                            type="button"
+                            variant="link"
+                            onClick={handleSkipDocumentation}
+                            disabled={isSubmitting}
+                            className="text-zinc-400 hover:text-white"
+                        >
+                            Skip this section
+                        </Button>
+                    )}
 
 
                     {currentStep === STEPS.length - 1 ? (
