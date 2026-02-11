@@ -393,7 +393,7 @@ export default function HomePage() {
     { id: "buy" as const, label: "Buy" },
     { id: "sell" as const, label: "Sell" },
     { id: "swap" as const, label: "Swap" },
-    { id: "bridge" as const, label: "Bridge" },
+    // { id: "bridge" as const, label: "Bridge" },
   ];
 
   const handleSellAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
