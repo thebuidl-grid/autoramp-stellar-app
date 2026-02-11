@@ -9,6 +9,11 @@ import {
   rainbowWallet,
   walletConnectWallet,
   metaMaskWallet,
+  rabbyWallet,
+  trustWallet,
+  okxWallet,
+  phantomWallet,
+  baseAccount,
 } from "@rainbow-me/rainbowkit/wallets";
 import { createConfig, http } from "wagmi";
 import { SUPPORTED_CHAINS, getRpcUrl } from "./constants/networks";
@@ -23,7 +28,16 @@ const connectors =
         [
           {
             groupName: "Recommended",
-            wallets: [rainbowWallet, walletConnectWallet, metaMaskWallet],
+            wallets: [
+              rainbowWallet,
+              walletConnectWallet,
+              metaMaskWallet,
+              rabbyWallet,
+              trustWallet,
+              okxWallet,
+              phantomWallet,
+              baseAccount,
+            ],
           },
         ],
         {
