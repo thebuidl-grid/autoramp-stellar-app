@@ -121,7 +121,9 @@ export function KYBForm() {
         if (savedProgress) {
             try {
                 const { step, merchantId: savedMerchantId, formData } = JSON.parse(savedProgress);
-                setCurrentStep(step);
+                // Ensure step is a number, handling object wrapper if present
+                const safeStep = typeof step === 'number' ? step : (step as any)?.currentStep ?? 0;
+                setCurrentStep(safeStep);
                 setMerchantId(savedMerchantId);
                 form.reset(formData);
             } catch (error) {
@@ -1028,20 +1030,20 @@ export function KYBForm() {
                         Back
                     </Button>
 
-                    //{currentStep === 2 && (
-                    //    <Button
-                    //        type="button"
-                    //        variant="link"
-                    //        onClick={handleSkipDocumentation}
-                    //        disabled={isSubmitting}
-                    //        className="text-zinc-400 hover:text-white"
-                    //    >
-                    //        Skip this section
-                    //    </Button>
-                    //)}
+                    {/* {currentStep === 2 && (
+                        <Button
+                            type="button"
+                            variant="link"
+                            onClick={handleSkipDocumentation}
+                            disabled={isSubmitting}
+                            className="text-zinc-400 hover:text-white"
+                        >
+                            Skip this section
+                        </Button>
+                    )} */}
 
-
-                    {currentStep === STEPS.length - 1 ? (
+                    {/* Guard against currentStep being an object (e.g. from localStorage) */}
+                    {(typeof currentStep === 'number' ? currentStep : (currentStep as any)?.currentStep ?? 0) === STEPS.length - 1 ? (
                         <Button
                             onClick={form.handleSubmit(onSubmit, (errors) => {
                                 console.log("Form Errors:", errors);
