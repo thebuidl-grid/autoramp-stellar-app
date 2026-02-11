@@ -1,0 +1,14 @@
+export const USDC_ADDRESSES: Record<string, string> = {
+  // Testnet
+  sepolia: "0x1c7D4B196Cb0232b50466dB0141f1766a5996075",
+  basesepolia: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  arbitrumsepolia: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+  optimismsepolia: "0x5fd84259d66Cd46123540766BbE1959B18749E35",
+  polygonamoy: "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
+  // Mainnet
+  ethereum: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+  base: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  arbitrum: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+  optimism: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+  polygon: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+};

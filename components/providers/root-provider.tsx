@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { Toaster } from "@/components/ui/toast";
 import { WagmiProviderWrapper } from "@/components/providers/wagmi-provider";
+import { SolanaProvider } from "@/components/providers/solana-provider";
 
 interface RootProviderProps {
     children: ReactNode;
@@ -24,10 +25,12 @@ export function RootProvider({ children }: RootProviderProps) {
 
     return (
         <WagmiProviderWrapper>
-            <AuthProvider>
-                {children}
-                <Toaster />
-            </AuthProvider>
+            <SolanaProvider>
+                <AuthProvider>
+                    {children}
+                    <Toaster />
+                </AuthProvider>
+            </SolanaProvider>
         </WagmiProviderWrapper>
     );
 }
