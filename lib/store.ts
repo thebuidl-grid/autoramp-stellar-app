@@ -160,7 +160,7 @@ export const useUIStore = create<UIState>((set, get) => ({
  * Global state for transaction form (buy, sell, swap)
  */
 
-export type TabType = "buy" | "sell" | "swap";
+export type TabType = "buy" | "sell" | "swap" | "bridge";
 export type CryptoType = "CNGN" | "USDC" | "USDT";
 export type StepType = "form" | "pending" | "completed" | "execute";
 
@@ -177,6 +177,8 @@ interface TransactionFormState {
   bankCode: string;
   accountNumber: string;
   walletAddress: string;
+  fromChain: string;
+  toChain: string;
 
   // Transaction state
   step: StepType;
@@ -199,6 +201,8 @@ interface TransactionFormState {
   setBankCode: (code: string) => void;
   setAccountNumber: (number: string) => void;
   setWalletAddress: (address: string) => void;
+  setFromChain: (chain: string) => void;
+  setToChain: (chain: string) => void;
   setStep: (step: StepType) => void;
   setTransactionData: (data: any) => void;
   setSwapData: (data: any) => void;
@@ -220,6 +224,8 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
   bankCode: "",
   accountNumber: "",
   walletAddress: "",
+  fromChain: "Ethereum",
+  toChain: "Base",
   step: "form",
   transactionData: null,
   swapData: null,
@@ -238,6 +244,8 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
   setBankCode: (code) => set({ bankCode: code }),
   setAccountNumber: (number) => set({ accountNumber: number }),
   setWalletAddress: (address) => set({ walletAddress: address }),
+  setFromChain: (chain) => set({ fromChain: chain }),
+  setToChain: (chain) => set({ toChain: chain }),
   setStep: (step) => set({ step }),
   setTransactionData: (data) => set({ transactionData: data }),
   setSwapData: (data) => set({ swapData: data }),
@@ -255,5 +263,7 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
       bankCode: "",
       accountNumber: "",
       walletAddress: "",
+      fromChain: "Ethereum",
+      toChain: "Base",
     }),
 }));

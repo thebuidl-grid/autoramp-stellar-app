@@ -9,6 +9,7 @@ import {
   Copy,
   Loader2,
   ArrowDown,
+  ArrowUpRight,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { formatNumber } from "@/lib/utils";
@@ -20,6 +21,8 @@ import { OfframpConfirmationModal } from "@/components/swap/offramp-confirmation
 import { SavedWalletSelector } from "@/components/swap/SavedWalletSelector";
 import { AddWalletDialog } from "@/components/profile/AddWalletDialog";
 import { OnrampConfirmationModal } from "@/components/swap/onramp-confirmation-modal";
+import { BridgeSection } from "@/components/swap/bridge-section";
+import { ChainSelectionModal } from "@/components/swap/chain-selection-modal";
 import { HeroBackground } from "@/components/hero/hero-background";
 import {
   useBanks,
@@ -32,6 +35,9 @@ import {
   useSwapWebSocket,
   useCreateSimpleSwap,
   useResolveAccount,
+  useSupportedChains,
+  useBridge,
+  useBridgeStatus,
 } from "@/lib/hooks";
 import { SearchableBankSelect } from "@/components/ui/searchable-bank-select";
 import { parseFormattedNumber } from "@/lib/utils";
@@ -45,6 +51,8 @@ import {
   useReadContract,
 } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import {
   SWAP_CONSTANTS,
   SWAP_ROUTER_ABI,
@@ -53,6 +61,7 @@ import {
 import { parseUnits, formatUnits, encodePacked } from "viem";
 import { useTransactionStore } from "@/lib/store";
 import { QUOTER_ABI, QUOTER_ADDRESS } from "@/lib/constants/quoter-constants";
+import { USDC_ADDRESSES } from "@/lib/constants/bridge-constants";
 
 export default function HomePage() {
   const { toast } = useToast();
@@ -136,6 +145,16 @@ export default function HomePage() {
   const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
   const [isBuyConfirmationModalOpen, setIsBuyConfirmationModalOpen] =
     useState(false);
+  const [isFromChainModalOpen, setIsFromChainModalOpen] = useState(false);
+  const [isToChainModalOpen, setIsToChainModalOpen] = useState(false);
+
+  const fromChain = useTransactionStore((state) => state.fromChain);
+  const toChain = useTransactionStore((state) => state.toChain);
+  const setFromChain = useTransactionStore((state) => state.setFromChain);
+  const setToChain = useTransactionStore((state) => state.setToChain);
+
+  const { data: supportedChains = [] } = useSupportedChains();
+  const { executeBridge, isBridging, bridgeResult } = useBridge();
 
   const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
   const parsedBuyAmount = buyAmount ? parseFormattedNumber(buyAmount) : null;
@@ -208,6 +227,10 @@ export default function HomePage() {
     onUpdate: handleWebSocketUpdate,
   });
 
+  const { data: bridgeStatus } = useBridgeStatus(
+    activeTab === "bridge" && step === "pending" ? reference : undefined,
+  );
+
   const { data: cngnBalance } = useReadContract({
     address: SWAP_CONSTANTS.CNGN as `0x${string}`,
     abi: ERC20_ABI,
@@ -218,8 +241,14 @@ export default function HomePage() {
     },
   });
 
+  const currentUsdcAddress =
+    activeTab === "bridge"
+      ? USDC_ADDRESSES[fromChain.toLowerCase().replace(/\s+/g, "")] ||
+        SWAP_CONSTANTS.USDC
+      : SWAP_CONSTANTS.USDC;
+
   const { data: usdcBalance } = useReadContract({
-    address: SWAP_CONSTANTS.USDC as `0x${string}`,
+    address: currentUsdcAddress as `0x${string}`,
     abi: ERC20_ABI,
     functionName: "balanceOf",
     args: address ? [address as `0x${string}`] : undefined,
@@ -227,7 +256,7 @@ export default function HomePage() {
       enabled:
         !!address &&
         isConnected &&
-        (activeTab === "sell" || activeTab === "swap"),
+        (activeTab === "sell" || activeTab === "swap" || activeTab === "bridge"),
     },
   });
 
@@ -364,6 +393,7 @@ export default function HomePage() {
     { id: "buy" as const, label: "Buy" },
     { id: "sell" as const, label: "Sell" },
     { id: "swap" as const, label: "Swap" },
+    // { id: "bridge" as const, label: "Bridge" },
   ];
 
   const handleSellAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -825,6 +855,49 @@ export default function HomePage() {
     }
   };
 
+  // Handle bridge: USDC Ethereum to USDC Base (or vice versa)
+  const handleBridge = async () => {
+    if (!isAuthenticated()) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    if (!sellAmount || !walletAddress) {
+      toast({
+        title: "Missing fields",
+        description: "Please enter amount and destination wallet",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const isMainnet = process.env.NEXT_PUBLIC_NETWORK === "mainnet";
+    if (fromChain === toChain && isMainnet) {
+      toast({
+        title: "Invalid chains",
+        description: "Source and destination chains must be different on mainnet",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+
+    try {
+      const reference = await executeBridge({
+        fromChain: "Ethereum_Sepolia",
+        toChain: "Base_Sepolia",
+        amount: parseFormattedNumber(sellAmount).toString(),
+        recipientAddress: walletAddress,
+      });
+
+      if (reference) {
+        setStep("pending");
+      }
+    } catch (error) {
+      // Error handled in useBridge
+    }
+  };
+
   // Handle buy: NGN to CNGN (onramp)
   const handleBuy = async () => {
     if (!isAuthenticated()) {
@@ -1186,6 +1259,8 @@ export default function HomePage() {
       handleBuy();
     } else if (activeTab === "swap") {
       handleSwap();
+    } else if (activeTab === "bridge") {
+      handleBridge();
     }
   };
 
@@ -1257,6 +1332,12 @@ export default function HomePage() {
         formatUnits(usdtBalance, SWAP_CONSTANTS.USDT_DECIMALS),
       );
     }
+  } else if (activeTab === "bridge") {
+    if (usdcBalance !== undefined) {
+      activeBalance = parseFloat(
+        formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS),
+      );
+    }
   }
 
   // Render based on step
@@ -1281,126 +1362,164 @@ export default function HomePage() {
             ))}
           </div>
 
-          <SwapSection
-            label="You'll send"
-            amount={
-              activeTab === "buy"
-                ? buyAmount
-                : activeTab === "swap"
-                  ? sellAmount
-                  : sellAmount
-            }
-            onAmountChange={
-              activeTab === "buy"
-                ? handleBuyAmountChange
-                : handleSellAmountChange
-            }
-            currencyType={
-              activeTab === "buy"
-                ? "NGN"
-                : activeTab === "swap"
-                  ? (fromCryptoType as "CNGN" | "USDC")
-                  : (cryptoType as "CNGN" | "USDC" | "USDT")
-            }
-            onCurrencyClick={
-              activeTab === "buy"
-                ? undefined
-                : activeTab === "swap"
-                  ? () => setIsFromCryptoModalOpen(true)
-                  : () => setIsCryptoModalOpen(true)
-            }
-            userBalance={activeBalance}
-            onPercentageClick={handlePercentageClick}
-          />
+          {activeTab === "bridge" ? (
+            <div className="space-y-4">
+              <BridgeSection
+                label="Bridge From"
+                amount={sellAmount}
+                onAmountChange={handleSellAmountChange}
+                chain={fromChain}
+                onChainClick={() => setIsFromChainModalOpen(true)}
+                userBalance={activeBalance}
+                onPercentageClick={handlePercentageClick}
+                direction="from"
+              />
+              <div className="flex justify-center -my-6">
+                <button
+                  type="button"
+                  className="w-12 h-12 rounded-full bg-secondary hover:bg-secondary/90 flex items-center justify-center transition-colors shadow-lg"
+                  onClick={() => {
+                    const temp = fromChain;
+                    setFromChain(toChain);
+                    setToChain(temp);
+                  }}
+                >
+                  <ArrowUpDown size={18} className="text-black" />
+                </button>
+              </div>
+              <BridgeSection
+                label="Bridge To"
+                amount={sellAmount}
+                onAmountChange={() => {}}
+                chain={toChain}
+                onChainClick={() => setIsToChainModalOpen(true)}
+                direction="to"
+              />
+            </div>
+          ) : (
+            <>
+              <SwapSection
+                label="You'll send"
+                amount={
+                  activeTab === "buy"
+                    ? buyAmount
+                    : activeTab === "swap"
+                      ? sellAmount
+                      : sellAmount
+                }
+                onAmountChange={
+                  activeTab === "buy"
+                    ? handleBuyAmountChange
+                    : handleSellAmountChange
+                }
+                currencyType={
+                  activeTab === "buy"
+                    ? "NGN"
+                    : activeTab === "swap"
+                      ? (fromCryptoType as "CNGN" | "USDC")
+                      : (cryptoType as "CNGN" | "USDC" | "USDT")
+                }
+                onCurrencyClick={
+                  activeTab === "buy"
+                    ? undefined
+                    : activeTab === "swap"
+                      ? () => setIsFromCryptoModalOpen(true)
+                      : () => setIsCryptoModalOpen(true)
+                }
+                userBalance={activeBalance}
+                onPercentageClick={handlePercentageClick}
+              />
 
-          <div className="flex justify-center -my-6">
-            <button
-              type="button"
-              className="w-12 h-12 rounded-full bg-secondary hover:bg-secondary/90 flex items-center justify-center transition-colors shadow-lg"
-              onClick={
-                activeTab === "swap"
-                  ? () => {
-                      const temp = fromCryptoType;
-                      setFromCryptoType(toCryptoType);
-                      setToCryptoType(temp);
-                    }
-                  : undefined
-              }
-            >
-              {activeTab === "buy" || activeTab === "sell" ? (
-                <ArrowDown size={18} className="text-black" />
-              ) : (
-                <ArrowUpDown size={18} className="text-black" />
-              )}
-            </button>
-          </div>
+              <div className="flex justify-center -my-6">
+                <button
+                  type="button"
+                  className="w-12 h-12 rounded-full bg-secondary hover:bg-secondary/90 flex items-center justify-center transition-colors shadow-lg"
+                  onClick={
+                    activeTab === "swap"
+                      ? () => {
+                          const temp = fromCryptoType;
+                          setFromCryptoType(toCryptoType);
+                          setToCryptoType(temp);
+                        }
+                      : undefined
+                  }
+                >
+                  {activeTab === "buy" || activeTab === "sell" ? (
+                    <ArrowDown size={18} className="text-black" />
+                  ) : (
+                    <ArrowUpDown size={18} className="text-black" />
+                  )}
+                </button>
+              </div>
 
-          <SwapSection
-            label="You'll receive"
-            amount={
-              activeTab === "buy"
-                ? (() => {
-                    if (!buyAmount) return "";
-                    const parsed = parseFormattedNumber(buyAmount);
-                    return parsed.toLocaleString("en-NG");
-                  })()
-                : activeTab === "swap" ||
-                    (activeTab === "sell" &&
-                      (cryptoType === "USDC" || cryptoType === "USDT"))
-                  ? (() => {
-                      // --- SHARED LOGIC FOR SWAP AND SELL (USDC) ---
-                      if (!sellAmount) return "";
+              <SwapSection
+                label="You'll receive"
+                amount={
+                  activeTab === "buy"
+                    ? (() => {
+                        if (!buyAmount) return "";
+                        const parsed = parseFormattedNumber(buyAmount);
+                        return parsed.toLocaleString("en-NG");
+                      })()
+                    : activeTab === "swap" ||
+                        (activeTab === "sell" &&
+                          (cryptoType === "USDC" || cryptoType === "USDT"))
+                      ? (() => {
+                          // --- SHARED LOGIC FOR SWAP AND SELL (USDC) ---
+                          if (!sellAmount) return "";
 
-                      if (isQuoteLoading) return "..."; // Optional: Show loading state
+                          if (isQuoteLoading) return "..."; // Optional: Show loading state
 
-                      if (quoteAmountOut > 0n) {
-                        // Use the decimals determined in Step 1
-                        const formatted = formatUnits(
-                          quoteAmountOut,
-                          quoteDecimalsOut,
-                        );
+                          if (quoteAmountOut > 0n) {
+                            // Use the decimals determined in Step 1
+                            const formatted = formatUnits(
+                              quoteAmountOut,
+                              quoteDecimalsOut,
+                            );
 
-                        // For Sell tab (CNGN/NGN), we usually want 0 decimals (NGN is fiat-like here)
-                        // For Swap tab (USDC/CNGN), we might want decimals.
-                        // Adjust formatting based on context if needed.
+                            // For Sell tab (CNGN/NGN), we usually want 0 decimals (NGN is fiat-like here)
+                            // For Swap tab (USDC/CNGN), we might want decimals.
+                            // Adjust formatting based on context if needed.
 
-                        return parseFloat(formatted).toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        });
-                      }
-                      return "0.00";
-                      // ---------------------------------------------
-                    })()
-                  : (() => {
-                      // --- LOGIC FOR SELL (CNGN ONLY) ---
-                      // CNGN to NGN is 1:1, no swap needed
-                      if (!sellAmount) return "";
-                      const parsed = parseFormattedNumber(sellAmount);
-                      return parsed.toLocaleString("en-NG");
-                    })()
-            }
-            onAmountChange={() => {}}
-            currencyType={
-              activeTab === "buy"
-                ? "CNGN"
-                : activeTab === "swap"
-                  ? (toCryptoType as "CNGN" | "USDC" | "USDT")
-                  : "NGN"
-            }
-            onCurrencyClick={
-              activeTab === "swap"
-                ? () => setIsToCryptoModalOpen(true)
-                : undefined
-            }
-            disabled={true}
-            isLoading={
-              (needsConversion && isLoadingEstimate) ||
-              (activeTab === "swap" && isQuoteLoading)
-            }
-          />
+                            return parseFloat(formatted).toLocaleString("en-US", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            });
+                          }
+                          return "0.00";
+                          // ---------------------------------------------
+                        })()
+                      : (() => {
+                          // --- LOGIC FOR SELL (CNGN ONLY) ---
+                          // CNGN to NGN is 1:1, no swap needed
+                          if (!sellAmount) return "";
+                          const parsed = parseFormattedNumber(sellAmount);
+                          return parsed.toLocaleString("en-NG");
+                        })()
+                }
+                onAmountChange={() => {}}
+                currencyType={
+                  activeTab === "buy"
+                    ? "CNGN"
+                    : activeTab === "swap"
+                      ? (toCryptoType as "CNGN" | "USDC" | "USDT")
+                      : "NGN"
+                }
+                onCurrencyClick={
+                  activeTab === "swap"
+                    ? () => setIsToCryptoModalOpen(true)
+                    : undefined
+                }
+                disabled={true}
+                isLoading={
+                  (needsConversion && isLoadingEstimate) ||
+                  (activeTab === "swap" && isQuoteLoading)
+                }
+              />
+            </>
+          )}
 
-          {(activeTab === "buy" || activeTab === "swap") && (
+          {(activeTab === "buy" || activeTab === "swap" || activeTab === "bridge") && (
             <div className="space-y-4">
               <SavedWalletSelector
                 onSelect={(address) => setWalletAddress(address)}
@@ -1489,7 +1608,7 @@ export default function HomePage() {
             </div>
           )}
 
-          {activeTab === "sell" || activeTab === "swap" ? (
+          {activeTab === "sell" || activeTab === "swap" || activeTab === "bridge" ? (
             <div className="p-4 rounded-xl bg-black/50 border border-white/10">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-white/70">Wallet Connection</span>
@@ -1575,14 +1694,17 @@ export default function HomePage() {
                 cryptoType === "USDC" &&
                 initializeSwap.isPending) ||
               (activeTab === "buy" && onRamp.isPending) ||
-              (activeTab === "swap" && createSimpleSwap.isPending)
+              (activeTab === "swap" && createSimpleSwap.isPending) ||
+              (activeTab === "bridge" && isBridging)
             }
           >
             {activeTab === "buy"
               ? "BUY"
               : activeTab === "sell"
                 ? "SELL"
-                : "SWAP"}
+                : activeTab === "swap"
+                  ? "SWAP"
+                  : "BRIDGE"}
           </Button>
         </form>
       );
@@ -1789,6 +1911,108 @@ export default function HomePage() {
                   Connected for real-time updates
                 </p>
               )}
+            </div>
+          )}
+
+          {activeTab === "bridge" && (
+            <div className="space-y-4">
+              {/* Source Transaction */}
+              <div className="p-4 bg-black/50 rounded-xl space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-white/70 text-sm">
+                    Source Transaction
+                  </span>
+                  {(bridgeResult?.sourceTxHash ||
+                    bridgeStatus?.metadata?.SOURCE_TX) && (
+                    <a
+                      href={`https://${fromChain.toLowerCase().includes("testnet") || fromChain.toLowerCase().includes("sepolia") ? "sepolia." : ""}etherscan.io/tx/${bridgeResult?.sourceTxHash || bridgeStatus?.metadata?.SOURCE_TX}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-secondary text-xs hover:underline flex items-center gap-1"
+                    >
+                      View on Explorer <ArrowUpRight className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+                {(bridgeResult?.sourceTxHash ||
+                  bridgeStatus?.metadata?.SOURCE_TX) ? (
+                  <code className="text-xs text-secondary block truncate bg-secondary/10 p-2 rounded">
+                    {bridgeResult?.sourceTxHash ||
+                      bridgeStatus?.metadata?.SOURCE_TX}
+                  </code>
+                ) : (
+                  <div className="flex items-center gap-2 text-xs text-white/50">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Waiting for transaction...
+                  </div>
+                )}
+              </div>
+
+              {/* Status Steps */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="bg-green-500/20 p-1 rounded-full">
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      Bridge Initiated
+                    </p>
+                    <p className="text-xs text-white/50">
+                      Transaction sent to Circle
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {bridgeStatus?.status === "COMPLETED" ? (
+                    <div className="bg-green-500/20 p-1 rounded-full">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                    </div>
+                  ) : (
+                    <div className="bg-yellow-500/20 p-1 rounded-full">
+                      <Loader2 className="w-4 h-4 text-yellow-500 animate-spin" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      Circle Attestation
+                    </p>
+                    <p className="text-xs text-white/50">
+                      Waiting for block confirmations (~15 mins)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {bridgeStatus?.status === "COMPLETED" ? (
+                    <div className="bg-green-500/20 p-1 rounded-full">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                    </div>
+                  ) : (
+                    <div className="bg-white/10 p-1 rounded-full">
+                      <div className="w-4 h-4 rounded-full border-2 border-white/20" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      Destination Mint
+                    </p>
+                    <p className="text-xs text-white/50">
+                      Funds sent to your wallet
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                <p className="text-xs text-blue-200">
+                  <span className="font-bold">Note:</span> Bridging involves
+                  Circle CCTP which requires block finality. This process
+                  can take 15-20 minutes on testnets. You can safely close
+                  this window; the transaction will complete automatically.
+                </p>
+              </div>
             </div>
           )}
 
@@ -2075,6 +2299,28 @@ export default function HomePage() {
         walletAddress={walletAddress}
         network="Base"
         isLoading={onRamp.isPending}
+      />
+
+      <ChainSelectionModal
+        open={isFromChainModalOpen}
+        onOpenChange={setIsFromChainModalOpen}
+        selectedChain={fromChain}
+        onSelect={(chain) => {
+          setFromChain(chain);
+          setIsFromChainModalOpen(false);
+        }}
+        chains={supportedChains}
+      />
+
+      <ChainSelectionModal
+        open={isToChainModalOpen}
+        onOpenChange={setIsToChainModalOpen}
+        selectedChain={toChain}
+        onSelect={(chain) => {
+          setToChain(chain);
+          setIsToChainModalOpen(false);
+        }}
+        chains={supportedChains}
       />
     </div>
   );
