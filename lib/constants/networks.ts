@@ -120,8 +120,16 @@ export const getRpcUrlByChainName = (chainName: string): string | undefined => {
       : process.env.NEXT_PUBLIC_RPC_SOLANA;
   }
 
-  // For other chains, try to find by ID if applicable
-  // This is a simple mapping for common names to IDs
+  const chainId = getChainId(chainName);
+  return chainId ? getRpcUrl(chainId) : undefined;
+};
+
+export const getChainId = (chainName: string): number | undefined => {
+  const normalized = chainName.toLowerCase().replace(/\s+/g, "");
+
+  // For Solana, we return the custom ID
+  if (normalized === "solana") return 501;
+
   const chainMapping: Record<string, number> = {
     ethereum: mainnet.id,
     sepolia: sepolia.id,
@@ -131,6 +139,5 @@ export const getRpcUrlByChainName = (chainName: string): string | undefined => {
     polygonamoy: polygonAmoy.id,
   };
 
-  const chainId = chainMapping[normalized.replace(/\s+/g, "")];
-  return chainId ? getRpcUrl(chainId) : undefined;
+  return chainMapping[normalized];
 };
