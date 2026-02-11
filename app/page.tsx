@@ -20,6 +20,8 @@ import { OfframpConfirmationModal } from "@/components/swap/offramp-confirmation
 import { SavedWalletSelector } from "@/components/swap/SavedWalletSelector";
 import { AddWalletDialog } from "@/components/profile/AddWalletDialog";
 import { OnrampConfirmationModal } from "@/components/swap/onramp-confirmation-modal";
+import { BridgeSection } from "@/components/swap/bridge-section";
+import { ChainSelectionModal } from "@/components/swap/chain-selection-modal";
 import { HeroBackground } from "@/components/hero/hero-background";
 import {
   useBanks,
@@ -32,6 +34,8 @@ import {
   useSwapWebSocket,
   useCreateSimpleSwap,
   useResolveAccount,
+  useSupportedChains,
+  useBridge,
 } from "@/lib/hooks";
 import { SearchableBankSelect } from "@/components/ui/searchable-bank-select";
 import { parseFormattedNumber } from "@/lib/utils";
@@ -45,6 +49,8 @@ import {
   useReadContract,
 } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import {
   SWAP_CONSTANTS,
   SWAP_ROUTER_ABI,
@@ -136,6 +142,16 @@ export default function HomePage() {
   const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
   const [isBuyConfirmationModalOpen, setIsBuyConfirmationModalOpen] =
     useState(false);
+  const [isFromChainModalOpen, setIsFromChainModalOpen] = useState(false);
+  const [isToChainModalOpen, setIsToChainModalOpen] = useState(false);
+
+  const fromChain = useTransactionStore((state) => state.fromChain);
+  const toChain = useTransactionStore((state) => state.toChain);
+  const setFromChain = useTransactionStore((state) => state.setFromChain);
+  const setToChain = useTransactionStore((state) => state.setToChain);
+
+  const { data: supportedChains = [] } = useSupportedChains();
+  const { executeBridge, isBridging } = useBridge();
 
   const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
   const parsedBuyAmount = buyAmount ? parseFormattedNumber(buyAmount) : null;
@@ -364,6 +380,7 @@ export default function HomePage() {
     { id: "buy" as const, label: "Buy" },
     { id: "sell" as const, label: "Sell" },
     { id: "swap" as const, label: "Swap" },
+    { id: "bridge" as const, label: "Bridge" },
   ];
 
   const handleSellAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -825,6 +842,48 @@ export default function HomePage() {
     }
   };
 
+  // Handle bridge: USDC Ethereum to USDC Base (or vice versa)
+  const handleBridge = async () => {
+    if (!isAuthenticated()) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    if (!sellAmount || !walletAddress) {
+      toast({
+        title: "Missing fields",
+        description: "Please enter amount and destination wallet",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const isMainnet = process.env.NEXT_PUBLIC_NETWORK === "mainnet";
+    if (fromChain === toChain && isMainnet) {
+      toast({
+        title: "Invalid chains",
+        description: "Source and destination chains must be different on mainnet",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const reference = await executeBridge({
+        fromChain,
+        toChain,
+        amount: parseFormattedNumber(sellAmount).toString(),
+        recipientAddress: walletAddress,
+      });
+
+      if (reference) {
+        setStep("pending");
+      }
+    } catch (error) {
+      // Error handled in useBridge
+    }
+  };
+
   // Handle buy: NGN to CNGN (onramp)
   const handleBuy = async () => {
     if (!isAuthenticated()) {
@@ -1186,6 +1245,8 @@ export default function HomePage() {
       handleBuy();
     } else if (activeTab === "swap") {
       handleSwap();
+    } else if (activeTab === "bridge") {
+      handleBridge();
     }
   };
 
@@ -1256,6 +1317,12 @@ export default function HomePage() {
       activeBalance = parseFloat(
         formatUnits(usdtBalance, SWAP_CONSTANTS.USDT_DECIMALS),
       );
+      } else if (activeTab === "bridge") {
+      if (usdcBalance !== undefined) {
+        activeBalance = parseFloat(
+          formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS),
+        );
+      }
     }
   }
 
@@ -1281,126 +1348,164 @@ export default function HomePage() {
             ))}
           </div>
 
-          <SwapSection
-            label="You'll send"
-            amount={
-              activeTab === "buy"
-                ? buyAmount
-                : activeTab === "swap"
-                  ? sellAmount
-                  : sellAmount
-            }
-            onAmountChange={
-              activeTab === "buy"
-                ? handleBuyAmountChange
-                : handleSellAmountChange
-            }
-            currencyType={
-              activeTab === "buy"
-                ? "NGN"
-                : activeTab === "swap"
-                  ? (fromCryptoType as "CNGN" | "USDC")
-                  : (cryptoType as "CNGN" | "USDC" | "USDT")
-            }
-            onCurrencyClick={
-              activeTab === "buy"
-                ? undefined
-                : activeTab === "swap"
-                  ? () => setIsFromCryptoModalOpen(true)
-                  : () => setIsCryptoModalOpen(true)
-            }
-            userBalance={activeBalance}
-            onPercentageClick={handlePercentageClick}
-          />
+          {activeTab === "bridge" ? (
+            <div className="space-y-4">
+              <BridgeSection
+                label="Bridge From"
+                amount={sellAmount}
+                onAmountChange={handleSellAmountChange}
+                chain={fromChain}
+                onChainClick={() => setIsFromChainModalOpen(true)}
+                userBalance={activeBalance}
+                onPercentageClick={handlePercentageClick}
+                direction="from"
+              />
+              <div className="flex justify-center -my-6">
+                <button
+                  type="button"
+                  className="w-12 h-12 rounded-full bg-secondary hover:bg-secondary/90 flex items-center justify-center transition-colors shadow-lg"
+                  onClick={() => {
+                    const temp = fromChain;
+                    setFromChain(toChain);
+                    setToChain(temp);
+                  }}
+                >
+                  <ArrowUpDown size={18} className="text-black" />
+                </button>
+              </div>
+              <BridgeSection
+                label="Bridge To"
+                amount={sellAmount}
+                onAmountChange={() => {}}
+                chain={toChain}
+                onChainClick={() => setIsToChainModalOpen(true)}
+                direction="to"
+              />
+            </div>
+          ) : (
+            <>
+              <SwapSection
+                label="You'll send"
+                amount={
+                  activeTab === "buy"
+                    ? buyAmount
+                    : activeTab === "swap"
+                      ? sellAmount
+                      : sellAmount
+                }
+                onAmountChange={
+                  activeTab === "buy"
+                    ? handleBuyAmountChange
+                    : handleSellAmountChange
+                }
+                currencyType={
+                  activeTab === "buy"
+                    ? "NGN"
+                    : activeTab === "swap"
+                      ? (fromCryptoType as "CNGN" | "USDC")
+                      : (cryptoType as "CNGN" | "USDC" | "USDT")
+                }
+                onCurrencyClick={
+                  activeTab === "buy"
+                    ? undefined
+                    : activeTab === "swap"
+                      ? () => setIsFromCryptoModalOpen(true)
+                      : () => setIsCryptoModalOpen(true)
+                }
+                userBalance={activeBalance}
+                onPercentageClick={handlePercentageClick}
+              />
 
-          <div className="flex justify-center -my-6">
-            <button
-              type="button"
-              className="w-12 h-12 rounded-full bg-secondary hover:bg-secondary/90 flex items-center justify-center transition-colors shadow-lg"
-              onClick={
-                activeTab === "swap"
-                  ? () => {
-                      const temp = fromCryptoType;
-                      setFromCryptoType(toCryptoType);
-                      setToCryptoType(temp);
-                    }
-                  : undefined
-              }
-            >
-              {activeTab === "buy" || activeTab === "sell" ? (
-                <ArrowDown size={18} className="text-black" />
-              ) : (
-                <ArrowUpDown size={18} className="text-black" />
-              )}
-            </button>
-          </div>
+              <div className="flex justify-center -my-6">
+                <button
+                  type="button"
+                  className="w-12 h-12 rounded-full bg-secondary hover:bg-secondary/90 flex items-center justify-center transition-colors shadow-lg"
+                  onClick={
+                    activeTab === "swap"
+                      ? () => {
+                          const temp = fromCryptoType;
+                          setFromCryptoType(toCryptoType);
+                          setToCryptoType(temp);
+                        }
+                      : undefined
+                  }
+                >
+                  {activeTab === "buy" || activeTab === "sell" ? (
+                    <ArrowDown size={18} className="text-black" />
+                  ) : (
+                    <ArrowUpDown size={18} className="text-black" />
+                  )}
+                </button>
+              </div>
 
-          <SwapSection
-            label="You'll receive"
-            amount={
-              activeTab === "buy"
-                ? (() => {
-                    if (!buyAmount) return "";
-                    const parsed = parseFormattedNumber(buyAmount);
-                    return parsed.toLocaleString("en-NG");
-                  })()
-                : activeTab === "swap" ||
-                    (activeTab === "sell" &&
-                      (cryptoType === "USDC" || cryptoType === "USDT"))
-                  ? (() => {
-                      // --- SHARED LOGIC FOR SWAP AND SELL (USDC) ---
-                      if (!sellAmount) return "";
+              <SwapSection
+                label="You'll receive"
+                amount={
+                  activeTab === "buy"
+                    ? (() => {
+                        if (!buyAmount) return "";
+                        const parsed = parseFormattedNumber(buyAmount);
+                        return parsed.toLocaleString("en-NG");
+                      })()
+                    : activeTab === "swap" ||
+                        (activeTab === "sell" &&
+                          (cryptoType === "USDC" || cryptoType === "USDT"))
+                      ? (() => {
+                          // --- SHARED LOGIC FOR SWAP AND SELL (USDC) ---
+                          if (!sellAmount) return "";
 
-                      if (isQuoteLoading) return "..."; // Optional: Show loading state
+                          if (isQuoteLoading) return "..."; // Optional: Show loading state
 
-                      if (quoteAmountOut > 0n) {
-                        // Use the decimals determined in Step 1
-                        const formatted = formatUnits(
-                          quoteAmountOut,
-                          quoteDecimalsOut,
-                        );
+                          if (quoteAmountOut > 0n) {
+                            // Use the decimals determined in Step 1
+                            const formatted = formatUnits(
+                              quoteAmountOut,
+                              quoteDecimalsOut,
+                            );
 
-                        // For Sell tab (CNGN/NGN), we usually want 0 decimals (NGN is fiat-like here)
-                        // For Swap tab (USDC/CNGN), we might want decimals.
-                        // Adjust formatting based on context if needed.
+                            // For Sell tab (CNGN/NGN), we usually want 0 decimals (NGN is fiat-like here)
+                            // For Swap tab (USDC/CNGN), we might want decimals.
+                            // Adjust formatting based on context if needed.
 
-                        return parseFloat(formatted).toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        });
-                      }
-                      return "0.00";
-                      // ---------------------------------------------
-                    })()
-                  : (() => {
-                      // --- LOGIC FOR SELL (CNGN ONLY) ---
-                      // CNGN to NGN is 1:1, no swap needed
-                      if (!sellAmount) return "";
-                      const parsed = parseFormattedNumber(sellAmount);
-                      return parsed.toLocaleString("en-NG");
-                    })()
-            }
-            onAmountChange={() => {}}
-            currencyType={
-              activeTab === "buy"
-                ? "CNGN"
-                : activeTab === "swap"
-                  ? (toCryptoType as "CNGN" | "USDC" | "USDT")
-                  : "NGN"
-            }
-            onCurrencyClick={
-              activeTab === "swap"
-                ? () => setIsToCryptoModalOpen(true)
-                : undefined
-            }
-            disabled={true}
-            isLoading={
-              (needsConversion && isLoadingEstimate) ||
-              (activeTab === "swap" && isQuoteLoading)
-            }
-          />
+                            return parseFloat(formatted).toLocaleString("en-US", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            });
+                          }
+                          return "0.00";
+                          // ---------------------------------------------
+                        })()
+                      : (() => {
+                          // --- LOGIC FOR SELL (CNGN ONLY) ---
+                          // CNGN to NGN is 1:1, no swap needed
+                          if (!sellAmount) return "";
+                          const parsed = parseFormattedNumber(sellAmount);
+                          return parsed.toLocaleString("en-NG");
+                        })()
+                }
+                onAmountChange={() => {}}
+                currencyType={
+                  activeTab === "buy"
+                    ? "CNGN"
+                    : activeTab === "swap"
+                      ? (toCryptoType as "CNGN" | "USDC" | "USDT")
+                      : "NGN"
+                }
+                onCurrencyClick={
+                  activeTab === "swap"
+                    ? () => setIsToCryptoModalOpen(true)
+                    : undefined
+                }
+                disabled={true}
+                isLoading={
+                  (needsConversion && isLoadingEstimate) ||
+                  (activeTab === "swap" && isQuoteLoading)
+                }
+              />
+            </>
+          )}
 
-          {(activeTab === "buy" || activeTab === "swap") && (
+          {(activeTab === "buy" || activeTab === "swap" || activeTab === "bridge") && (
             <div className="space-y-4">
               <SavedWalletSelector
                 onSelect={(address) => setWalletAddress(address)}
@@ -1489,7 +1594,7 @@ export default function HomePage() {
             </div>
           )}
 
-          {activeTab === "sell" || activeTab === "swap" ? (
+          {activeTab === "sell" || activeTab === "swap" || activeTab === "bridge" ? (
             <div className="p-4 rounded-xl bg-black/50 border border-white/10">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-white/70">Wallet Connection</span>
@@ -1575,14 +1680,17 @@ export default function HomePage() {
                 cryptoType === "USDC" &&
                 initializeSwap.isPending) ||
               (activeTab === "buy" && onRamp.isPending) ||
-              (activeTab === "swap" && createSimpleSwap.isPending)
+              (activeTab === "swap" && createSimpleSwap.isPending) ||
+              (activeTab === "bridge" && isBridging)
             }
           >
             {activeTab === "buy"
               ? "BUY"
               : activeTab === "sell"
                 ? "SELL"
-                : "SWAP"}
+                : activeTab === "swap"
+                  ? "SWAP"
+                  : "BRIDGE"}
           </Button>
         </form>
       );
@@ -2075,6 +2183,28 @@ export default function HomePage() {
         walletAddress={walletAddress}
         network="Base"
         isLoading={onRamp.isPending}
+      />
+
+      <ChainSelectionModal
+        open={isFromChainModalOpen}
+        onOpenChange={setIsFromChainModalOpen}
+        selectedChain={fromChain}
+        onSelect={(chain) => {
+          setFromChain(chain);
+          setIsFromChainModalOpen(false);
+        }}
+        chains={supportedChains}
+      />
+
+      <ChainSelectionModal
+        open={isToChainModalOpen}
+        onOpenChange={setIsToChainModalOpen}
+        selectedChain={toChain}
+        onSelect={(chain) => {
+          setToChain(chain);
+          setIsToChainModalOpen(false);
+        }}
+        chains={supportedChains}
       />
     </div>
   );

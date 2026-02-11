@@ -223,10 +223,16 @@ export const userApi = {
 
   // Saved Bank Accounts with OTP verification
   initiateAddAccount: (data: InitiateAddAccountDto) =>
-    api.post<InitiateAddAccountResponse>("/user/bank-accounts/initiate-verification", data),
+    api.post<InitiateAddAccountResponse>(
+      "/user/bank-accounts/initiate-verification",
+      data,
+    ),
 
   verifyAndAddAccount: (data: VerifyAndAddAccountDto) =>
-    api.post<SavedAccountNumber>("/user/bank-accounts/complete-verification", data),
+    api.post<SavedAccountNumber>(
+      "/user/bank-accounts/complete-verification",
+      data,
+    ),
 
   getSavedAccounts: () => api.get<SavedAccountNumber[]>("/user/bank-accounts"),
 
@@ -868,6 +874,54 @@ export const swapApi = {
     api.get<Record<string, string>>(
       `/swap/balances${address ? `?address=${address}` : ""}`,
     ),
+};
+
+// ============== Bridge API ==============
+
+export interface InitiateBridgeDto {
+  fromChain: string;
+  toChain: string;
+  amount: string;
+  sourceAddress: string;
+  destinationAddress: string;
+}
+
+export interface InitiateBridgeResponse {
+  reference: string;
+  status: string;
+}
+
+export interface UpdateBridgeHashDto {
+  reference: string;
+  step: "SOURCE_TX" | "ATTESTATION" | "DESTINATION_TX";
+  hash: string;
+  status: "PROCESSING" | "COMPLETED" | "FAILED";
+}
+
+export interface BridgeStatusResponse {
+  reference: string;
+  status: string;
+  transactionHash: string;
+  metadata: {
+    SOURCE_TX?: string;
+    DESTINATION_TX?: string;
+    ATTESTATION?: string;
+    [key: string]: any;
+  };
+}
+
+export const bridgeApi = {
+  initiate: (data: InitiateBridgeDto) =>
+    api.post<InitiateBridgeResponse>("/bridge/initiate", data),
+
+  updateHash: (data: UpdateBridgeHashDto) =>
+    api.post<{ success: boolean }>("/bridge/update-hash", data),
+
+  getStatus: (reference: string) =>
+    api.get<BridgeStatusResponse>(`/bridge/status/${reference}`),
+
+  getSupportedChains: () =>
+    api.get<{ chains: string[] }>("/bridge/supported-chains"),
 };
 
 export const miscApi = {

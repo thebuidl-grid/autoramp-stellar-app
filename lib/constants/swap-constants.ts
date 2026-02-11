@@ -1,17 +1,21 @@
-/**
- * Swap Constants
- *
- * Contract addresses and configuration for swap functionality
- */
+import { IS_TESTNET } from "./networks";
 
 // Base network contract addresses
 export const SWAP_CONSTANTS = {
   SWAP_ROUTER:
     process.env.NEXT_PUBLIC_SWAP_ROUTER_ADDRESS ||
-    "0x0000000000000000000000000000000000000000",
-  USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-  CNGN: "0x46c85152bfe9f96829aa94755d9f915f9b10ef5f",
-  USDT: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+    (IS_TESTNET
+      ? "0x94cc0aa7b1f31f9076e7300300db79fbd2e3f6dc" // Base Sepolia SwapRouter
+      : "0x2626164c24022c6e176b30a30b31174eaa0f368a"), // Base Mainnet SwapRouter
+  USDC: IS_TESTNET
+    ? "0x036CbD53842c5426634e7929541eC2318f3dCF7e" // Base Sepolia USDC
+    : "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base Mainnet USDC
+  CNGN: IS_TESTNET
+    ? "0x401306C9b05Ddd6aAA6758066fB9D796783A0963" // Base Sepolia CNGN (example)
+    : "0x46c85152bfe9f96829aa94755d9f915f9b10ef5f", // Base Mainnet CNGN
+  USDT: IS_TESTNET
+    ? "0x560866166CD34Ba4854f3bA2eB87771B7C13cc92" // Base Sepolia USDT (example)
+    : "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", // Base Mainnet USDT
   USDC_DECIMALS: 6,
   CNGN_DECIMALS: 6,
   USDT_DECIMALS: 6,
