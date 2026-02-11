@@ -9,6 +9,7 @@ import {
   Copy,
   Loader2,
   ArrowDown,
+  ArrowUpRight,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { formatNumber } from "@/lib/utils";
@@ -36,6 +37,7 @@ import {
   useResolveAccount,
   useSupportedChains,
   useBridge,
+  useBridgeStatus,
 } from "@/lib/hooks";
 import { SearchableBankSelect } from "@/components/ui/searchable-bank-select";
 import { parseFormattedNumber } from "@/lib/utils";
@@ -59,6 +61,7 @@ import {
 import { parseUnits, formatUnits, encodePacked } from "viem";
 import { useTransactionStore } from "@/lib/store";
 import { QUOTER_ABI, QUOTER_ADDRESS } from "@/lib/constants/quoter-constants";
+import { USDC_ADDRESSES } from "@/lib/constants/bridge-constants";
 
 export default function HomePage() {
   const { toast } = useToast();
@@ -151,7 +154,7 @@ export default function HomePage() {
   const setToChain = useTransactionStore((state) => state.setToChain);
 
   const { data: supportedChains = [] } = useSupportedChains();
-  const { executeBridge, isBridging } = useBridge();
+  const { executeBridge, isBridging, bridgeResult } = useBridge();
 
   const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
   const parsedBuyAmount = buyAmount ? parseFormattedNumber(buyAmount) : null;
@@ -224,6 +227,10 @@ export default function HomePage() {
     onUpdate: handleWebSocketUpdate,
   });
 
+  const { data: bridgeStatus } = useBridgeStatus(
+    activeTab === "bridge" && step === "pending" ? reference : undefined,
+  );
+
   const { data: cngnBalance } = useReadContract({
     address: SWAP_CONSTANTS.CNGN as `0x${string}`,
     abi: ERC20_ABI,
@@ -234,8 +241,14 @@ export default function HomePage() {
     },
   });
 
+  const currentUsdcAddress =
+    activeTab === "bridge"
+      ? USDC_ADDRESSES[fromChain.toLowerCase().replace(/\s+/g, "")] ||
+        SWAP_CONSTANTS.USDC
+      : SWAP_CONSTANTS.USDC;
+
   const { data: usdcBalance } = useReadContract({
-    address: SWAP_CONSTANTS.USDC as `0x${string}`,
+    address: currentUsdcAddress as `0x${string}`,
     abi: ERC20_ABI,
     functionName: "balanceOf",
     args: address ? [address as `0x${string}`] : undefined,
@@ -243,7 +256,7 @@ export default function HomePage() {
       enabled:
         !!address &&
         isConnected &&
-        (activeTab === "sell" || activeTab === "swap"),
+        (activeTab === "sell" || activeTab === "swap" || activeTab === "bridge"),
     },
   });
 
@@ -867,11 +880,12 @@ export default function HomePage() {
       });
       return;
     }
+    
 
     try {
       const reference = await executeBridge({
-        fromChain,
-        toChain,
+        fromChain: "Ethereum_Sepolia",
+        toChain: "Base_Sepolia",
         amount: parseFormattedNumber(sellAmount).toString(),
         recipientAddress: walletAddress,
       });
@@ -1317,12 +1331,12 @@ export default function HomePage() {
       activeBalance = parseFloat(
         formatUnits(usdtBalance, SWAP_CONSTANTS.USDT_DECIMALS),
       );
-      } else if (activeTab === "bridge") {
-      if (usdcBalance !== undefined) {
-        activeBalance = parseFloat(
-          formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS),
-        );
-      }
+    }
+  } else if (activeTab === "bridge") {
+    if (usdcBalance !== undefined) {
+      activeBalance = parseFloat(
+        formatUnits(usdcBalance, SWAP_CONSTANTS.USDC_DECIMALS),
+      );
     }
   }
 
@@ -1897,6 +1911,108 @@ export default function HomePage() {
                   Connected for real-time updates
                 </p>
               )}
+            </div>
+          )}
+
+          {activeTab === "bridge" && (
+            <div className="space-y-4">
+              {/* Source Transaction */}
+              <div className="p-4 bg-black/50 rounded-xl space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-white/70 text-sm">
+                    Source Transaction
+                  </span>
+                  {(bridgeResult?.sourceTxHash ||
+                    bridgeStatus?.metadata?.SOURCE_TX) && (
+                    <a
+                      href={`https://${fromChain.toLowerCase().includes("testnet") || fromChain.toLowerCase().includes("sepolia") ? "sepolia." : ""}etherscan.io/tx/${bridgeResult?.sourceTxHash || bridgeStatus?.metadata?.SOURCE_TX}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-secondary text-xs hover:underline flex items-center gap-1"
+                    >
+                      View on Explorer <ArrowUpRight className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+                {(bridgeResult?.sourceTxHash ||
+                  bridgeStatus?.metadata?.SOURCE_TX) ? (
+                  <code className="text-xs text-secondary block truncate bg-secondary/10 p-2 rounded">
+                    {bridgeResult?.sourceTxHash ||
+                      bridgeStatus?.metadata?.SOURCE_TX}
+                  </code>
+                ) : (
+                  <div className="flex items-center gap-2 text-xs text-white/50">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Waiting for transaction...
+                  </div>
+                )}
+              </div>
+
+              {/* Status Steps */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="bg-green-500/20 p-1 rounded-full">
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      Bridge Initiated
+                    </p>
+                    <p className="text-xs text-white/50">
+                      Transaction sent to Circle
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {bridgeStatus?.status === "COMPLETED" ? (
+                    <div className="bg-green-500/20 p-1 rounded-full">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                    </div>
+                  ) : (
+                    <div className="bg-yellow-500/20 p-1 rounded-full">
+                      <Loader2 className="w-4 h-4 text-yellow-500 animate-spin" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      Circle Attestation
+                    </p>
+                    <p className="text-xs text-white/50">
+                      Waiting for block confirmations (~15 mins)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {bridgeStatus?.status === "COMPLETED" ? (
+                    <div className="bg-green-500/20 p-1 rounded-full">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                    </div>
+                  ) : (
+                    <div className="bg-white/10 p-1 rounded-full">
+                      <div className="w-4 h-4 rounded-full border-2 border-white/20" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      Destination Mint
+                    </p>
+                    <p className="text-xs text-white/50">
+                      Funds sent to your wallet
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                <p className="text-xs text-blue-200">
+                  <span className="font-bold">Note:</span> Bridging involves
+                  Circle CCTP which requires block finality. This process
+                  can take 15-20 minutes on testnets. You can safely close
+                  this window; the transaction will complete automatically.
+                </p>
+              </div>
             </div>
           )}
 
