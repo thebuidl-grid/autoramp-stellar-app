@@ -256,7 +256,9 @@ export default function HomePage() {
       enabled:
         !!address &&
         isConnected &&
-        (activeTab === "sell" || activeTab === "swap" || activeTab === "bridge"),
+        (activeTab === "sell" ||
+          activeTab === "swap" ||
+          activeTab === "bridge"),
     },
   });
 
@@ -875,12 +877,12 @@ export default function HomePage() {
     if (fromChain === toChain && isMainnet) {
       toast({
         title: "Invalid chains",
-        description: "Source and destination chains must be different on mainnet",
+        description:
+          "Source and destination chains must be different on mainnet",
         variant: "destructive",
       });
       return;
     }
-    
 
     try {
       const reference = await executeBridge({
@@ -1481,10 +1483,13 @@ export default function HomePage() {
                             // For Swap tab (USDC/CNGN), we might want decimals.
                             // Adjust formatting based on context if needed.
 
-                            return parseFloat(formatted).toLocaleString("en-US", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            });
+                            return parseFloat(formatted).toLocaleString(
+                              "en-US",
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            );
                           }
                           return "0.00";
                           // ---------------------------------------------
@@ -1519,7 +1524,9 @@ export default function HomePage() {
             </>
           )}
 
-          {(activeTab === "buy" || activeTab === "swap" || activeTab === "bridge") && (
+          {(activeTab === "buy" ||
+            activeTab === "swap" ||
+            activeTab === "bridge") && (
             <div className="space-y-4">
               <SavedWalletSelector
                 onSelect={(address) => setWalletAddress(address)}
@@ -1608,10 +1615,14 @@ export default function HomePage() {
             </div>
           )}
 
-          {activeTab === "sell" || activeTab === "swap" || activeTab === "bridge" ? (
+          {activeTab === "sell" ||
+          activeTab === "swap" ||
+          activeTab === "bridge" ? (
             <div className="p-4 rounded-xl bg-black/50 border border-white/10">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-white/70">Wallet Connection</span>
+              <div className="flex md:items-center justify-between items-center mb-2">
+                <span className="text-sm text-white/70 font-normal">
+                  Wallet Connection
+                </span>
                 <ConnectButton showBalance={false} />
               </div>
               {isConnected &&
@@ -1934,8 +1945,8 @@ export default function HomePage() {
                     </a>
                   )}
                 </div>
-                {(bridgeResult?.sourceTxHash ||
-                  bridgeStatus?.metadata?.SOURCE_TX) ? (
+                {bridgeResult?.sourceTxHash ||
+                bridgeStatus?.metadata?.SOURCE_TX ? (
                   <code className="text-xs text-secondary block truncate bg-secondary/10 p-2 rounded">
                     {bridgeResult?.sourceTxHash ||
                       bridgeStatus?.metadata?.SOURCE_TX}
@@ -2008,9 +2019,9 @@ export default function HomePage() {
               <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
                 <p className="text-xs text-blue-200">
                   <span className="font-bold">Note:</span> Bridging involves
-                  Circle CCTP which requires block finality. This process
-                  can take 15-20 minutes on testnets. You can safely close
-                  this window; the transaction will complete automatically.
+                  Circle CCTP which requires block finality. This process can
+                  take 15-20 minutes on testnets. You can safely close this
+                  window; the transaction will complete automatically.
                 </p>
               </div>
             </div>
