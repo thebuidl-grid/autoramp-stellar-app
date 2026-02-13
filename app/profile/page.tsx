@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 /**
  * Profile Page
- * 
+ *
  * Displays user profile information and manages saved accounts and wallets.
  */
 export default function ProfilePage() {
@@ -45,21 +45,38 @@ export default function ProfilePage() {
       <main className="pt-32 pb-16">
         <div className="max-w-6xl mx-auto px-4">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Account Settings</h1>
-            <p className="text-white/60">Manage your profile and saved payment methods</p>
+            <h1 className="text-3xl font-bold text-white mb-2">
+              Account Settings
+            </h1>
+            <p className="text-white/60">
+              Manage your profile and saved payment methods
+            </p>
           </div>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="bg-zinc-900 border border-zinc-800">
-              <TabsTrigger value="profile" className="data-[state=active]:bg-zinc-800">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="space-y-6"
+          >
+            <TabsList className="w-full lg:w-fit flex justify-start md:justify-center overflow-x-auto bg-zinc-900 border border-zinc-800 h-14 no-scrollbar">
+              <TabsTrigger
+                value="profile"
+                className="data-[state=active]:bg-zinc-800"
+              >
                 <User className="w-4 h-4 mr-2" />
                 Profile
               </TabsTrigger>
-              <TabsTrigger value="accounts" className="data-[state=active]:bg-zinc-800">
+              <TabsTrigger
+                value="accounts"
+                className="data-[state=active]:bg-zinc-800"
+              >
                 <Building2 className="w-4 h-4 mr-2" />
                 Saved Accounts
               </TabsTrigger>
-              <TabsTrigger value="wallets" className="data-[state=active]:bg-zinc-800">
+              <TabsTrigger
+                value="wallets"
+                className="data-[state=active]:bg-zinc-800"
+              >
                 <CreditCard className="w-4 h-4 mr-2" />
                 Saved Wallets
               </TabsTrigger>
@@ -138,4 +155,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
