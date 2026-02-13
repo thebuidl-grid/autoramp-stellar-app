@@ -460,7 +460,7 @@ export interface ResolveAccountResponse {
 export const stablestackApi = {
   getBanks: () =>
     api.get<{ status: string; message: string; data: Bank[] }>(
-      "/stablestack/banks",
+      "/misc/banks",
     ),
 
   resolveAccount: (bankCode: string, accountNumber: string) => {
@@ -468,7 +468,7 @@ export const stablestackApi = {
     params.append("bankCode", bankCode);
     params.append("accountNumber", accountNumber);
     return api.get<ResolveAccountResponse>(
-      `/stablestack/resolve-account?${params.toString()}`,
+      `/misc/resolve-account?${params.toString()}`,
     );
   },
 

@@ -222,7 +222,7 @@ export default function DocsPage() {
                         {/* Banks */}
                         <EndpointSection
                             method="GET"
-                            endpoint="/api/merchant/banks"
+                            endpoint="/misc/banks"
                             title="List Banks"
                             description="Get a list of all supported Nigerian banks. Use the bank code when creating offramp transactions."
                             auth={true}
@@ -244,7 +244,7 @@ export default function DocsPage() {
                         {/* Resolve Account */}
                         <EndpointSection
                             method="GET"
-                            endpoint="/api/merchant/resolve-account"
+                            endpoint="/misc/resolve-account"
                             title="Resolve Account"
                             description="Verify a bank account and get the account holder's name before processing a transaction."
                             auth={true}
