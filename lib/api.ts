@@ -472,9 +472,9 @@ export const stablestackApi = {
     );
   },
 
-  onRamp: (data: OnRampDto) => api.post("/stablestack/onramp", data),
+  onRamp: (data: OnRampDto) => api.post("/ramp/onramp", data),
 
-  offRamp: (data: OffRampDto) => api.post("/stablestack/offramp", data),
+  offRamp: (data: OffRampDto) => api.post("/ramp/offramp", data),
 
   getTransactions: (
     id?: string,
@@ -488,7 +488,7 @@ export const stablestackApi = {
     if (page) params.append("page", page.toString());
     if (limit) params.append("limit", limit.toString());
     return api.get<TransactionsResponse>(
-      `/stablestack/transactions?${params.toString()}`,
+      `/ramp/transactions?${params.toString()}`,
     );
   },
 };
