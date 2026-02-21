@@ -395,16 +395,17 @@ export interface Transaction {
   flintTransactionId?: string;
   network?: string;
   depositAddress?: string;
-  depositAccount?: any;
+  depositAccount?: {
+    accountNumber: string;
+    accountName: string;
+    bankName: string;
+    bankCode: string;
+  };
   metadata?: any;
 
   // Off-ramp specific fields (combined from existing Transaction and TransactionDto)
   amount_offramp?: number; // Off-ramp amount in token (from TransactionDto)
   fiatAmount?: number; // Off-ramp fiat amount in NGN
-  bankCode?: string;
-  accountNumber?: string;
-  accountName?: string;
-  bankName?: string;
   tokenType?: string;
 }
 
@@ -459,9 +460,7 @@ export interface ResolveAccountResponse {
 
 export const stablestackApi = {
   getBanks: () =>
-    api.get<{ status: string; message: string; data: Bank[] }>(
-      "/misc/banks",
-    ),
+    api.get<{ status: string; message: string; data: Bank[] }>("/misc/banks"),
 
   resolveAccount: (bankCode: string, accountNumber: string) => {
     const params = new URLSearchParams();
