@@ -222,20 +222,20 @@ export function TransactionDetailsDialog({
                   </div>
                 </div>
               )}
-              {!isOnramp && transaction.accountNumber && (
+              {!isOnramp && transaction?.depositAccount?.accountNumber && (
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">
                     Bank Account
                   </p>
                   <div className="space-y-2">
-                    {transaction.bankName && (
-                      <p className="font-medium">{transaction.bankName}</p>
+                    {transaction?.depositAccount?.bankName && (
+                      <p className="font-medium">{transaction?.depositAccount?.bankName}</p>
                     )}
                     <div className="flex items-center gap-2">
-                      <p className="font-mono">{transaction.accountNumber}</p>
-                      {transaction.accountName && (
+                      <p className="font-mono">{transaction?.depositAccount?.accountNumber}</p>
+                      {transaction?.depositAccount?.accountName && (
                         <span className="text-sm text-muted-foreground">
-                          - {transaction.accountName}
+                          - {transaction?.depositAccount?.accountName}
                         </span>
                       )}
                     </div>
