@@ -407,6 +407,10 @@ export interface Transaction {
   amount_offramp?: number; // Off-ramp amount in token (from TransactionDto)
   fiatAmount?: number; // Off-ramp fiat amount in NGN
   tokenType?: string;
+  bankName?: string;
+  accountNumber?: string;
+  accountName?: string;
+  bankCode?: string;
 }
 
 export interface SwapTransaction {
