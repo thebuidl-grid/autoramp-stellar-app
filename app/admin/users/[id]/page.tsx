@@ -96,7 +96,7 @@ export default function UserDetailPage() {
     if (error || !userResponse) {
         return (
             <div className="space-y-4">
-                <Button variant="ghost" onClick={() => router.back()} className="gap-2">
+                <Button variant="ghost" onClick={() => router.push("/admin/users")} className="gap-2">
                     <ArrowLeft className="h-4 w-4" />
                     Back to Users
                 </Button>
@@ -122,7 +122,7 @@ export default function UserDetailPage() {
     return (
         <div className="space-y-6 max-w-5xl mx-auto pb-10">
             <div className="flex items-center gap-4">
-                <Button variant="outline" size="icon" onClick={() => router.back()}>
+                <Button variant="outline" size="icon" onClick={() => router.push("/admin/users")}>
                     <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <div>
