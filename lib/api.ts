@@ -691,10 +691,10 @@ export const adminApi = {
       wallet_address?: string;
       contact_name?: string;
     }>,
-  ) => api.patch<AdminUser>(`/admin/user/${userId}/profile`, data),
+  ) => api.patch<AdminUser>(`/admin/users/${userId}/profile`, data),
 
   suspendUser: (userId: string, data: { suspended: boolean }) =>
-    api.patch<{ message: string }>(`/admin/user/${userId}/suspend`, data),
+    api.patch<{ message: string }>(`/admin/users/${userId}/suspend`, data),
 
   updateUserFlags: (
     userId: string,
