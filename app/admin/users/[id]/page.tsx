@@ -46,8 +46,8 @@ export default function UserDetailPage() {
     // The user schema might have isOtcEnabled, or we manage it locally if it fails
     
     const suspendMutation = useMutation({
-        mutationFn: async (suspended: boolean) => {
-            return await adminApi.suspendUser(userId, { suspended });
+        mutationFn: async (suspend: boolean) => {
+            return await adminApi.suspendUser(userId, { suspend });
         },
         onSuccess: (data) => {
             toast({
@@ -65,9 +65,9 @@ export default function UserDetailPage() {
         }
     });
 
-    const toggleOtcMutation = useMutation({
-        mutationFn: async (isOTCEnabled: boolean) => {
-            return await adminApi.toggleUserOtc(userId, { isOTCEnabled });
+    const toggleFlagMutation = useMutation({
+        mutationFn: async (data: { isMerchant?: boolean, isApiAccessApproved?: boolean, isOTCEnabled?: boolean }) => {
+            return await adminApi.updateUserFlags(userId, data);
         },
         onSuccess: () => {
             toast({
@@ -78,8 +78,8 @@ export default function UserDetailPage() {
         },
         onError: (err) => {
             toast({
-                title: "Warning",
-                description: "API might not support OTC toggle yet: " + getErrorMessage(err),
+                title: "Error",
+                description: "Failed to update user flag: " + getErrorMessage(err),
                 variant: "destructive",
             });
         }
@@ -113,10 +113,9 @@ export default function UserDetailPage() {
     }
 
     const user = userResponse as AdminUser;
-    const isOtcEnabled = user.isOTCEnabled ?? false; // Default to false if not provided by backend
 
-    const handleOtcToggle = (checked: boolean) => {
-        toggleOtcMutation.mutate(checked);
+    const handleFlagToggle = (field: "isMerchant" | "isApiAccessApproved" | "isOTCEnabled", checked: boolean) => {
+        toggleFlagMutation.mutate({ [field]: checked });
     };
 
     return (
@@ -133,7 +132,7 @@ export default function UserDetailPage() {
 
             <div className="grid gap-6 md:grid-cols-3">
                 {/* Main Identity Card */}
-                <Card className="md:col-span-2">
+                <Card className={`md:col-span-2 transition-opacity duration-300 ${user.suspended ? "opacity-50 grayscale-[0.5]" : ""}`}>
                     <CardHeader className="flex flex-row items-center justify-between pb-4">
                         <div className="space-y-1">
                             <CardTitle>Profile Information</CardTitle>
@@ -191,70 +190,84 @@ export default function UserDetailPage() {
                 </Card>
 
                 {/* Settings & Flags */}
-                <Card>
+                <Card className="relative overflow-hidden">
+                    {user.suspended && (
+                        <div className="absolute inset-0 z-10 bg-background/20 backdrop-blur-[1px] pointer-events-none flex items-center justify-center">
+                            <div className="bg-destructive/10 text-destructive text-xs font-bold px-3 py-1.5 rounded-full border border-destructive/20 shadow-sm backdrop-blur-md translate-y-[-2rem]">
+                                ACCOUNT SUSPENDED
+                            </div>
+                        </div>
+                    )}
                     <CardHeader>
                         <CardTitle>Permissions & Features</CardTitle>
                         <CardDescription>Manage user access flags</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                        {/* OTC Toggle */}
-                        <div className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-background">
-                            <div className="space-y-0.5">
-                                <Label className="text-base font-semibold">Manual OTC</Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Allow this user to access manual OTC trading features.
-                                </p>
+                        {/* Flag Toggles */}
+                        <div className="space-y-4">
+                            {/* Merchant Toggle */}
+                            <div className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-background">
+                                <div className="space-y-0.5">
+                                    <Label className="text-base font-semibold">Merchant Status</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Enable merchant capabilities for this user.
+                                    </p>
+                                </div>
+                                <ToggleSwitch 
+                                    checked={!!user.isMerchant} 
+                                    onChange={(checked) => handleFlagToggle("isMerchant", checked)}
+                                    disabled={toggleFlagMutation.isPending || user.suspended}
+                                />
                             </div>
-                            <input 
-                                type="checkbox"
-                                checked={isOtcEnabled} 
-                                onChange={(e) => handleOtcToggle(e.target.checked)}
-                                disabled={toggleOtcMutation.isPending}
-                                className="h-6 w-11 rounded-full bg-white/10 checked:bg-primary transition-colors appearance-none cursor-pointer relative after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all checked:after:translate-x-5"
-                            />
+
+                            {/* API Access Toggle */}
+                            <div className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-background">
+                                <div className="space-y-0.5">
+                                    <Label className="text-base font-semibold">API Access</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Approve API access for this user's account.
+                                    </p>
+                                </div>
+                                <ToggleSwitch 
+                                    checked={!!user.isApiAccessApproved} 
+                                    onChange={(checked) => handleFlagToggle("isApiAccessApproved", checked)}
+                                    disabled={toggleFlagMutation.isPending || user.suspended}
+                                />
+                            </div>
+
+                            {/* OTC Toggle */}
+                            <div className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-background">
+                                <div className="space-y-0.5">
+                                    <Label className="text-base font-semibold">OTC Enablement</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Allow OTC trading and send enablement email.
+                                    </p>
+                                </div>
+                                <ToggleSwitch 
+                                    checked={!!user.isOTCEnabled} 
+                                    onChange={(checked) => handleFlagToggle("isOTCEnabled", checked)}
+                                    disabled={toggleFlagMutation.isPending || user.suspended}
+                                />
+                            </div>
                         </div>
 
-                        <div className="h-px bg-white/10 my-6" />
+                        <div className="h-px bg-border my-6" />
 
                         <div className="space-y-4">
-                            <h4 className="text-sm font-semibold">Other Status Flags</h4>
-                            
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">Is Merchant</span>
-                                {user.isMerchant ? (
-                                    <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50"><CheckCircle2 className="mr-1 h-3 w-3" /> Yes</Badge>
-                                ) : (
-                                    <Badge variant="outline" className="text-muted-foreground"><XCircle className="mr-1 h-3 w-3" /> No</Badge>
-                                )}
-                            </div>
-
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">OTC Enabled</span>
-                                {user.isOTCEnabled ? (
-                                    <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50"><CheckCircle2 className="mr-1 h-3 w-3" /> Yes</Badge>
-                                ) : (
-                                    <Badge variant="outline" className="text-muted-foreground"><XCircle className="mr-1 h-3 w-3" /> No</Badge>
-                                )}
-                            </div>
-
-                            <div className="h-px bg-white/10 my-6" />
-
-                            <div className="space-y-4">
-                                <h4 className="text-sm font-semibold text-red-500">Danger Zone</h4>
-                                <Button 
-                                    variant={user.suspended ? "default" : "destructive"} 
-                                    className="w-full h-10"
-                                    onClick={() => suspendMutation.mutate(!user.suspended)}
-                                    isLoading={suspendMutation.isPending}
-                                >
-                                    {user.suspended ? "Unsuspend User" : "Suspend User"}
-                                </Button>
-                                <p className="text-[10px] text-muted-foreground text-center italic">
-                                    {user.suspended 
-                                        ? (user.suspendedAt ? `Suspended on ${format(new Date(user.suspendedAt), "PPP p")}` : "User is currently suspended.")
-                                        : "Suspending will block the user from all platform activities."}
-                                </p>
-                            </div>
+                            <h4 className="text-sm font-semibold text-destructive">Danger Zone</h4>
+                            <Button 
+                                variant={user.suspended ? "default" : "destructive"} 
+                                className="w-full h-10 relative z-20"
+                                onClick={() => suspendMutation.mutate(!user.suspended)}
+                                disabled={suspendMutation.isPending}
+                            >
+                                {user.suspended ? "Unsuspend User" : "Suspend User"}
+                            </Button>
+                            <p className="text-[10px] text-muted-foreground text-center italic">
+                                {user.suspended 
+                                    ? (user.suspendedAt ? `Suspended on ${format(new Date(user.suspendedAt), "PPP p")}` : "User is currently suspended.")
+                                    : "Suspending will revoke API keys and block platform access."}
+                            </p>
                         </div>
                     </CardContent>
                 </Card>
@@ -281,5 +294,17 @@ export default function UserDetailPage() {
 
             </div>
         </div>
+    );
+}
+
+function ToggleSwitch({ checked, onChange, disabled }: { checked: boolean, onChange: (checked: boolean) => void, disabled?: boolean }) {
+    return (
+        <input 
+            type="checkbox"
+            checked={checked} 
+            onChange={(e) => onChange(e.target.checked)}
+            disabled={disabled}
+            className="h-6 w-11 rounded-full bg-muted checked:bg-primary transition-colors appearance-none cursor-pointer relative after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all checked:after:translate-x-5 disabled:opacity-50 disabled:cursor-not-allowed"
+        />
     );
 }
