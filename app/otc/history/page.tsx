@@ -41,11 +41,6 @@ export default function OtcHistoryPage() {
         enabled: isAuthenticated,
     });
 
-    useEffect(() => {
-        if (_hasHydrated && !isAuthenticated) {
-            router.push("/auth/login");
-        }
-    }, [isAuthenticated, _hasHydrated, router]);
 
     const handleCopy = async (text: string, label: string) => {
         const success = await copyToClipboard(text);
@@ -63,10 +58,6 @@ export default function OtcHistoryPage() {
         tx.token.toLowerCase().includes(searchQuery.toLowerCase()) ||
         tx.network.toLowerCase().includes(searchQuery.toLowerCase())
     ) || [];
-
-    if (!_hasHydrated || !isAuthenticated) {
-        return null;
-    }
 
     return (
         <div className="min-h-screen bg-black text-white">

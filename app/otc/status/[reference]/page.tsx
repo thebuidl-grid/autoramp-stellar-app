@@ -67,18 +67,6 @@ export default function OtcTransactionStatusPage() {
         }
     };
 
-    if (!_hasHydrated) {
-        return (
-            <div className="min-h-screen bg-black flex items-center justify-center">
-                <div className="h-12 w-12 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-            </div>
-        );
-    }
-
-    if (!isAuthenticated) {
-        router.push("/auth/login");
-        return null;
-    }
 
     if (isLoading) {
         return (
