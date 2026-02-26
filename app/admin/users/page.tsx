@@ -28,16 +28,18 @@ import { adminApi } from "@/lib/api";
 import { format } from "date-fns";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function AdminUsersPage() {
     const router = useRouter();
     const [page, setPage] = useState(1);
+    const [searchQuery, setSearchQuery] = useState("");
     const limit = 10;
 
     const { data: usersResponse, isLoading } = useQuery({
-        queryKey: ["admin-users", page],
+        queryKey: ["admin-users", page, searchQuery],
         queryFn: async () => {
-            const { data } = await adminApi.getUsers(page, limit);
+            const { data } = await adminApi.getUsers(page, limit, searchQuery);
             return data;
         },
     });
@@ -65,8 +67,10 @@ export default function AdminUsersPage() {
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
                                 type="search"
-                                placeholder="Search users..."
+                                placeholder="Search users by email..."
                                 className="w-[200px] lg:w-[300px] pl-8 h-9"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
                             />
                         </div>
                     </div>
@@ -91,7 +95,7 @@ export default function AdminUsersPage() {
                                         </td>
                                     </tr>
                                 ) : (
-                                    usersResponse?.users.map((user) => (
+                                    (usersResponse?.users || []).map((user) => (
                                         <tr key={user.id} className="border-b transition-colors hover:bg-muted/50">
                                             <td className="p-4 align-middle font-medium">
                                                 {user.email}
@@ -116,25 +120,38 @@ export default function AdminUsersPage() {
                                             <td className="p-4 align-middle text-muted-foreground">
                                                 {format(new Date(user.createdAt), "MMM d, yyyy")}
                                             </td>
-                                            <td className="p-4 align-middle text-right">
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" className="h-8 w-8 p-0">
-                                                            <MoreHorizontal className="h-4 w-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                        <DropdownMenuItem onClick={() => router.push(`/admin/users/${user.id}`)}>
-                                                            View Details
-                                                        </DropdownMenuItem>
-
-                                                        <DropdownMenuItem>Edit Permissions</DropdownMenuItem>
-                                                        <DropdownMenuSeparator />
-                                                        <DropdownMenuItem className="text-red-500">Suspend User</DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </td>
+                                             <td className="p-4 align-middle text-right">
+                                                 <div className="flex justify-end gap-2">
+                                                     <Button 
+                                                         variant="outline" 
+                                                         size="sm" 
+                                                         className="h-8 px-3 text-xs"
+                                                         asChild
+                                                     >
+                                                         <Link href={`/admin/users/${user.id}`}>
+                                                             View
+                                                         </Link>
+                                                     </Button>
+                                                     <DropdownMenu>
+                                                         <DropdownMenuTrigger asChild>
+                                                             <Button variant="ghost" className="h-8 w-8 p-0">
+                                                                 <MoreHorizontal className="h-4 w-4" />
+                                                             </Button>
+                                                         </DropdownMenuTrigger>
+                                                         <DropdownMenuContent align="end">
+                                                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                             <DropdownMenuItem asChild>
+                                                                 <Link href={`/admin/users/${user.id}`}>
+                                                                     View Details
+                                                                 </Link>
+                                                             </DropdownMenuItem>
+                                                             <DropdownMenuItem>Edit Permissions</DropdownMenuItem>
+                                                             <DropdownMenuSeparator />
+                                                             <DropdownMenuItem className="text-red-500">Suspend User</DropdownMenuItem>
+                                                         </DropdownMenuContent>
+                                                     </DropdownMenu>
+                                                 </div>
+                                             </td>
                                         </tr>
                                     ))
                                 )}
