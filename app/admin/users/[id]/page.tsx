@@ -139,7 +139,7 @@ export default function UserDetailPage() {
                             <CardTitle>Profile Information</CardTitle>
                             <CardDescription>Basic contact and identity details</CardDescription>
                         </div>
-                        <Badge variant={user.role === "admin" ? "default" : "secondary"} className="capitalize">
+                        <Badge variant={user.role?.toLowerCase() === "admin" ? "default" : "secondary"} className="capitalize">
                             {user.role}
                         </Badge>
                     </CardHeader>
@@ -251,7 +251,7 @@ export default function UserDetailPage() {
                                 </Button>
                                 <p className="text-[10px] text-muted-foreground text-center italic">
                                     {user.suspended 
-                                        ? "This user currently cannot perform any transactions." 
+                                        ? `Locked on ${user.suspendedAt ? format(new Date(user.suspendedAt), "PPP") : "unknown date"}.` 
                                         : "Suspending will block the user from all platform activities."}
                                 </p>
                             </div>
