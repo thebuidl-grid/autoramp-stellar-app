@@ -2,6 +2,9 @@
 
 import { OtcOnboardingForm } from "@/components/otc/otc-onboarding-form";
 import { useAuthStore, useIsAuthenticated } from "@/lib/store";
+import { useOtcStatus } from "@/lib/hooks";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -10,6 +13,8 @@ import Image from "next/image";
 export default function OtcOnboardingPage() {
     const isAuthenticated = useIsAuthenticated();
     const { _hasHydrated } = useAuthStore();
+    const router = useRouter();
+    const { isOTCEnabled, isOnboarded, isLoading: isOtcLoading } = useOtcStatus();
 
     if (!_hasHydrated) {
         return (
