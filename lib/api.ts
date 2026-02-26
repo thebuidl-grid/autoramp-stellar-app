@@ -114,6 +114,7 @@ export interface User {
   role: string;
   isMerchant?: boolean;
   isApiAccessApproved?: boolean;
+  isOTCEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -688,14 +689,15 @@ export const adminApi = {
 
   updateUserFlags: (
     userId: string,
-    data: { is_merchant?: boolean; is_api_access_approved?: boolean },
+    data: {
+      is_merchant?: boolean;
+      is_api_access_approved?: boolean;
+      isOTCEnabled?: boolean;
+    },
   ) => api.patch<AdminUser>(`/admin/users/${userId}/flags`, data),
 
-  toggleUserOtc: (userId: string, data: { isOtcEnabled: boolean }) =>
-    api.patch<{ message: string; user: AdminUser }>(
-      `/admin/users/${userId}/otc`,
-      data,
-    ),
+  toggleUserOtc: (userId: string, data: { isOTCEnabled: boolean }) =>
+    api.patch<AdminUser>(`/admin/users/${userId}/flags`, data),
 
   // API Key Management
   getAllApiKeys: (page: number = 1, limit: number = 10) =>
@@ -865,7 +867,8 @@ export const otcApi = {
   getTransaction: (id: string) =>
     api.get<OtcTransaction>(`/otc/transaction/${id}`),
 
-  checkIsOtcEnabled: () => api.get<{ isEnabled: boolean }>("/otc/isEnabled"),
+  checkIsOtcEnabled: () =>
+    api.get<{ isOTCEnabled: boolean; isOnboarded: boolean }>("/otc/isEnabled"),
 };
 
 export interface InitializeSwapDto {
