@@ -115,6 +115,7 @@ export interface User {
   isMerchant?: boolean;
   isApiAccessApproved?: boolean;
   isOTCEnabled?: boolean;
+  suspended?: boolean;
   createdAt: string;
   updatedAt: string;
 }
