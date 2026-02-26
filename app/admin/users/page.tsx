@@ -84,7 +84,7 @@ export default function AdminUsersPage() {
                                     <th className="p-4 text-left font-medium">Contact</th>
                                     <th className="p-4 text-left font-medium">Role</th>
                                     <th className="p-4 text-left font-medium">Joined</th>
-                                    <th className="p-4 text-right font-medium">Actions</th>
+                                    <th className="p-4 text-right font-medium"></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -121,36 +121,16 @@ export default function AdminUsersPage() {
                                                 {format(new Date(user.createdAt), "MMM d, yyyy")}
                                             </td>
                                              <td className="p-4 align-middle text-right">
-                                                 <div className="flex justify-end gap-2">
-                                                     <Button 
-                                                         variant="outline" 
-                                                         size="sm" 
-                                                         className="h-8 px-3 text-xs"
-                                                         asChild
-                                                     >
-                                                         <Link href={`/admin/users/${user.id}`}>
-                                                             View
-                                                         </Link>
-                                                     </Button>
-                                                     <DropdownMenu>
-                                                         <DropdownMenuTrigger asChild>
-                                                             <Button variant="ghost" className="h-8 w-8 p-0">
-                                                                 <MoreHorizontal className="h-4 w-4" />
-                                                             </Button>
-                                                         </DropdownMenuTrigger>
-                                                         <DropdownMenuContent align="end">
-                                                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                             <DropdownMenuItem asChild>
-                                                                 <Link href={`/admin/users/${user.id}`}>
-                                                                     View Details
-                                                                 </Link>
-                                                             </DropdownMenuItem>
-                                                             <DropdownMenuItem>Edit Permissions</DropdownMenuItem>
-                                                             <DropdownMenuSeparator />
-                                                             <DropdownMenuItem className="text-red-500">Suspend User</DropdownMenuItem>
-                                                         </DropdownMenuContent>
-                                                     </DropdownMenu>
-                                                 </div>
+                                                 <Button 
+                                                     variant="outline" 
+                                                     size="sm" 
+                                                     className="h-8 px-4 text-xs font-medium"
+                                                     asChild
+                                                 >
+                                                     <Link href={`/admin/users/${user.id}`}>
+                                                         View
+                                                     </Link>
+                                                 </Button>
                                              </td>
                                         </tr>
                                     ))

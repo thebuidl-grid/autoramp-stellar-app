@@ -45,6 +45,26 @@ export default function UserDetailPage() {
     // We try to use the the fetched state first (if it exists on the model)
     // The user schema might have isOtcEnabled, or we manage it locally if it fails
     
+    const suspendMutation = useMutation({
+        mutationFn: async (suspended: boolean) => {
+            return await adminApi.suspendUser(userId, { suspended });
+        },
+        onSuccess: (data) => {
+            toast({
+                title: "Success",
+                description: data.data.message || "User suspension status updated.",
+            });
+            queryClient.invalidateQueries({ queryKey: ["admin-user", userId] });
+        },
+        onError: (err) => {
+            toast({
+                title: "Error",
+                description: getErrorMessage(err),
+                variant: "destructive",
+            });
+        }
+    });
+
     const toggleOtcMutation = useMutation({
         mutationFn: async (isOTCEnabled: boolean) => {
             return await adminApi.toggleUserOtc(userId, { isOTCEnabled });
@@ -57,7 +77,6 @@ export default function UserDetailPage() {
             queryClient.invalidateQueries({ queryKey: ["admin-user", userId] });
         },
         onError: (err) => {
-            // Also handle possibility of missing endpoint gracefully
             toast({
                 title: "Warning",
                 description: "API might not support OTC toggle yet: " + getErrorMessage(err),
@@ -216,6 +235,25 @@ export default function UserDetailPage() {
                                 ) : (
                                     <Badge variant="outline" className="text-muted-foreground"><XCircle className="mr-1 h-3 w-3" /> No</Badge>
                                 )}
+                            </div>
+
+                            <div className="h-px bg-white/10 my-6" />
+
+                            <div className="space-y-4">
+                                <h4 className="text-sm font-semibold text-red-500">Danger Zone</h4>
+                                <Button 
+                                    variant={user.suspended ? "default" : "destructive"} 
+                                    className="w-full h-10"
+                                    onClick={() => suspendMutation.mutate(!user.suspended)}
+                                    isLoading={suspendMutation.isPending}
+                                >
+                                    {user.suspended ? "Unsuspend User" : "Suspend User"}
+                                </Button>
+                                <p className="text-[10px] text-muted-foreground text-center italic">
+                                    {user.suspended 
+                                        ? "This user currently cannot perform any transactions." 
+                                        : "Suspending will block the user from all platform activities."}
+                                </p>
                             </div>
                         </div>
                     </CardContent>
