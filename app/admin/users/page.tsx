@@ -25,7 +25,10 @@ import { useQuery } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api";
 import { format } from "date-fns";
 
+import { useRouter } from "next/navigation";
+
 export default function AdminUsersPage() {
+    const router = useRouter();
     const [page, setPage] = useState(1);
     const limit = 10;
 
@@ -120,7 +123,10 @@ export default function AdminUsersPage() {
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
                                                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                        <DropdownMenuItem>View Details</DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => router.push(`/admin/users/${user.id}`)}>
+                                                            View Details
+                                                        </DropdownMenuItem>
+
                                                         <DropdownMenuItem>Edit Permissions</DropdownMenuItem>
                                                         <DropdownMenuSeparator />
                                                         <DropdownMenuItem className="text-red-500">Suspend User</DropdownMenuItem>

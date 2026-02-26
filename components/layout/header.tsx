@@ -76,6 +76,14 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                   History
                 </Link>
               )}
+              {isAuthenticated && (
+                <Link
+                  href="/otc/trade"
+                  className="text-sm text-white/60 hover:text-secondary transition-colors duration-300"
+                >
+                  OTC
+                </Link>
+              )}
               {isAuthenticated && user?.isMerchant && (
                 <Link
                   href="/merchant/dashboard"
@@ -109,6 +117,16 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                     <DropdownMenuItem asChild>
                       <Link href="/history" className="cursor-pointer">
                         History
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/otc/trade" className="cursor-pointer">
+                        OTC Trade
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/otc/history" className="cursor-pointer">
+                        OTC History
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
