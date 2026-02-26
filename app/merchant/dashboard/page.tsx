@@ -6,12 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Key, Activity, BarChart3, Settings } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, TrendingUp } from "lucide-react";
+import { useOtcStatus } from "@/lib/hooks";
 
 export default function MerchantDashboardPage() {
     const { data: stats, isLoading } = useMerchantApiKeyStats();
     const router = useRouter();
     const { toast } = useToast();
+    const { isOTCEnabled } = useOtcStatus();
 
     if (isLoading) {
         return (
@@ -94,6 +96,19 @@ export default function MerchantDashboardPage() {
                         </CardHeader>
                     </Card>
                 </Link>
+                {isOTCEnabled && (
+                    <Link href="/otc/trade">
+                        <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full border-primary/20 bg-primary/5">
+                            <CardHeader className="flex flex-row items-center gap-4">
+                                <TrendingUp className="h-8 w-8 text-primary" />
+                                <div>
+                                    <CardTitle>OTC Trading</CardTitle>
+                                    <p className="text-sm text-muted-foreground">Access OTC trade portal</p>
+                                </div>
+                            </CardHeader>
+                        </Card>
+                    </Link>
+                )}
             </div>
         </div>
     );
