@@ -8,7 +8,9 @@ import {
     Mail,
     Phone,
     Wallet,
-    MoreHorizontal
+    MoreHorizontal,
+    ChevronLeft,
+    ChevronRight
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -139,6 +141,40 @@ export default function AdminUsersPage() {
                             </tbody>
                         </table>
                     </div>
+
+                    {/* Pagination */}
+                    {usersResponse?.pagination && (
+                        <div className="flex items-center justify-between px-2 py-4 border-t mt-4">
+                            <div className="text-sm text-muted-foreground">
+                                Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, usersResponse.pagination.total)} of {usersResponse.pagination.total} users
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    disabled={page === 1 || isLoading}
+                                    className="gap-1"
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                    Previous
+                                </Button>
+                                <div className="flex items-center justify-center min-w-[32px] text-sm font-medium">
+                                    {page} / {usersResponse.pagination.totalPages}
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setPage(p => Math.min(usersResponse.pagination.totalPages, p + 1))}
+                                    disabled={page === usersResponse.pagination.totalPages || isLoading}
+                                    className="gap-1"
+                                >
+                                    Next
+                                    <ChevronRight className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>
