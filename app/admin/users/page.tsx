@@ -114,7 +114,13 @@ export default function AdminUsersPage() {
                                         </td>
                                     </tr>
                                 ) : (
-                                    (usersResponse?.users || []).map((user) => (
+                                    (usersResponse?.users || [])
+                                        .filter(user => {
+                                            if (statusFilter === "active") return !user.suspended;
+                                            if (statusFilter === "suspended") return !!user.suspended;
+                                            return true;
+                                        })
+                                        .map((user) => (
                                         <tr key={user.id} className="border-b transition-colors hover:bg-muted/50">
                                             <td className="p-4 align-middle font-medium">
                                                 {user.email}
@@ -132,7 +138,7 @@ export default function AdminUsersPage() {
                                                 </div>
                                             </td>
                                              <td className="p-4 align-middle capitalize">
-                                                 <Badge variant={user.role === "admin" ? "default" : "secondary"}>
+                                                 <Badge variant={user.role?.toLowerCase() === "admin" ? "default" : "secondary"}>
                                                      {user.role}
                                                  </Badge>
                                              </td>

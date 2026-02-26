@@ -116,6 +116,7 @@ export interface User {
   isApiAccessApproved?: boolean;
   isOTCEnabled?: boolean;
   suspended?: boolean;
+  suspendedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
