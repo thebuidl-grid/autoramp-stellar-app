@@ -693,20 +693,17 @@ export const adminApi = {
     }>,
   ) => api.patch<AdminUser>(`/admin/users/${userId}/profile`, data),
 
-  suspendUser: (userId: string, data: { suspended: boolean }) =>
+  suspendUser: (userId: string, data: { suspend: boolean }) =>
     api.patch<{ message: string }>(`/admin/users/${userId}/suspend`, data),
 
   updateUserFlags: (
     userId: string,
     data: {
-      is_merchant?: boolean;
-      is_api_access_approved?: boolean;
+      isMerchant?: boolean;
+      isApiAccessApproved?: boolean;
       isOTCEnabled?: boolean;
     },
   ) => api.patch<AdminUser>(`/admin/users/${userId}/flags`, data),
-
-  toggleUserOtc: (userId: string, data: { isOTCEnabled: boolean }) =>
-    api.patch<AdminUser>(`/admin/users/${userId}/flags`, data),
 
   // API Key Management
   getAllApiKeys: (page: number = 1, limit: number = 10) =>
