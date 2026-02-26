@@ -689,7 +689,13 @@ export const adminApi = {
   updateUserFlags: (
     userId: string,
     data: { is_merchant?: boolean; is_api_access_approved?: boolean },
-  ) => api.patch<AdminUser>(`/admin/user/${userId}/flags`, data),
+  ) => api.patch<AdminUser>(`/admin/users/${userId}/flags`, data),
+
+  toggleUserOtc: (userId: string, data: { isOtcEnabled: boolean }) =>
+    api.patch<{ message: string; user: AdminUser }>(
+      `/admin/users/${userId}/otc`,
+      data,
+    ),
 
   // API Key Management
   getAllApiKeys: (page: number = 1, limit: number = 10) =>
@@ -791,6 +797,76 @@ export interface AnalyticsDataPoint {
   swapVolume: number;
 }
 // ============== Swap API ==============
+
+export interface SwapTransaction {
+  id: string;
+  reference: string;
+  fromTokenType: string;
+  fromAmount: number;
+  toTokenType: string;
+  toAmount: number;
+  exchangeRate: number;
+  sourceAddress: string;
+  destinationAddress: string;
+  status: string;
+  transactionHash?: string;
+  fromNetwork?: string;
+  toNetwork?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
+// ============== OTC API Types ==============
+
+export enum OtcIdentityType {
+  BVN = "BVN",
+  NIN = "NIN",
+}
+
+export interface OnboardOtcDto {
+  identityType: OtcIdentityType;
+  identityNumber: string;
+  otp?: string;
+}
+
+export interface InitiateOtcTransactionDto {
+  quantity: number;
+  token: string;
+  network: string;
+  chain?: string;
+  address: string;
+  memo?: string;
+}
+
+export interface OtcTransaction extends Transaction {
+  quantity: number;
+  token: string;
+  network: string;
+  chain?: string;
+  address: string;
+  memo?: string;
+}
+
+// ============== API Groups ==============
+
+export const otcApi = {
+  onboard: (data: OnboardOtcDto) =>
+    api.post<{ success: boolean; message: string }>("/otc/onboard", data),
+
+  initiate: (data: InitiateOtcTransactionDto) =>
+    api.post<OtcTransaction>("/otc/initiate", data),
+
+  getStatus: (reference: string) =>
+    api.get<OtcTransaction>(`/otc/status/${reference}`),
+
+  getTransactions: () => api.get<OtcTransaction[]>("/otc/transactions"),
+
+  getTransaction: (id: string) =>
+    api.get<OtcTransaction>(`/otc/transaction/${id}`),
+
+  checkIsOtcEnabled: () => api.get<{ isEnabled: boolean }>("/otc/isEnabled"),
+};
 
 export interface InitializeSwapDto {
   amount: number; // NGN amount for offramp
