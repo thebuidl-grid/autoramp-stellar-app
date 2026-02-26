@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     Users,
     Search,
@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api";
+import { useDebounce } from "@/lib/hooks";
 import { format } from "date-fns";
 
 import { useRouter } from "next/navigation";
@@ -29,16 +30,22 @@ export default function AdminUsersPage() {
     const [page, setPage] = useState(1);
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("all");
+    const debouncedSearchQuery = useDebounce(searchQuery, 500);
     const limit = 10;
 
     const { data: usersResponse, isLoading } = useQuery({
-        queryKey: ["admin-users", page, searchQuery, statusFilter],
+        queryKey: ["admin-users", page, debouncedSearchQuery, statusFilter],
         queryFn: async () => {
             const status = statusFilter === "all" ? undefined : statusFilter;
-            const { data } = await adminApi.getUsers(page, limit, searchQuery, status);
+            const { data } = await adminApi.getUsers(page, limit, debouncedSearchQuery, status);
             return data;
         },
     });
+
+    // Reset to page 1 when search or filter changes
+    useEffect(() => {
+        setPage(1);
+    }, [debouncedSearchQuery, statusFilter]);
 
     return (
         <div className="space-y-8">
