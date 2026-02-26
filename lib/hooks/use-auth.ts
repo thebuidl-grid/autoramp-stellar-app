@@ -2,7 +2,13 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { authApi, SignInDto, SignUpDto, getErrorMessage } from "@/lib/api";
+import {
+  authApi,
+  SignInDto,
+  SignUpDto,
+  getErrorMessage,
+  otcApi,
+} from "@/lib/api";
 import { merchantApi } from "@/lib/merchant";
 import { useAuthStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
@@ -133,3 +139,27 @@ export function useIsOnboarded() {
   });
 }
 
+/**
+ * OTC Status Check Hook
+ */
+export function useOtcStatus() {
+  const user = useAuthStore((state) => state.user);
+
+  const { data: otcStatus, ...rest } = useQuery({
+    queryKey: ["otcEnabled", user?.id],
+    queryFn: async () => {
+      const response = await otcApi.checkIsOtcEnabled();
+      return response.data;
+    },
+    enabled: !!user,
+    staleTime: 30 * 60 * 1000, // 30 minutes
+    refetchOnWindowFocus: false,
+  });
+
+  return {
+    ...rest,
+    data: otcStatus,
+    isOTCEnabled: otcStatus?.isOTCEnabled ?? false,
+    isOnboarded: otcStatus?.isOnboarded ?? false,
+  };
+}

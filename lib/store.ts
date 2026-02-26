@@ -160,7 +160,7 @@ export const useUIStore = create<UIState>((set, get) => ({
  * Global state for transaction form (buy, sell, swap)
  */
 
-export type TabType = "buy" | "sell" | "swap" | "bridge";
+export type TabType = "buy" | "sell" | "swap" | "bridge" | "otc";
 export type CryptoType = "CNGN" | "USDC" | "USDT";
 export type StepType = "form" | "pending" | "completed" | "execute";
 
