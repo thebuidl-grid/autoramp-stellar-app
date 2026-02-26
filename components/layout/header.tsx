@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAuthStore, useIsAuthenticated } from "@/lib/store";
-import { useMerchantStatus } from "@/lib/hooks/use-auth";
+import { useMerchantStatus, useOtcStatus } from "@/lib/hooks/use-auth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +27,11 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
 
 
   const { data: merchantStatus } = useMerchantStatus();
+  const { data: otcStatus, isOTCEnabled, isOnboarded } = useOtcStatus();
+
+  const otcLink = isOTCEnabled 
+    ? (isOnboarded ? "/otc/trade" : "/otc/onboarding")
+    : null;
 
 
   // Sync merchant status to store when fetched
@@ -76,9 +81,9 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                   History
                 </Link>
               )}
-              {isAuthenticated && (
+              {isAuthenticated && otcLink && (
                 <Link
-                  href="/otc/trade"
+                  href={otcLink}
                   className="text-sm text-white/60 hover:text-secondary transition-colors duration-300"
                 >
                   OTC
@@ -119,16 +124,22 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                         History
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/otc/trade" className="cursor-pointer">
-                        OTC Trade
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/otc/history" className="cursor-pointer">
-                        OTC History
-                      </Link>
-                    </DropdownMenuItem>
+                    {otcLink && (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link href={otcLink} className="cursor-pointer">
+                            OTC {isOnboarded ? "Trade" : "Onboarding"}
+                          </Link>
+                        </DropdownMenuItem>
+                        {isOnboarded && (
+                          <DropdownMenuItem asChild>
+                            <Link href="/otc/history" className="cursor-pointer">
+                              OTC History
+                            </Link>
+                          </DropdownMenuItem>
+                        )}
+                      </>
+                    )}
                     <DropdownMenuItem asChild>
                       <Link href="/profile" className="cursor-pointer">
                         Profile

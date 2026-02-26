@@ -6,7 +6,9 @@ import { Header } from "@/components/layout/header";
 import { useAuthStore, useIsAuthenticated } from "@/lib/store";
 import { useProfile } from "@/lib/hooks/use-user";
 import { Skeleton } from "@/components/ui/skeleton";
-import { User, Mail, Phone, Wallet, Building2, CreditCard } from "lucide-react";
+import { User, Mail, Phone, Wallet, Building2, CreditCard, CheckCircle2, XCircle, TrendingUp } from "lucide-react";
+import { useOtcStatus } from "@/lib/hooks";
+import { Badge } from "@/components/ui/badge";
 import { SavedAccountsManager } from "@/components/profile/SavedAccountsManager";
 import { SavedWalletsManager } from "@/components/profile/SavedWalletsManager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,6 +23,7 @@ export default function ProfilePage() {
   const isAuthenticated = useIsAuthenticated();
   const { _hasHydrated, user: storeUser } = useAuthStore();
   const { data: profile, isLoading } = useProfile();
+  const { isOTCEnabled } = useOtcStatus();
   const [activeTab, setActiveTab] = useState("profile");
 
   // Redirect to home if not authenticated (after hydration)
@@ -131,6 +134,32 @@ export default function ProfilePage() {
                       </label>
                       <div className="px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white font-mono text-sm break-all">
                         {user?.walletAddress || "Not connected"}
+                      </div>
+                    </div>
+
+                    {/* OTC Status */}
+                    <div className="space-y-2 pt-4 border-t border-white/5">
+                      <label className="text-sm text-white/70 flex items-center gap-2">
+                        <TrendingUp size={16} />
+                        Manual OTC Status
+                      </label>
+                      <div className="flex items-center gap-2">
+                        {isOTCEnabled ? (
+                          <Badge className="bg-green-500/10 text-green-500 border-green-500/20 px-3 py-1">
+                            <CheckCircle2 size={14} className="mr-1.5" />
+                            Enabled
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-white/40 border-white/10 px-3 py-1">
+                            <XCircle size={14} className="mr-1.5" />
+                            Not Enabled
+                          </Badge>
+                        )}
+                        {!isOTCEnabled && (
+                          <span className="text-xs text-white/40 italic">
+                            Contact support to request OTC access
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
