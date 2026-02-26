@@ -251,7 +251,7 @@ export default function UserDetailPage() {
                                 </Button>
                                 <p className="text-[10px] text-muted-foreground text-center italic">
                                     {user.suspended 
-                                        ? `Locked on ${user.suspendedAt ? format(new Date(user.suspendedAt), "PPP") : "unknown date"}.` 
+                                        ? (user.suspendedAt ? `Suspended on ${format(new Date(user.suspendedAt), "PPP p")}` : "User is currently suspended.")
                                         : "Suspending will block the user from all platform activities."}
                                 </p>
                             </div>
