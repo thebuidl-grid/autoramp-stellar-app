@@ -661,9 +661,14 @@ export interface MerchantsResponse {
 export const adminApi = {
   getMe: () => api.get<AdminUser>("/admin/me"),
 
-  getUsers: (page: number = 1, limit: number = 10, search?: string) =>
+  getUsers: (
+    page: number = 1,
+    limit: number = 10,
+    search?: string,
+    status?: string,
+  ) =>
     api.get<UsersResponse>(
-      `/admin/users?page=${page}&limit=${limit}${search ? `&search=${search}` : ""}`,
+      `/admin/users?page=${page}&limit=${limit}${search ? `&search=${search}` : ""}${status ? `&status=${status}` : ""}`,
     ),
 
   getUserById: (id: string) => api.get<AdminUser>(`/admin/users/${id}`),

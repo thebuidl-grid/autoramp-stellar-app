@@ -10,7 +10,9 @@ import {
     Wallet,
     MoreHorizontal,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    XCircle,
+    CheckCircle2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -34,12 +36,14 @@ export default function AdminUsersPage() {
     const router = useRouter();
     const [page, setPage] = useState(1);
     const [searchQuery, setSearchQuery] = useState("");
+    const [statusFilter, setStatusFilter] = useState<string>("all");
     const limit = 10;
 
     const { data: usersResponse, isLoading } = useQuery({
-        queryKey: ["admin-users", page, searchQuery],
+        queryKey: ["admin-users", page, searchQuery, statusFilter],
         queryFn: async () => {
-            const { data } = await adminApi.getUsers(page, limit, searchQuery);
+            const status = statusFilter === "all" ? undefined : statusFilter;
+            const { data } = await adminApi.getUsers(page, limit, searchQuery, status);
             return data;
         },
     });
@@ -61,17 +65,39 @@ export default function AdminUsersPage() {
 
             <Card>
                 <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <CardTitle>All Users</CardTitle>
-                        <div className="relative">
-                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                type="search"
-                                placeholder="Search users by email..."
-                                className="w-[200px] lg:w-[300px] pl-8 h-9"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div className="flex bg-muted p-1 rounded-md text-xs font-medium">
+                                <button 
+                                    onClick={() => setStatusFilter("all")}
+                                    className={`px-3 py-1.5 rounded-sm transition-colors ${statusFilter === "all" ? "bg-background shadow-sm" : "hover:text-foreground"}`}
+                                >
+                                    All
+                                </button>
+                                <button 
+                                    onClick={() => setStatusFilter("active")}
+                                    className={`px-3 py-1.5 rounded-sm transition-colors ${statusFilter === "active" ? "bg-background shadow-sm text-green-500" : "hover:text-foreground"}`}
+                                >
+                                    Active
+                                </button>
+                                <button 
+                                    onClick={() => setStatusFilter("suspended")}
+                                    className={`px-3 py-1.5 rounded-sm transition-colors ${statusFilter === "suspended" ? "bg-background shadow-sm text-red-500" : "hover:text-foreground"}`}
+                                >
+                                    Suspended
+                                </button>
+                            </div>
+                            <div className="relative">
+                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    type="search"
+                                    placeholder="Search users..."
+                                    className="w-[200px] lg:w-[250px] pl-8 h-9"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                            </div>
                         </div>
                     </div>
                 </CardHeader>
@@ -82,8 +108,9 @@ export default function AdminUsersPage() {
                                 <tr>
                                     <th className="p-4 text-left font-medium">User</th>
                                     <th className="p-4 text-left font-medium">Contact</th>
-                                    <th className="p-4 text-left font-medium">Role</th>
-                                    <th className="p-4 text-left font-medium">Joined</th>
+                                     <th className="p-4 text-left font-medium">Role</th>
+                                     <th className="p-4 text-left font-medium">Status</th>
+                                     <th className="p-4 text-left font-medium">Joined</th>
                                     <th className="p-4 text-right font-medium"></th>
                                 </tr>
                             </thead>
@@ -112,14 +139,27 @@ export default function AdminUsersPage() {
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="p-4 align-middle capitalize">
-                                                <Badge variant={user.role === "admin" ? "default" : "secondary"}>
-                                                    {user.role}
-                                                </Badge>
-                                            </td>
-                                            <td className="p-4 align-middle text-muted-foreground">
-                                                {format(new Date(user.createdAt), "MMM d, yyyy")}
-                                            </td>
+                                             <td className="p-4 align-middle capitalize">
+                                                 <Badge variant={user.role === "admin" ? "default" : "secondary"}>
+                                                     {user.role}
+                                                 </Badge>
+                                             </td>
+                                             <td className="p-4 align-middle">
+                                                 {user.suspended ? (
+                                                     <div className="flex items-center gap-1.5 text-red-500 font-medium text-xs">
+                                                         <XCircle className="h-3.5 w-3.5" />
+                                                         Suspended
+                                                     </div>
+                                                 ) : (
+                                                     <div className="flex items-center gap-1.5 text-green-500 font-medium text-xs">
+                                                         <CheckCircle2 className="h-3.5 w-3.5" />
+                                                         Active
+                                                     </div>
+                                                 )}
+                                             </td>
+                                             <td className="p-4 align-middle text-muted-foreground text-xs">
+                                                 {format(new Date(user.createdAt), "MMM d, yyyy")}
+                                             </td>
                                              <td className="p-4 align-middle text-right">
                                                  <Button 
                                                      variant="outline" 
