@@ -46,8 +46,8 @@ export default function UserDetailPage() {
     // The user schema might have isOtcEnabled, or we manage it locally if it fails
     
     const toggleOtcMutation = useMutation({
-        mutationFn: async (isOtcEnabled: boolean) => {
-            return await adminApi.toggleUserOtc(userId, { isOtcEnabled });
+        mutationFn: async (isOTCEnabled: boolean) => {
+            return await adminApi.toggleUserOtc(userId, { isOTCEnabled });
         },
         onSuccess: () => {
             toast({
@@ -93,8 +93,8 @@ export default function UserDetailPage() {
         );
     }
 
-    const user = userResponse as AdminUser & { isOtcEnabled?: boolean };
-    const isOtcEnabled = user.isOtcEnabled ?? false; // Default to false if not provided by backend
+    const user = userResponse as AdminUser;
+    const isOtcEnabled = user.isOTCEnabled ?? false; // Default to false if not provided by backend
 
     const handleOtcToggle = (checked: boolean) => {
         toggleOtcMutation.mutate(checked);
@@ -210,8 +210,8 @@ export default function UserDetailPage() {
                             </div>
 
                             <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">API Access Approved</span>
-                                {user.isApiAccessApproved ? (
+                                <span className="text-sm text-muted-foreground">OTC Enabled</span>
+                                {user.isOTCEnabled ? (
                                     <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50"><CheckCircle2 className="mr-1 h-3 w-3" /> Yes</Badge>
                                 ) : (
                                     <Badge variant="outline" className="text-muted-foreground"><XCircle className="mr-1 h-3 w-3" /> No</Badge>
