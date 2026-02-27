@@ -835,7 +835,10 @@ export enum OtcIdentityType {
 export interface OnboardOtcDto {
   identityType: OtcIdentityType;
   identityNumber: string;
-  otp?: string;
+  bankCode?: string;
+  bankName?: string;
+  accountName?: string;
+  accountNumber?: string;
 }
 
 export interface InitiateOtcTransactionDto {
@@ -1023,6 +1026,5 @@ export const miscApi = {
       `/rates/estimate-ngn?cngnAmount=${cngnAmount}`,
     ),
 };
-
 
 // Redundant merchant definitions moved to merchant.ts
