@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { merchantApi } from "@/lib/merchant";
 import { uploadFile } from "@/lib/cloudinary";
 import { useToast } from "@/components/ui/toast";
@@ -82,7 +83,7 @@ const DocumentPreview = ({
                     </div>
                 </div>
                 <Button variant="outline" size="sm" asChild>
-                    <a href={value} target="_blank" rel="noopener noreferrer">View</a>
+                    <Link href={value} target="_blank" rel="noopener noreferrer">View</Link>
                 </Button>
             </div>
         ) : (

@@ -60,8 +60,8 @@ export default function OtcTradePage() {
 
                 {/* Footer */}
                 <div className="mt-20 text-center space-y-4">
-                    <div className="flex items-center justify-center gap-6 text-zinc-400 text-xs">
-                        <a href="mailto:dev@thebuidlgrid.org" className="hover:text-primary transition-colors">Support: dev@thebuidlgrid.org</a>
+                    <div className="flex items-center justify-center gap-4 text-sm mt-4">
+                        <Link href="mailto:dev@thebuidlgrid.org" className="hover:text-primary transition-colors">Support: dev@thebuidlgrid.org</Link>
                         <span>•</span>
                         <span>© {new Date().getFullYear()} AutoRamp / The Buidl Grid</span>
                     </div>
