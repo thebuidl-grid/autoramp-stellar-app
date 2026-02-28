@@ -24,8 +24,6 @@ import { AddWalletDialog } from "@/components/profile/AddWalletDialog";
 import { OnrampConfirmationModal } from "@/components/swap/onramp-confirmation-modal";
 import { BridgeSection } from "@/components/swap/bridge-section";
 import { ChainSelectionModal } from "@/components/swap/chain-selection-modal";
-import { OtcOnboardingForm } from "@/components/otc/otc-onboarding-form";
-import { InitiateOtcForm } from "@/components/otc/initiate-otc-form";
 import { HeroBackground } from "@/components/hero/hero-background";
 import {
   useBanks,
@@ -41,7 +39,6 @@ import {
   useSupportedChains,
   useBridge,
   useBridgeStatus,
-  useOtcStatus,
 } from "@/lib/hooks";
 import { SearchableBankSelect } from "@/components/ui/searchable-bank-select";
 import { parseFormattedNumber } from "@/lib/utils";
@@ -395,13 +392,10 @@ export default function HomePage() {
     }
   }, [isApproved, isAutoSwapping]);
 
-  const { data: otcStatus, isOTCEnabled, isOnboarded } = useOtcStatus();
-
   const tabs = [
     { id: "buy" as const, label: "Buy" },
     { id: "sell" as const, label: "Sell" },
     { id: "swap" as const, label: "Swap" },
-    ...(isOTCEnabled ? [{ id: "otc" as const, label: "OTC" }] : []),
     // { id: "bridge" as const, label: "Bridge" },
   ];
 
@@ -1347,27 +1341,6 @@ export default function HomePage() {
             ))}
           </div>
 
-          {activeTab === "otc" ? (
-            <div className="space-y-6 py-4">
-              {isOnboarded ? (
-                <div className="space-y-4">
-                  <div className="text-center space-y-1 mb-4">
-                    <h3 className="text-xl font-bold tracking-tight">OTC Trading</h3>
-                    <p className="text-xs text-zinc-400">Personalized large-volume trades</p>
-                  </div>
-                  <InitiateOtcForm />
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="text-center space-y-1 mb-4">
-                    <h3 className="text-xl font-bold tracking-tight">OTC Onboarding</h3>
-                    <p className="text-xs text-zinc-400">Complete verification to start OTC trading</p>
-                  </div>
-                  <OtcOnboardingForm />
-                </div>
-              )}
-            </div>
-          ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {activeTab === "bridge" ? (
                 <div className="space-y-4">
@@ -1721,7 +1694,6 @@ export default function HomePage() {
                   : "BRIDGE"}
           </Button>
             </form>
-          )}
         </div>
       );
     }
