@@ -667,9 +667,10 @@ export const adminApi = {
     limit: number = 10,
     search?: string,
     status?: string,
+    role?: string,
   ) =>
     api.get<UsersResponse>(
-      `/admin/users?page=${page}&limit=${limit}${search ? `&search=${search}` : ""}${status ? `&status=${status}` : ""}`,
+      `/admin/users?page=${page}&limit=${limit}${search ? `&search=${search}` : ""}${status ? `&status=${status}` : ""}${role ? `&role=${role}` : ""}`,
     ),
 
   getUserById: (id: string) => api.get<AdminUser>(`/admin/users/${id}`),

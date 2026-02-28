@@ -12,7 +12,8 @@ import {
     ChevronLeft,
     ChevronRight,
     XCircle,
-    CheckCircle2
+    CheckCircle2,
+    Loader2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -30,14 +31,16 @@ export default function AdminUsersPage() {
     const [page, setPage] = useState(1);
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("all");
+    const [roleFilter, setRoleFilter] = useState<string>("all");
     const debouncedSearchQuery = useDebounce(searchQuery, 500);
     const limit = 10;
 
-    const { data: usersResponse, isLoading } = useQuery({
-        queryKey: ["admin-users", page, debouncedSearchQuery, statusFilter],
+    const { data: usersResponse, isLoading, isFetching } = useQuery({
+        queryKey: ["admin-users", page, debouncedSearchQuery, statusFilter, roleFilter],
         queryFn: async () => {
             const status = statusFilter === "all" ? undefined : statusFilter;
-            const { data } = await adminApi.getUsers(page, limit, debouncedSearchQuery, status);
+            const role = roleFilter === "all" ? undefined : roleFilter;
+            const { data } = await adminApi.getUsers(page, limit, debouncedSearchQuery, status, role);
             return data;
         },
     });
@@ -45,7 +48,34 @@ export default function AdminUsersPage() {
     // Reset to page 1 when search or filter changes
     useEffect(() => {
         setPage(1);
-    }, [debouncedSearchQuery, statusFilter]);
+    }, [debouncedSearchQuery, statusFilter, roleFilter]);
+
+    const filteredUsers = (usersResponse?.users || [])
+        .filter(user => {
+            if (statusFilter === "active") return !user.suspended;
+            if (statusFilter === "suspended") return !!user.suspended;
+            return true;
+        })
+        .filter(user => {
+            if (roleFilter === "admin") return user.role?.toLowerCase() === "admin";
+            if (roleFilter === "user") return user.role?.toLowerCase() !== "admin";
+            return true;
+        });
+
+    const isLocalFiltered = roleFilter !== "all";
+
+    const serverIgnoredRoleFilter = roleFilter !== "all" && (usersResponse?.users || []).some(user => {
+        if (roleFilter === "admin") return user.role?.toLowerCase() !== "admin";
+        if (roleFilter === "user") return user.role?.toLowerCase() === "admin";
+        return false;
+    });
+
+    const displayTotal = serverIgnoredRoleFilter ? filteredUsers.length : usersResponse?.pagination.total || 0;
+    const displayTotalPages = serverIgnoredRoleFilter ? 1 : usersResponse?.pagination.totalPages || 1;
+    
+    // Using filteredUsers.length check to ensure when 0 users are found, we say 0 to 0 instead of 1 to 0
+    const startIndex = filteredUsers.length > 0 ? (serverIgnoredRoleFilter ? 1 : ((page - 1) * limit) + 1) : 0;
+    const endIndex = serverIgnoredRoleFilter ? filteredUsers.length : Math.min(page * limit, displayTotal);
 
     return (
         <div className="space-y-8">
@@ -87,15 +117,38 @@ export default function AdminUsersPage() {
                                     Suspended
                                 </button>
                             </div>
+                            <div className="flex bg-muted p-1 rounded-md text-xs font-medium">
+                                <button 
+                                    onClick={() => setRoleFilter("all")}
+                                    className={`px-3 py-1.5 rounded-sm transition-colors ${roleFilter === "all" ? "bg-background shadow-sm" : "hover:text-foreground"}`}
+                                >
+                                    All Roles
+                                </button>
+                                <button 
+                                    onClick={() => setRoleFilter("admin")}
+                                    className={`px-3 py-1.5 rounded-sm transition-colors ${roleFilter === "admin" ? "bg-background shadow-sm text-primary" : "hover:text-foreground"}`}
+                                >
+                                    Admins
+                                </button>
+                                <button 
+                                    onClick={() => setRoleFilter("user")}
+                                    className={`px-3 py-1.5 rounded-sm transition-colors ${roleFilter === "user" ? "bg-background shadow-sm text-foreground" : "hover:text-foreground"}`}
+                                >
+                                    Users
+                                </button>
+                            </div>
                             <div className="relative">
                                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                 <Input
                                     type="search"
                                     placeholder="Search users..."
-                                    className="w-[200px] lg:w-[250px] pl-8 h-9"
+                                    className="w-[200px] lg:w-[250px] pl-8 pr-8 h-9"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
+                                {isFetching && (
+                                    <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground animate-spin" />
+                                )}
                             </div>
                         </div>
                     </div>
@@ -121,13 +174,7 @@ export default function AdminUsersPage() {
                                         </td>
                                     </tr>
                                 ) : (
-                                    (usersResponse?.users || [])
-                                        .filter(user => {
-                                            if (statusFilter === "active") return !user.suspended;
-                                            if (statusFilter === "suspended") return !!user.suspended;
-                                            return true;
-                                        })
-                                        .map((user) => (
+                                    filteredUsers.map((user) => (
                                         <tr key={user.id} className="border-b transition-colors hover:bg-muted/50">
                                             <td className="p-4 align-middle font-medium">
                                                 {user.email}
@@ -188,7 +235,7 @@ export default function AdminUsersPage() {
                     {usersResponse?.pagination && (
                         <div className="flex items-center justify-between px-2 py-4 border-t mt-4">
                             <div className="text-sm text-muted-foreground">
-                                Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, usersResponse.pagination.total)} of {usersResponse.pagination.total} users
+                                Showing {startIndex} to {endIndex} of {displayTotal} users
                             </div>
                             <div className="flex items-center gap-2">
                                 <Button
@@ -202,13 +249,13 @@ export default function AdminUsersPage() {
                                     Previous
                                 </Button>
                                 <div className="flex items-center justify-center min-w-[32px] text-sm font-medium">
-                                    {page} / {usersResponse.pagination.totalPages}
+                                    {serverIgnoredRoleFilter ? 1 : page} / {displayTotalPages}
                                 </div>
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => setPage(p => Math.min(usersResponse.pagination.totalPages, p + 1))}
-                                    disabled={page === usersResponse.pagination.totalPages || isLoading}
+                                    onClick={() => setPage(p => Math.min(displayTotalPages, p + 1))}
+                                    disabled={page === displayTotalPages || isLoading || serverIgnoredRoleFilter}
                                     className="gap-1"
                                 >
                                     Next
