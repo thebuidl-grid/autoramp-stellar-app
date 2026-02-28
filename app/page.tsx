@@ -4,33 +4,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowUpDown,
-  CheckCircle,
   AlertCircle,
-  Copy,
-  Loader2,
   ArrowDown,
-  ArrowUpRight,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
-import Link from "next/link";
 import { formatNumber } from "@/lib/utils";
 import { TabButton } from "@/components/swap/tab-button";
 import { SwapSection } from "@/components/swap/swap-section";
 import { CryptoSelectionModal } from "@/components/swap/crypto-selection-modal";
 import { SavedAccountSelector } from "@/components/swap/SavedAccountSelector";
-import { OfframpConfirmationModal } from "@/components/swap/offramp-confirmation-modal";
 import { SavedWalletSelector } from "@/components/swap/SavedWalletSelector";
-import { AddWalletDialog } from "@/components/profile/AddWalletDialog";
-import { OnrampConfirmationModal } from "@/components/swap/onramp-confirmation-modal";
 import { BridgeSection } from "@/components/swap/bridge-section";
 import { ChainSelectionModal } from "@/components/swap/chain-selection-modal";
 import { OtcOnboardingForm } from "@/components/otc/otc-onboarding-form";
 import { InitiateOtcForm } from "@/components/otc/initiate-otc-form";
-import { HeroBackground } from "@/components/hero/hero-background";
 import {
   useBanks,
   useEstimateNgn,
-  useUsdNgnRate,
   useOffRamp,
   useOnRamp,
   useInitializeSwap,
@@ -40,14 +30,11 @@ import {
   useResolveAccount,
   useSupportedChains,
   useBridge,
-  useBridgeStatus,
   useOtcStatus,
 } from "@/lib/hooks";
 import { SearchableBankSelect } from "@/components/ui/searchable-bank-select";
 import { parseFormattedNumber } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
-import { EmailOtpModal } from "@/components/auth/email-otp-modal";
-import { copyToClipboard } from "@/lib/utils";
 import {
   useAccount,
   useWriteContract,
@@ -55,8 +42,6 @@ import {
   useReadContract,
 } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import {
   SWAP_CONSTANTS,
   SWAP_ROUTER_ABI,
@@ -143,22 +128,13 @@ export default function HomePage() {
   const resolveAccount = useResolveAccount();
 
   // Local UI state
-  const [copied, setCopied] = useState(false);
-  const [isAutoSwapping, setIsAutoSwapping] = useState(false);
-  const [isAddWalletDialogOpen, setIsAddWalletDialogOpen] = useState(false);
-  const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
-  const [isBuyConfirmationModalOpen, setIsBuyConfirmationModalOpen] =
-    useState(false);
-  const [isFromChainModalOpen, setIsFromChainModalOpen] = useState(false);
-  const [isToChainModalOpen, setIsToChainModalOpen] = useState(false);
 
   const fromChain = useTransactionStore((state) => state.fromChain);
   const toChain = useTransactionStore((state) => state.toChain);
   const setFromChain = useTransactionStore((state) => state.setFromChain);
   const setToChain = useTransactionStore((state) => state.setToChain);
 
-  const { data: supportedChains = [] } = useSupportedChains();
-  const { executeBridge, isBridging, bridgeResult } = useBridge();
+  const { executeBridge } = useBridge();
 
   const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
   const parsedBuyAmount = buyAmount ? parseFormattedNumber(buyAmount) : null;
@@ -188,7 +164,6 @@ export default function HomePage() {
     isLoading: isLoadingEstimate,
     error: ngnEstimateError,
   } = useEstimateNgn(needsConversion ? amountToConvert : null);
-  const { data: usdNgnRate } = useUsdNgnRate();
 
   // Handle 401 errors for NGN estimate endpoint
   useEffect(() => {
@@ -203,7 +178,6 @@ export default function HomePage() {
   // WebSocket for transaction updates
   const handleWebSocketUpdate = useCallback(
     (update: any) => {
-      console.log("WebSocket update received:", update);
       if (update.status === "COMPLETED") {
         setStep("completed");
         toast({
@@ -213,7 +187,7 @@ export default function HomePage() {
         });
       }
     },
-    [toast],
+    [toast, setStep],
   );
 
   const reference =
@@ -231,9 +205,7 @@ export default function HomePage() {
     onUpdate: handleWebSocketUpdate,
   });
 
-  const { data: bridgeStatus } = useBridgeStatus(
-    activeTab === "bridge" && step === "pending" ? reference : undefined,
-  );
+
 
   const { data: cngnBalance } = useReadContract({
     address: SWAP_CONSTANTS.CNGN as `0x${string}`,
@@ -315,20 +287,15 @@ export default function HomePage() {
     },
   });
 
-  const {
-    writeContract: approveToken,
-    data: approveHash,
-    isPending: isApproving,
-  } = useWriteContract();
-  const { isLoading: isWaitingApproval, isSuccess: isApproved } =
+  const { writeContract: approveToken, data: approveHash } = useWriteContract();
+  const { isSuccess: isApproved } =
     useWaitForTransactionReceipt({ hash: approveHash });
 
   const {
     writeContract: executeSwap,
     data: swapHash,
-    isPending: isExecuting,
   } = useWriteContract();
-  const { isLoading: isWaitingSwap, isSuccess: isSwapSuccess } =
+  const { isSuccess: isSwapSuccess } =
     useWaitForTransactionReceipt({ hash: swapHash });
 
   const hasUpdatedSwap = useRef(false);
@@ -386,15 +353,9 @@ export default function HomePage() {
     if (isApproved) refetchAllowance();
   }, [isApproved, refetchAllowance]);
 
-  // Daisy-chain: Automatically trigger swap after approval is confirmed
-  useEffect(() => {
-    if (isApproved && isAutoSwapping) {
-      console.log("Approval confirmed, auto-triggering swap...");
-      handleExecuteSwap();
-    }
-  }, [isApproved, isAutoSwapping]);
 
-  const { data: otcStatus, isOTCEnabled, isOnboarded } = useOtcStatus();
+
+  const { isOTCEnabled, isOnboarded } = useOtcStatus();
 
   const tabs = [
     { id: "buy" as const, label: "Buy" },
@@ -421,8 +382,6 @@ export default function HomePage() {
       return;
     }
     const formatted = formatNumber(value);
-    console.log(formatted, "formatted ");
-    console.log(parseFloat(buyAmount).toLocaleString(), "style form");
     setBuyAmount(formatted);
   };
 
@@ -581,11 +540,11 @@ export default function HomePage() {
   let quoteDecimalsOut = 18; // Default
 
   // Helper to resolve token address
-  const getTokenAddress = (type: string) => {
+  const getTokenAddress = useCallback((type: string) => {
     if (type === "USDC") return SWAP_CONSTANTS.USDC;
     if (type === "USDT") return SWAP_CONSTANTS.USDT;
     return SWAP_CONSTANTS.CNGN;
-  };
+  }, []);
 
   const getTokenDecimals = (type: string) => {
     if (type === "USDC") return SWAP_CONSTANTS.USDC_DECIMALS;
@@ -815,17 +774,8 @@ export default function HomePage() {
           onSuccess: (response) => {
             setTransactionData(response.data);
             setStep("pending");
-            setIsConfirmationModalOpen(false);
           },
-          onError: () => {
-            // Error handling is done in mutation? If not, we might want to close modal or show error
-            // For now, let's keep modal open if error? Or close it?
-            // Usually we might want to keep it open to show error, but the existing error handling
-            // seems to be toast based or internal.
-            // Let's close it on error to be safe or keep it open?
-            // The mutation hook likely handles error toasts.
-            setIsConfirmationModalOpen(false);
-          },
+          onError: () => {},
         },
       );
     } else if (cryptoType === "USDC" || cryptoType === "USDT") {
@@ -844,7 +794,6 @@ export default function HomePage() {
         },
         {
           onSuccess: (response) => {
-            console.log(response, "response from init");
             const updatedResponse = { ...response.data };
             if (cryptoType === "USDT") {
               if (updatedResponse.swapParams) {
@@ -853,11 +802,8 @@ export default function HomePage() {
             }
             setSwapData(updatedResponse);
             setStep("execute");
-            setIsConfirmationModalOpen(false);
           },
-          onError: () => {
-            setIsConfirmationModalOpen(false);
-          },
+          onError: () => {},
         },
       );
     }
@@ -952,7 +898,6 @@ export default function HomePage() {
         onSuccess: (response) => {
           setTransactionData(response.data);
           setStep("pending");
-          setIsBuyConfirmationModalOpen(false);
         },
       },
     );
@@ -983,13 +928,8 @@ export default function HomePage() {
           : SWAP_CONSTANTS.CNGN_DECIMALS;
 
       // 2. Parse Amount Safely
-      // DIRECTLY use the string from the DB/State. Do not convert to number first.
       const rawAmountString = swapData.swapParams.amountIn;
       const tokenAmount = parseUnits(rawAmountString, decimals);
-
-      console.log(
-        `Approving ${rawAmountString} (${tokenAmount}) for ${tokenAddress}`,
-      );
 
       approveToken({
         address: tokenAddress as `0x${string}`,
@@ -1069,15 +1009,6 @@ export default function HomePage() {
     );
 
     try {
-      console.log("Executing Swap with params:", {
-        tokenIn: swapData.swapParams.tokenIn,
-        tokenOut: swapData.swapParams.tokenOut,
-        path: swapPath,
-        amountIn: amountIn.toString(),
-        amountOutMinimum: amountOutMinimum.toString(),
-        expectedOutput: expectedOutput,
-      });
-
       if (swapPath) {
         // Execute Swap (Unified - exactInput)
         executeSwap({
@@ -1432,9 +1363,7 @@ export default function HomePage() {
                 amount={
                   activeTab === "buy"
                     ? buyAmount
-                    : activeTab === "swap"
-                      ? sellAmount
-                      : sellAmount
+                    : sellAmount
                 }
                 onAmountChange={
                   activeTab === "buy"
