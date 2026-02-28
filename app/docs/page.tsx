@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { HeroBackground } from "@/components/hero/hero-background";
 import { Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
@@ -178,7 +179,7 @@ export default function DocsPage() {
             <div>
               <h3 className="text-white font-medium mb-2">2. Get your API Key</h3>
               <p className="text-white/60 text-sm">
-                Once approved, log in to your <a href="/merchant/dashboard" className="text-blue-400 hover:underline">Merchant Dashboard</a> and create an API key.
+                Once approved, log in to your <Link href="/merchant/dashboard" className="text-blue-400 hover:underline">Merchant Dashboard</Link> and create an API key.
               </p>
             </div>
             <div>
@@ -480,9 +481,11 @@ export default function DocsPage() {
           <div className="bg-white/5 border border-white/10 rounded-lg p-6">
             <p className="text-white/70">
               If you have any questions or need assistance, please contact our support team at{" "}
-              <a href="mailto:dev@thebuidlgrid.org" className="text-blue-400 hover:underline">
+            </p>
+            <p className="text-white/70">
+              <Link href="mailto:dev@thebuidlgrid.org" className="text-blue-400 hover:underline">
                 dev@thebuidlgrid.org
-              </a>
+              </Link>
             </p>
           </div>
         </section>

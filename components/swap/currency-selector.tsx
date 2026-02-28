@@ -47,11 +47,12 @@ export function CurrencySelector({ type, onClick }: CurrencySelectorProps) {
         isClickable ? "hover:bg-white/10 cursor-pointer" : "cursor-default"
       }`}
     >
-      <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
-        <img
+      <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-white/10 flex items-center justify-center overflow-hidden relative">
+        <Image
           src={getLogo()}
           alt={type}
-          className="w-6 h-6 md:w-8 md:h-8 object-contain"
+          fill
+          className="object-contain"
         />
       </div>
       <div className="text-left">
