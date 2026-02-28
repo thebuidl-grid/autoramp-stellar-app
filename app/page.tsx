@@ -4,23 +4,33 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowUpDown,
+  CheckCircle,
   AlertCircle,
+  Copy,
+  Loader2,
   ArrowDown,
+  ArrowUpRight,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
+import Link from "next/link";
 import { formatNumber } from "@/lib/utils";
 import { TabButton } from "@/components/swap/tab-button";
 import { SwapSection } from "@/components/swap/swap-section";
 import { CryptoSelectionModal } from "@/components/swap/crypto-selection-modal";
 import { SavedAccountSelector } from "@/components/swap/SavedAccountSelector";
+import { OfframpConfirmationModal } from "@/components/swap/offramp-confirmation-modal";
 import { SavedWalletSelector } from "@/components/swap/SavedWalletSelector";
+import { AddWalletDialog } from "@/components/profile/AddWalletDialog";
+import { OnrampConfirmationModal } from "@/components/swap/onramp-confirmation-modal";
 import { BridgeSection } from "@/components/swap/bridge-section";
 import { ChainSelectionModal } from "@/components/swap/chain-selection-modal";
 import { OtcOnboardingForm } from "@/components/otc/otc-onboarding-form";
 import { InitiateOtcForm } from "@/components/otc/initiate-otc-form";
+import { HeroBackground } from "@/components/hero/hero-background";
 import {
   useBanks,
   useEstimateNgn,
+  useUsdNgnRate,
   useOffRamp,
   useOnRamp,
   useInitializeSwap,
@@ -30,11 +40,14 @@ import {
   useResolveAccount,
   useSupportedChains,
   useBridge,
+  useBridgeStatus,
   useOtcStatus,
 } from "@/lib/hooks";
 import { SearchableBankSelect } from "@/components/ui/searchable-bank-select";
 import { parseFormattedNumber } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
+import { EmailOtpModal } from "@/components/auth/email-otp-modal";
+import { copyToClipboard } from "@/lib/utils";
 import {
   useAccount,
   useWriteContract,
@@ -42,6 +55,8 @@ import {
   useReadContract,
 } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import {
   SWAP_CONSTANTS,
   SWAP_ROUTER_ABI,
@@ -128,13 +143,22 @@ export default function HomePage() {
   const resolveAccount = useResolveAccount();
 
   // Local UI state
+  const [copied, setCopied] = useState(false);
+  const [isAutoSwapping, setIsAutoSwapping] = useState(false);
+  const [isAddWalletDialogOpen, setIsAddWalletDialogOpen] = useState(false);
+  const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
+  const [isBuyConfirmationModalOpen, setIsBuyConfirmationModalOpen] =
+    useState(false);
+  const [isFromChainModalOpen, setIsFromChainModalOpen] = useState(false);
+  const [isToChainModalOpen, setIsToChainModalOpen] = useState(false);
 
   const fromChain = useTransactionStore((state) => state.fromChain);
   const toChain = useTransactionStore((state) => state.toChain);
   const setFromChain = useTransactionStore((state) => state.setFromChain);
   const setToChain = useTransactionStore((state) => state.setToChain);
 
-  const { executeBridge } = useBridge();
+  const { data: supportedChains = [] } = useSupportedChains();
+  const { executeBridge, isBridging, bridgeResult } = useBridge();
 
   const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
   const parsedBuyAmount = buyAmount ? parseFormattedNumber(buyAmount) : null;
@@ -164,6 +188,7 @@ export default function HomePage() {
     isLoading: isLoadingEstimate,
     error: ngnEstimateError,
   } = useEstimateNgn(needsConversion ? amountToConvert : null);
+  const { data: usdNgnRate } = useUsdNgnRate();
 
   // Handle 401 errors for NGN estimate endpoint
   useEffect(() => {
@@ -204,6 +229,10 @@ export default function HomePage() {
     enabled: !!reference && step === "pending" && activeTab !== "swap",
     onUpdate: handleWebSocketUpdate,
   });
+
+  const { data: bridgeStatus } = useBridgeStatus(
+    activeTab === "bridge" && step === "pending" ? reference : undefined,
+  );
 
 
 
@@ -287,15 +316,20 @@ export default function HomePage() {
     },
   });
 
-  const { writeContract: approveToken, data: approveHash } = useWriteContract();
-  const { isSuccess: isApproved } =
+  const {
+    writeContract: approveToken,
+    data: approveHash,
+    isPending: isApproving,
+  } = useWriteContract();
+  const { isLoading: isWaitingApproval, isSuccess: isApproved } =
     useWaitForTransactionReceipt({ hash: approveHash });
 
   const {
     writeContract: executeSwap,
     data: swapHash,
+    isPending: isExecuting,
   } = useWriteContract();
-  const { isSuccess: isSwapSuccess } =
+  const { isLoading: isWaitingSwap, isSuccess: isSwapSuccess } =
     useWaitForTransactionReceipt({ hash: swapHash });
 
   const hasUpdatedSwap = useRef(false);
@@ -355,7 +389,13 @@ export default function HomePage() {
 
 
 
-  const { isOTCEnabled, isOnboarded } = useOtcStatus();
+  useEffect(() => {
+    if (isApproved && isAutoSwapping) {
+      handleExecuteSwap();
+    }
+  }, [isApproved, isAutoSwapping]);
+
+  const { data: otcStatus, isOTCEnabled, isOnboarded } = useOtcStatus();
 
   const tabs = [
     { id: "buy" as const, label: "Buy" },
@@ -774,8 +814,11 @@ export default function HomePage() {
           onSuccess: (response) => {
             setTransactionData(response.data);
             setStep("pending");
+            setIsConfirmationModalOpen(false);
           },
-          onError: () => {},
+          onError: () => {
+            setIsConfirmationModalOpen(false);
+          },
         },
       );
     } else if (cryptoType === "USDC" || cryptoType === "USDT") {
@@ -802,8 +845,11 @@ export default function HomePage() {
             }
             setSwapData(updatedResponse);
             setStep("execute");
+            setIsConfirmationModalOpen(false);
           },
-          onError: () => {},
+          onError: () => {
+            setIsConfirmationModalOpen(false);
+          },
         },
       );
     }
@@ -898,6 +944,7 @@ export default function HomePage() {
         onSuccess: (response) => {
           setTransactionData(response.data);
           setStep("pending");
+          setIsBuyConfirmationModalOpen(false);
         },
       },
     );
