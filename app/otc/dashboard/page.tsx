@@ -1,6 +1,6 @@
 "use client";
 
-import { useOtcStats, useOtcStatus } from "@/lib/hooks";
+import { useOtcStats, useOtcRate } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -11,7 +11,9 @@ import {
     Plus,
     UserCircle,
     Copy,
-    ArrowUpRight
+    ArrowUpRight,
+    CircleDollarSign,
+    RefreshCw
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -22,13 +24,15 @@ import { useToast } from "@/components/ui/toast";
 
 export default function OtcDashboardPage() {
     const { user } = useAuthStore();
-    const { data: otcData, isLoading: isStatsLoading } = useOtcStats();
+    const { data: otcData, isLoading: isStatsLoading, refetch: refetchStats } = useOtcStats();
+    const { data: rateData, isLoading: isRateLoading, refetch: refetchRate, isFetching: isRateFetching } = useOtcRate();
     const { toast } = useToast();
 
     const stats = otcData?.stats || { totalTrades: 0, totalVolume: 0, pendingTrades: 0 };
     const recentTransactions = otcData?.transactions?.slice(0, 5) || [];
+    const currentRate = rateData?.rate || 0;
 
-    if (isStatsLoading) {
+    if (isStatsLoading || isRateLoading) {
         return (
             <div className="flex h-64 items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -54,7 +58,13 @@ export default function OtcDashboardPage() {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex justify-end mb-4">
+               <Button variant="outline" size="sm" onClick={() => { refetchStats(); refetchRate(); }} className="gap-2">
+                   <RefreshCw className="w-4 h-4" />
+                   Refresh Dashboard
+               </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Volume</CardTitle>
@@ -84,6 +94,27 @@ export default function OtcDashboardPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-amber-500">{stats.pendingTrades}</div>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-primary/5 border-primary/20">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium text-primary">Current Rate</CardTitle>
+                        <div className="flex items-center gap-2">
+                           <button 
+                               onClick={() => refetchRate()} 
+                               disabled={isRateFetching} 
+                               className="text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+                           >
+                               <RefreshCw className={`w-3.5 h-3.5 ${(isRateFetching && !isRateLoading) ? 'animate-spin' : ''}`} />
+                           </button>
+                           <CircleDollarSign className="h-4 w-4 text-primary" />
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-primary">
+                            {currentRate ? `₦${currentRate.toLocaleString()}` : "---"} <span className="text-sm font-normal text-muted-foreground">/ USDC</span>
+                        </div>
                     </CardContent>
                 </Card>
             </div>

@@ -16,8 +16,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Loader2, Send, Wallet, Coins, Network, Info } from "lucide-react";
+import { Loader2, Send, Wallet, Coins, Network, Info, RefreshCw } from "lucide-react";
 import { otcApi, InitiateOtcTransactionDto } from "@/lib/api";
+import { useOtcRate } from "@/lib/hooks";
 import { useRouter } from "next/navigation";
 import {
     Select,
@@ -45,6 +46,8 @@ export function InitiateOtcForm() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
+    const { data: rateData, isLoading: isRateLoading, refetch: refetchRate, isFetching: isRefetching } = useOtcRate();
+    const currentRate = rateData?.rate || 0;
 
     const form = useForm<InitiateFormValues>({
         resolver: zodResolver(initiateSchema) as any,
@@ -85,14 +88,33 @@ export function InitiateOtcForm() {
 
     return (
         <Card className="max-w-2xl mx-auto border-none shadow-2xl bg-white/5 backdrop-blur-md ring-1 ring-white/10">
-            <CardHeader>
-                <CardTitle className="text-2xl text-white flex items-center gap-2">
-                    <Send className="w-6 h-6 text-primary" />
-                    Initiate OTC Trade
-                </CardTitle>
-                <CardDescription className="text-zinc-400">
-                    Fill in the details below to start your Over-The-Counter transaction and receive a custom quote.
-                </CardDescription>
+            <CardHeader className="flex flex-col md:flex-row md:items-start justify-between gap-4 pb-6">
+                <div className="space-y-1.5">
+                    <CardTitle className="text-2xl text-white flex items-center gap-2">
+                        <Send className="w-6 h-6 text-primary" />
+                        Initiate OTC Trade
+                    </CardTitle>
+                    <CardDescription className="text-zinc-400 max-w-sm">
+                        Fill in the details below to start your Over-The-Counter transaction and receive a custom quote.
+                    </CardDescription>
+                </div>
+                <div className="shrink-0 text-right p-3 bg-primary/5 rounded-xl border border-primary/20">
+                    <div className="flex items-center justify-end gap-2 mb-1">
+                        <p className="text-xs text-primary font-bold uppercase tracking-wider">Current Rate</p>
+                        <button 
+                            type="button"
+                            onClick={() => refetchRate()} 
+                            disabled={isRefetching} 
+                            className="text-zinc-400 hover:text-primary transition-colors disabled:opacity-50"
+                        >
+                            <RefreshCw className={`w-3 h-3 ${(isRefetching && !isRateLoading) ? 'animate-spin' : ''}`} />
+                        </button>
+                    </div>
+                    <p className="text-xl font-bold text-white flex items-center justify-end gap-2">
+                        {isRateLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : currentRate ? `₦${currentRate.toLocaleString()}` : "---"} 
+                        <span className="text-sm font-normal text-zinc-400">/ USDC</span>
+                    </p>
+                </div>
             </CardHeader>
             <CardContent>
                 <Form {...form}>
