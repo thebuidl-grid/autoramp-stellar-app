@@ -9,6 +9,7 @@ import { merchantApi } from "@/lib/merchant";
 import { cn } from "@/lib/utils";
 import { uploadFile } from "@/lib/cloudinary";
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useMerchantStatus, useMerchantShareholders } from "@/lib/hooks";
 
 interface Shareholder {
@@ -54,7 +55,7 @@ const DocumentPreview = ({ label, value }: { label: string, value?: string }) =>
                     </div>
                 </div>
                 <Button variant="outline" size="sm" asChild>
-                    <a href={value} target="_blank" rel="noopener noreferrer">View</a>
+                    <Link href={value} target="_blank" rel="noopener noreferrer">View</Link>
                 </Button>
             </div>
         ) : (

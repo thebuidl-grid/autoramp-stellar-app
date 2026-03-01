@@ -12,7 +12,6 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
-import Link from "next/link";
 import { formatNumber } from "@/lib/utils";
 import { TabButton } from "@/components/swap/tab-button";
 import { SwapSection } from "@/components/swap/swap-section";
@@ -24,8 +23,6 @@ import { AddWalletDialog } from "@/components/profile/AddWalletDialog";
 import { OnrampConfirmationModal } from "@/components/swap/onramp-confirmation-modal";
 import { BridgeSection } from "@/components/swap/bridge-section";
 import { ChainSelectionModal } from "@/components/swap/chain-selection-modal";
-import { OtcOnboardingForm } from "@/components/otc/otc-onboarding-form";
-import { InitiateOtcForm } from "@/components/otc/initiate-otc-form";
 import { HeroBackground } from "@/components/hero/hero-background";
 import {
   useBanks,
@@ -41,7 +38,6 @@ import {
   useSupportedChains,
   useBridge,
   useBridgeStatus,
-  useOtcStatus,
 } from "@/lib/hooks";
 import { SearchableBankSelect } from "@/components/ui/searchable-bank-select";
 import { parseFormattedNumber } from "@/lib/utils";
@@ -203,7 +199,6 @@ export default function HomePage() {
   // WebSocket for transaction updates
   const handleWebSocketUpdate = useCallback(
     (update: any) => {
-      console.log("WebSocket update received:", update);
       if (update.status === "COMPLETED") {
         setStep("completed");
         toast({
@@ -213,7 +208,7 @@ export default function HomePage() {
         });
       }
     },
-    [toast],
+    [toast, setStep],
   );
 
   const reference =
@@ -234,6 +229,8 @@ export default function HomePage() {
   const { data: bridgeStatus } = useBridgeStatus(
     activeTab === "bridge" && step === "pending" ? reference : undefined,
   );
+
+
 
   const { data: cngnBalance } = useReadContract({
     address: SWAP_CONSTANTS.CNGN as `0x${string}`,
@@ -386,21 +383,18 @@ export default function HomePage() {
     if (isApproved) refetchAllowance();
   }, [isApproved, refetchAllowance]);
 
-  // Daisy-chain: Automatically trigger swap after approval is confirmed
+
+
   useEffect(() => {
     if (isApproved && isAutoSwapping) {
-      console.log("Approval confirmed, auto-triggering swap...");
       handleExecuteSwap();
     }
   }, [isApproved, isAutoSwapping]);
-
-  const { data: otcStatus, isOTCEnabled, isOnboarded } = useOtcStatus();
 
   const tabs = [
     { id: "buy" as const, label: "Buy" },
     { id: "sell" as const, label: "Sell" },
     { id: "swap" as const, label: "Swap" },
-    ...(isOTCEnabled ? [{ id: "otc" as const, label: "OTC" }] : []),
     // { id: "bridge" as const, label: "Bridge" },
   ];
 
@@ -421,8 +415,6 @@ export default function HomePage() {
       return;
     }
     const formatted = formatNumber(value);
-    console.log(formatted, "formatted ");
-    console.log(parseFloat(buyAmount).toLocaleString(), "style form");
     setBuyAmount(formatted);
   };
 
@@ -581,11 +573,11 @@ export default function HomePage() {
   let quoteDecimalsOut = 18; // Default
 
   // Helper to resolve token address
-  const getTokenAddress = (type: string) => {
+  const getTokenAddress = useCallback((type: string) => {
     if (type === "USDC") return SWAP_CONSTANTS.USDC;
     if (type === "USDT") return SWAP_CONSTANTS.USDT;
     return SWAP_CONSTANTS.CNGN;
-  };
+  }, []);
 
   const getTokenDecimals = (type: string) => {
     if (type === "USDC") return SWAP_CONSTANTS.USDC_DECIMALS;
@@ -818,12 +810,6 @@ export default function HomePage() {
             setIsConfirmationModalOpen(false);
           },
           onError: () => {
-            // Error handling is done in mutation? If not, we might want to close modal or show error
-            // For now, let's keep modal open if error? Or close it?
-            // Usually we might want to keep it open to show error, but the existing error handling
-            // seems to be toast based or internal.
-            // Let's close it on error to be safe or keep it open?
-            // The mutation hook likely handles error toasts.
             setIsConfirmationModalOpen(false);
           },
         },
@@ -844,7 +830,6 @@ export default function HomePage() {
         },
         {
           onSuccess: (response) => {
-            console.log(response, "response from init");
             const updatedResponse = { ...response.data };
             if (cryptoType === "USDT") {
               if (updatedResponse.swapParams) {
@@ -983,13 +968,8 @@ export default function HomePage() {
           : SWAP_CONSTANTS.CNGN_DECIMALS;
 
       // 2. Parse Amount Safely
-      // DIRECTLY use the string from the DB/State. Do not convert to number first.
       const rawAmountString = swapData.swapParams.amountIn;
       const tokenAmount = parseUnits(rawAmountString, decimals);
-
-      console.log(
-        `Approving ${rawAmountString} (${tokenAmount}) for ${tokenAddress}`,
-      );
 
       approveToken({
         address: tokenAddress as `0x${string}`,
@@ -1069,15 +1049,6 @@ export default function HomePage() {
     );
 
     try {
-      console.log("Executing Swap with params:", {
-        tokenIn: swapData.swapParams.tokenIn,
-        tokenOut: swapData.swapParams.tokenOut,
-        path: swapPath,
-        amountIn: amountIn.toString(),
-        amountOutMinimum: amountOutMinimum.toString(),
-        expectedOutput: expectedOutput,
-      });
-
       if (swapPath) {
         // Execute Swap (Unified - exactInput)
         executeSwap({
@@ -1369,27 +1340,6 @@ export default function HomePage() {
             ))}
           </div>
 
-          {activeTab === "otc" ? (
-            <div className="space-y-6 py-4">
-              {isOnboarded ? (
-                <div className="space-y-4">
-                  <div className="text-center space-y-1 mb-4">
-                    <h3 className="text-xl font-bold tracking-tight">OTC Trading</h3>
-                    <p className="text-xs text-zinc-400">Personalized large-volume trades</p>
-                  </div>
-                  <InitiateOtcForm />
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="text-center space-y-1 mb-4">
-                    <h3 className="text-xl font-bold tracking-tight">OTC Onboarding</h3>
-                    <p className="text-xs text-zinc-400">Complete verification to start OTC trading</p>
-                  </div>
-                  <OtcOnboardingForm />
-                </div>
-              )}
-            </div>
-          ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {activeTab === "bridge" ? (
                 <div className="space-y-4">
@@ -1432,9 +1382,7 @@ export default function HomePage() {
                 amount={
                   activeTab === "buy"
                     ? buyAmount
-                    : activeTab === "swap"
-                      ? sellAmount
-                      : sellAmount
+                    : sellAmount
                 }
                 onAmountChange={
                   activeTab === "buy"
@@ -1745,7 +1693,6 @@ export default function HomePage() {
                   : "BRIDGE"}
           </Button>
             </form>
-          )}
         </div>
       );
     }

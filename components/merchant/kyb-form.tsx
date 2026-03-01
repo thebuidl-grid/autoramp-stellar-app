@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
     Form,
@@ -450,7 +451,7 @@ export function KYBForm() {
                         </p>
                     </div>
                     <Button asChild className="mt-4">
-                        <a href="/merchant/dashboard">Go to Dashboard</a>
+                        <Link href="/merchant/dashboard">Go to Dashboard</Link>
                     </Button>
                 </CardContent>
             </Card>
@@ -1046,7 +1047,6 @@ export function KYBForm() {
                     {(typeof currentStep === 'number' ? currentStep : (currentStep as any)?.currentStep ?? 0) === STEPS.length - 1 ? (
                         <Button
                             onClick={form.handleSubmit(onSubmit, (errors) => {
-                                console.log("Form Errors:", errors);
                                 toast({
                                     title: "Submission Error",
                                     description: "Please check all steps for required information.",

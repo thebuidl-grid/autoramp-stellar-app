@@ -12,3 +12,4 @@ export * from "./use-transaction-handlers";
 export * from "./use-merchant";
 export * from "./use-bridge";
 export * from "./use-debounce";
+export * from "./use-otc";
