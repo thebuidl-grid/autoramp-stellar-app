@@ -12,7 +12,6 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
-import Link from "next/link";
 import { formatNumber } from "@/lib/utils";
 import { TabButton } from "@/components/swap/tab-button";
 import { SwapSection } from "@/components/swap/swap-section";

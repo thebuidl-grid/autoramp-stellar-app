@@ -62,8 +62,6 @@ export default function AdminUsersPage() {
             return true;
         });
 
-    const isLocalFiltered = roleFilter !== "all";
-
     const serverIgnoredRoleFilter = roleFilter !== "all" && (usersResponse?.users || []).some(user => {
         if (roleFilter === "admin") return user.role?.toLowerCase() !== "admin";
         if (roleFilter === "user") return user.role?.toLowerCase() === "admin";
