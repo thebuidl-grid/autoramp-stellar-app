@@ -854,6 +854,25 @@ export interface OtcTransaction extends Transaction {
   chain?: string;
   address: string;
   memo?: string;
+
+  // New fields from updated contract
+  fiatAmountReceived?: number;
+  systemFee?: number;
+  networkFee?: number;
+  feeCollected?: number;
+  tokenAmountSent?: number;
+  rate?: number;
+  meta?: {
+    quote?: {
+      rate: number;
+      totalAmount: number;
+    };
+  };
+  issuance?: {
+    bankCode: string;
+    accountNumber: string;
+    accountName: string;
+  };
 }
 
 // ============== API Groups ==============
@@ -863,7 +882,7 @@ export const otcApi = {
     api.post<{ success: boolean; message: string }>("/otc/onboard", data),
 
   initiate: (data: InitiateOtcTransactionDto) =>
-    api.post<OtcTransaction>("/otc/initiate", data),
+    api.post<OtcTransaction>("/otc/transaction", data),
 
   getStatus: (reference: string) =>
     api.get<OtcTransaction>(`/otc/status/${reference}`),
@@ -873,8 +892,19 @@ export const otcApi = {
   getTransaction: (id: string) =>
     api.get<OtcTransaction>(`/otc/transaction/${id}`),
 
+  getRate: (token: string = "USDC") =>
+    api.get<{ rate: number }>(`/otc/rate?token=${token}`),
+
+  generateVirtualAccount: (data: { amount: number }) =>
+    api.post<{ accountNumber: string; bankCode: string; accountName: string }>(
+      "/otc/generate-virtual-account",
+      data,
+    ),
+
   checkIsOtcEnabled: () =>
-    api.get<{ isOTCEnabled: boolean; isOnboarded: boolean }>("/otc/isEnabled"),
+    api.get<{ isOTCEnabled: boolean; isOnboarded: boolean; otcUser?: any }>(
+      "/otc/isEnabled",
+    ),
 };
 
 export interface InitializeSwapDto {

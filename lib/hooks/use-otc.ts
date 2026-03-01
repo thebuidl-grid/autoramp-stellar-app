@@ -38,3 +38,20 @@ export function useOtcStats() {
     staleTime: 30 * 1000, // 30 seconds
   });
 }
+
+/**
+ * Hook to fetch the current OTC exchange rate for CNGN to USDC or USDT
+ */
+export function useOtcRate(token: string = "USDC") {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery({
+    queryKey: ["otc-rate", token],
+    queryFn: async () => {
+      const response = await otcApi.getRate(token);
+      return response.data;
+    },
+    enabled: isAuthenticated,
+    staleTime: 60 * 1000, // 1 minute
+  });
+}

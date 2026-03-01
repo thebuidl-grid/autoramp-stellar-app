@@ -19,7 +19,9 @@ import {
     FileText,
     Calendar,
     AlertCircle,
-    Loader2
+    Loader2,
+    Building2,
+    ArrowRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -135,9 +137,76 @@ export default function OtcTransactionStatusPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Transaction Summary */}
-                <Card className="lg:col-span-2 overflow-hidden border-none shadow-none bg-muted/30">
-                    <CardHeader className="border-b border-border/50 pb-6">
+                {/* Main Content Area */}
+                <div className="lg:col-span-2 space-y-6">
+                    {/* Deposit Info Card (If Issuance Exists) */}
+                    {transaction.issuance && (transaction.status === "PENDING" || transaction.status === "PROCESSING") && (
+                        <Card className="overflow-hidden border-primary/20 bg-primary/5">
+                            <CardHeader className="border-b border-primary/10 pb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                                        <Building2 className="w-5 h-5 text-primary" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-lg text-primary">Deposit Details</CardTitle>
+                                        <CardDescription className="text-primary/70">Please transfer NGN to this virtual account to proceed.</CardDescription>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-4">
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Account Number</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-3xl font-bold tracking-tight text-white">{transaction.issuance.accountNumber}</p>
+                                                <button 
+                                                    onClick={() => handleCopy(transaction.issuance!.accountNumber, "Account Number")}
+                                                    className="p-2 hover:bg-black/20 rounded-md transition-colors text-primary"
+                                                >
+                                                    <Copy className="w-5 h-5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Amount to Send</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-xl font-bold text-white">₦{transaction.amount?.toLocaleString()}</p>
+                                                <button 
+                                                    onClick={() => handleCopy(transaction.amount?.toString() || "", "Amount")}
+                                                    className="p-1 hover:bg-black/20 rounded-md transition-colors text-primary"
+                                                >
+                                                    <Copy className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-4 md:border-l md:border-primary/10 md:pl-6">
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Bank Name</p>
+                                            <p className="text-base font-semibold text-white">SafeHaven Microfinance Bank</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Account Name</p>
+                                            <p className="text-base font-semibold text-white">{transaction.issuance.accountName}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                            <CardFooter className="bg-primary/10 border-t border-primary/10 p-4">
+                                <div className="flex items-start gap-3 w-full">
+                                    <AlertCircle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                                    <p className="text-sm text-primary/90">
+                                        Transfer exactly <span className="font-bold">₦{transaction.amount?.toLocaleString()}</span> to the account above. Your tokens will be deployed automatically once the deposit is confirmed.
+                                    </p>
+                                </div>
+                            </CardFooter>
+                        </Card>
+                    )}
+
+                    {/* Transaction Summary */}
+                    <Card className="overflow-hidden border-none shadow-none bg-muted/30">
+                        <CardHeader className="border-b border-border/50 pb-6">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                                 <Coins className="w-5 h-5 text-primary" />
@@ -157,8 +226,16 @@ export default function OtcTransactionStatusPage() {
                                         {transaction.quantity} <span className="text-muted-foreground text-xl">{transaction.token}</span>
                                     </p>
                                 </div>
+                                {transaction.rate && (
+                                    <div className="space-y-1">
+                                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Exchange Rate</p>
+                                        <p className="text-base font-semibold text-foreground">
+                                            ₦{transaction.rate.toLocaleString()} <span className="text-muted-foreground text-sm font-normal">/ {transaction.token}</span>
+                                        </p>
+                                    </div>
+                                )}
                                 <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Network</p>
+                                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Network / Chain</p>
                                     <p className="text-base font-semibold flex items-center gap-2 capitalize">
                                         <Network className="w-4 h-4 text-primary" />
                                         {transaction.network} {transaction.chain && <span className="text-muted-foreground text-xs font-normal">({transaction.chain})</span>}
@@ -200,6 +277,7 @@ export default function OtcTransactionStatusPage() {
                         </div>
                     </CardFooter>
                 </Card>
+            </div>
 
                 {/* Status Timeline */}
                 <div className="space-y-6">

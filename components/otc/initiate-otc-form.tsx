@@ -46,20 +46,21 @@ export function InitiateOtcForm() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
-    const { data: rateData, isLoading: isRateLoading, refetch: refetchRate, isFetching: isRefetching } = useOtcRate();
-    const currentRate = rateData?.rate || 0;
-
     const form = useForm<InitiateFormValues>({
         resolver: zodResolver(initiateSchema) as any,
         defaultValues: {
             quantity: 0,
-            token: "USDT",
+            token: "USDC",
             network: "Base",
             address: "",
             memo: "",
             chain: "",
         },
     });
+
+    const selectedToken = form.watch("token");
+    const { data: rateData, isLoading: isRateLoading, refetch: refetchRate, isFetching: isRefetching } = useOtcRate(selectedToken);
+    const currentRate = rateData?.rate || 0;
 
     const onSubmit = async (data: InitiateFormValues) => {
         setIsSubmitting(true);
