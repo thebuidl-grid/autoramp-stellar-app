@@ -39,7 +39,7 @@ const initiateSchema = z.object({
 type InitiateFormValues = z.infer<typeof initiateSchema>;
 
 const SUPPORTED_TOKENS = ["USDT", "USDC", "CNGN"];
-const SUPPORTED_NETWORKS = ["Polygon", "Base", "Ethereum", "Solana"];
+const SUPPORTED_NETWORKS = ["Base"];
 
 export function InitiateOtcForm() {
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,7 +51,7 @@ export function InitiateOtcForm() {
         defaultValues: {
             quantity: 0,
             token: "USDT",
-            network: "Polygon",
+            network: "Base",
             address: "",
             memo: "",
             chain: "",
