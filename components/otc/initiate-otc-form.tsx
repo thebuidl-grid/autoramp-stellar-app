@@ -134,7 +134,7 @@ export function InitiateOtcForm() {
                                                     type="number"
                                                     placeholder="0.00"
                                                     {...field}
-                                                    className="bg-zinc-900/50 border-zinc-700 text-white pl-10"
+                                                    className="bg-zinc-900/50 border-zinc-700 text-white pl-10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                 />
                                                 <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                                             </div>
