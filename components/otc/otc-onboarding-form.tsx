@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -17,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, CheckCircle2, Fingerprint, Building2, AlertCircle } from "lucide-react";
-import { otcApi, OtcIdentityType } from "@/lib/api";
+import { otcApi, OtcIdentityType, OnboardOtcDto } from "@/lib/api";
 import {
     Select,
     SelectContent,
@@ -92,20 +93,32 @@ export function OtcOnboardingForm() {
     useEffect(() => {
         if (!isLoaded) return;
 
-        const timer = setTimeout(() => {
-            const formData = form.getValues();
-            localStorage.setItem("otc_onboarding_progress", JSON.stringify({
-                formData
-            }));
-        }, 1000);
+        let timer: NodeJS.Timeout;
+        const subscription = form.watch((value) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                localStorage.setItem("otc_onboarding_progress", JSON.stringify({
+                    formData: value
+                }));
+            }, 1000);
+        });
 
-        return () => clearTimeout(timer);
-    }, [form.watch(), isLoaded]);
+        return () => {
+            clearTimeout(timer);
+            subscription.unsubscribe();
+        };
+    }, [form, isLoaded]);
 
     const onSubmit = async (data: OnboardingFormValues) => {
         setIsSubmitting(true);
         try {
-            const response = await otcApi.onboard(data);
+            // Send ONLY identity fields to isolate validation error
+            const payload: OnboardOtcDto = {
+                identityType: data.identityType,
+                identityNumber: data.identityNumber,
+            };
+
+            const response = await otcApi.onboard(payload);
             
             if (response.data.success) {
                 toast({
@@ -144,7 +157,7 @@ export function OtcOnboardingForm() {
                         </p>
                     </div>
                     <Button asChild className="mt-4">
-                        <a href="/otc/trade">Proceed to Trade</a>
+                        <Link href="/otc/trade">Proceed to Trade</Link>
                     </Button>
                 </CardContent>
             </Card>

@@ -97,12 +97,12 @@ export default function MerchantDashboardPage() {
                     </Card>
                 </Link>
                 {isOTCEnabled && (
-                    <Link href="/otc/trade">
+                    <Link href="/otc/dashboard">
                         <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full border-primary/20 bg-primary/5">
                             <CardHeader className="flex flex-row items-center gap-4">
                                 <TrendingUp className="h-8 w-8 text-primary" />
                                 <div>
-                                    <CardTitle>OTC Trading</CardTitle>
+                                    <CardTitle>OTC Dashboard</CardTitle>
                                     <p className="text-sm text-muted-foreground">Access OTC trade portal</p>
                                 </div>
                             </CardHeader>

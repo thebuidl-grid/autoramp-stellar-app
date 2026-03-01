@@ -30,7 +30,7 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
   const { data: otcStatus, isOTCEnabled, isOnboarded } = useOtcStatus();
 
   const otcLink = isOTCEnabled 
-    ? (isOnboarded ? "/otc/trade" : "/otc/onboarding")
+    ? (isOnboarded ? "/otc/dashboard" : "/otc/onboarding")
     : null;
 
 
@@ -64,14 +64,14 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
       <div className="mx-6 mt-2 lg:mt-6">
         <div className="max-w-4xl mx-auto py-4">
           <div className="flex items-center justify-between">
-            <a href="/">
+            <Link href="/">
               <div className="flex items-center gap-3">
                 <Image src="/logo.png" alt="AutoRamp" width={32} height={32} />
                 <span className="font-bold text-xl tracking-tight">
                   Auto<span className="text-secondary">Ramp</span>
                 </span>
               </div>
-            </a>
+            </Link>
             <nav className="hidden md:flex items-center gap-8 border border-white/10 backdrop-blur-lg py-4 px-6 rounded-full">
               {isAuthenticated && (
                 <Link
@@ -128,15 +128,22 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                       <>
                         <DropdownMenuItem asChild>
                           <Link href={otcLink} className="cursor-pointer">
-                            OTC {isOnboarded ? "Trade" : "Onboarding"}
+                            OTC {isOnboarded ? "Dashboard" : "Onboarding"}
                           </Link>
                         </DropdownMenuItem>
                         {isOnboarded && (
-                          <DropdownMenuItem asChild>
-                            <Link href="/otc/history" className="cursor-pointer">
-                              OTC History
-                            </Link>
-                          </DropdownMenuItem>
+                          <>
+                            <DropdownMenuItem asChild>
+                              <Link href="/otc/trade" className="cursor-pointer">
+                                OTC Trade
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href="/otc/history" className="cursor-pointer">
+                                OTC History
+                              </Link>
+                            </DropdownMenuItem>
+                          </>
                         )}
                       </>
                     )}

@@ -299,12 +299,28 @@ export default function UserDetailPage() {
 
 function ToggleSwitch({ checked, onChange, disabled }: { checked: boolean, onChange: (checked: boolean) => void, disabled?: boolean }) {
     return (
-        <input 
-            type="checkbox"
-            checked={checked} 
-            onChange={(e) => onChange(e.target.checked)}
+        <button
+            type="button"
+            role="switch"
+            aria-checked={checked}
             disabled={disabled}
-            className="h-6 w-11 rounded-full bg-muted checked:bg-primary transition-colors appearance-none cursor-pointer relative after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all checked:after:translate-x-5 disabled:opacity-50 disabled:cursor-not-allowed"
-        />
+            onClick={() => onChange(!checked)}
+            className={`
+                peer inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full
+                border-2 border-transparent transition-colors focus-visible:outline-none 
+                focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 
+                focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50
+                ${checked ? 'bg-primary' : 'bg-muted'}
+            `}
+        >
+            <span
+                data-state={checked ? "checked" : "unchecked"}
+                className={`
+                    pointer-events-none block h-5 w-5 rounded-full bg-background 
+                    shadow-lg ring-0 transition-transform
+                    ${checked ? 'translate-x-5' : 'translate-x-0'}
+                `}
+            />
+        </button>
     );
 }
