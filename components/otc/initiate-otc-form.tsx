@@ -16,10 +16,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Loader2, Send, Wallet, Coins, Network, Info, RefreshCw } from "lucide-react";
-import { otcApi, InitiateOtcTransactionDto } from "@/lib/api";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, Send, Wallet, Coins, Network, Info, RefreshCw, Copy, CheckCircle2, Building2, AlertCircle } from "lucide-react";
+import { otcApi, InitiateOtcTransactionDto, OtcTransaction } from "@/lib/api";
 import { useOtcRate } from "@/lib/hooks";
 import { useRouter } from "next/navigation";
+import { copyToClipboard } from "@/lib/utils";
 import {
     Select,
     SelectContent,
@@ -44,6 +46,7 @@ const SUPPORTED_NETWORKS = ["Base"];
 
 export function InitiateOtcForm() {
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [successData, setSuccessData] = useState<OtcTransaction | null>(null);
     const { toast } = useToast();
     const router = useRouter();
     const form = useForm<InitiateFormValues>({
@@ -73,8 +76,8 @@ export function InitiateOtcForm() {
                 variant: "success",
             });
             
-            // Redirect to transaction details or history
-            router.push(`/otc/status/${response.data.reference}`);
+            // Show modal with deposit details
+            setSuccessData(response.data);
         } catch (error: any) {
             console.error("Initiate OTC error", error);
             toast({
@@ -84,6 +87,17 @@ export function InitiateOtcForm() {
             });
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleCopy = async (text: string, label: string) => {
+        const success = await copyToClipboard(text);
+        if (success) {
+            toast({
+                title: "Copied!",
+                description: `${label} copied to clipboard`,
+                variant: "success",
+            });
         }
     };
 
@@ -260,6 +274,90 @@ export function InitiateOtcForm() {
                     By initiating this trade, you agree to receive a real-time quote. Final settlement amounts may vary slightly due to market volatility.
                 </p>
             </CardFooter>
+
+            {/* Success Details Modal */}
+            <Dialog 
+                open={!!successData} 
+                onOpenChange={(open) => {
+                    if (!open && successData) {
+                        router.push(`/otc/status/${successData.reference}`);
+                    }
+                }}
+            >
+                <DialogContent className="sm:max-w-xl bg-zinc-950 border-zinc-800 text-white">
+                    <DialogHeader className="space-y-3 pb-4 border-b border-zinc-800">
+                        <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-2">
+                            <CheckCircle2 className="w-6 h-6 text-green-500" />
+                        </div>
+                        <DialogTitle className="text-xl text-center">Trade Initiated Successfully</DialogTitle>
+                        <DialogDescription className="text-center text-zinc-400">
+                            Please transfer the required funds to your dedicated virtual account to execute this swap.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {successData?.issuance && (
+                        <div className="py-2">
+                            <div className="rounded-xl border border-primary/20 bg-primary/5 overflow-hidden">
+                                <div className="p-4 border-b border-primary/10 flex items-center gap-2">
+                                    <Building2 className="w-4 h-4 text-primary" />
+                                    <h4 className="font-semibold text-primary">Deposit Details</h4>
+                                </div>
+                                <div className="p-5 space-y-5">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Account Number</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-2xl font-bold font-mono tracking-tight">{successData.issuance.accountNumber}</p>
+                                                <button 
+                                                    onClick={() => handleCopy(successData.issuance!.accountNumber, "Account Number")}
+                                                    className="p-1.5 hover:bg-black/20 rounded-md transition-colors text-primary"
+                                                >
+                                                    <Copy className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1 md:text-right">
+                                            <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Amount to Send</p>
+                                            <div className="flex items-center md:justify-end gap-2">
+                                                <p className="text-xl font-bold text-white tracking-tight">₦{successData.amount?.toLocaleString()}</p>
+                                                <button 
+                                                    onClick={() => handleCopy(successData.amount?.toString() || "", "Amount")}
+                                                    className="p-1 hover:bg-black/20 rounded-md transition-colors text-primary"
+                                                >
+                                                    <Copy className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-primary/10">
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Bank Name</p>
+                                            <p className="text-sm font-medium">SafeHaven MFB</p>
+                                        </div>
+                                        <div className="space-y-1 md:text-right">
+                                            <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Account Name</p>
+                                            <p className="text-sm font-medium">{successData.issuance.accountName}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-primary/10 p-3 flex gap-2 items-start text-xs text-primary/90">
+                                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                    <p>Transfer exactly <strong>₦{successData.amount?.toLocaleString()}</strong> to the account above. Your tokens will be deployed automatically once confirmed.</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter className="pt-2">
+                        <Button 
+                            className="w-full text-base font-bold h-12"
+                            onClick={() => router.push(`/otc/status/${successData?.reference}`)}
+                        >
+                            View Live Tracking
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </Card>
     );
 }
