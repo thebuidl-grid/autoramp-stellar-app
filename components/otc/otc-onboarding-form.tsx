@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, CheckCircle2, Fingerprint, Building2, AlertCircle } from "lucide-react";
-import { otcApi, OtcIdentityType } from "@/lib/api";
+import { otcApi, OtcIdentityType, OnboardOtcDto } from "@/lib/api";
 import {
     Select,
     SelectContent,
@@ -112,7 +112,13 @@ export function OtcOnboardingForm() {
     const onSubmit = async (data: OnboardingFormValues) => {
         setIsSubmitting(true);
         try {
-            const response = await otcApi.onboard(data);
+            // Send ONLY identity fields to isolate validation error
+            const payload: OnboardOtcDto = {
+                identityType: data.identityType,
+                identityNumber: data.identityNumber,
+            };
+
+            const response = await otcApi.onboard(payload);
             
             if (response.data.success) {
                 toast({
