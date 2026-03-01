@@ -778,6 +778,67 @@ export const adminApi = {
 
   getMerchantBankAccounts: (merchantId: string) =>
     api.get<MerchantBankAccount[]>(`/merchants/bank-accounts/${merchantId}`),
+
+  // OTC User Management
+  getOtcUsers: (page: number = 1, limit: number = 10) =>
+    api.get<UsersResponse>(
+      `/admin/users?page=${page}&limit=${limit}&isOTCEnabled=true`,
+    ),
+
+  // OTC Transactions Management
+  getOtcTransactions: (
+    page: number = 1,
+    limit: number = 10,
+    status?: string,
+    startDate?: string,
+    endDate?: string,
+    search?: string,
+  ) => {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("limit", limit.toString());
+    if (status) params.append("status", status);
+    if (startDate) params.append("startDate", startDate);
+    if (endDate) params.append("endDate", endDate);
+    if (search) params.append("search", search);
+    return api.get<{
+      transactions: any[];
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+      };
+    }>(`/admin/otc/transactions?${params.toString()}`);
+  },
+
+  getOtcSwapPrice: (
+    sellToken: string,
+    buyToken: string,
+    sellAmount: string,
+    takerAddress?: string,
+  ) => {
+    const params = new URLSearchParams();
+    params.append("sellToken", sellToken);
+    params.append("buyToken", buyToken);
+    params.append("sellAmount", sellAmount);
+    if (takerAddress) params.append("takerAddress", takerAddress);
+    return api.get<any>(`/admin/otc/swap-price?${params.toString()}`);
+  },
+
+  getOtcSwapQuote: (
+    sellToken: string,
+    buyToken: string,
+    sellAmount: string,
+    takerAddress: string,
+  ) => {
+    const params = new URLSearchParams();
+    params.append("sellToken", sellToken);
+    params.append("buyToken", buyToken);
+    params.append("sellAmount", sellAmount);
+    params.append("takerAddress", takerAddress);
+    return api.get<any>(`/admin/otc/swap-quote?${params.toString()}`);
+  },
 };
 // Redundant public merchant definitions moved to merchant.ts
 
