@@ -7,10 +7,7 @@ import {
     TrendingUp, 
     History, 
     Clock, 
-    ArrowRightCircle, 
     Plus,
-    UserCircle,
-    Copy,
     ArrowUpRight,
     CircleDollarSign,
     RefreshCw
@@ -20,13 +17,11 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
-import { useToast } from "@/components/ui/toast";
 
 export default function OtcDashboardPage() {
     const { user } = useAuthStore();
     const { data: otcData, isLoading: isStatsLoading, refetch: refetchStats } = useOtcStats();
     const { data: rateData, isLoading: isRateLoading, refetch: refetchRate, isFetching: isRateFetching } = useOtcRate();
-    const { toast } = useToast();
 
     const stats = otcData?.stats || { totalTrades: 0, totalVolume: 0, pendingTrades: 0 };
     const recentTransactions = otcData?.transactions?.slice(0, 5) || [];
