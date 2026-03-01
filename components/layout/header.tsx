@@ -30,7 +30,7 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
   const { data: otcStatus, isOTCEnabled, isOnboarded } = useOtcStatus();
 
   const otcLink = isOTCEnabled 
-    ? (isOnboarded ? "/otc/trade" : "/otc/onboarding")
+    ? (isOnboarded ? "/otc/dashboard" : "/otc/onboarding")
     : null;
 
 
@@ -128,15 +128,22 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                       <>
                         <DropdownMenuItem asChild>
                           <Link href={otcLink} className="cursor-pointer">
-                            OTC {isOnboarded ? "Trade" : "Onboarding"}
+                            OTC {isOnboarded ? "Dashboard" : "Onboarding"}
                           </Link>
                         </DropdownMenuItem>
                         {isOnboarded && (
-                          <DropdownMenuItem asChild>
-                            <Link href="/otc/history" className="cursor-pointer">
-                              OTC History
-                            </Link>
-                          </DropdownMenuItem>
+                          <>
+                            <DropdownMenuItem asChild>
+                              <Link href="/otc/trade" className="cursor-pointer">
+                                OTC Trade
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href="/otc/history" className="cursor-pointer">
+                                OTC History
+                              </Link>
+                            </DropdownMenuItem>
+                          </>
                         )}
                       </>
                     )}
