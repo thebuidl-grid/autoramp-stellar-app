@@ -836,10 +836,6 @@ export enum OtcIdentityType {
 export interface OnboardOtcDto {
   identityType: OtcIdentityType;
   identityNumber: string;
-  bankCode?: string;
-  bankName?: string;
-  accountName?: string;
-  accountNumber?: string;
 }
 
 export interface InitiateOtcTransactionDto {
