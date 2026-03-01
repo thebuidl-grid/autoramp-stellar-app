@@ -6,6 +6,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
+import { OtcSidebar } from "@/components/otc/layout/OtcSidebar";
+import { cn } from "@/lib/utils";
+
 export default function OtcLayout({ children }: { children: React.ReactNode }) {
     const isAuthenticated = useIsAuthenticated();
     const { _hasHydrated } = useAuthStore();
@@ -28,7 +31,7 @@ export default function OtcLayout({ children }: { children: React.ReactNode }) {
 
         // Logic Table redirections
         if (isOnboarded && pathname === "/otc/onboarding") {
-            router.push("/otc/trade");
+            router.push("/otc/dashboard");
         } else if (!isOnboarded && pathname !== "/otc/onboarding") {
             router.push("/otc/onboarding");
         }
@@ -50,5 +53,19 @@ export default function OtcLayout({ children }: { children: React.ReactNode }) {
     if (isOnboarded && pathname === "/otc/onboarding") return null;
     if (!isOnboarded && pathname !== "/otc/onboarding") return null;
 
-    return <>{children}</>;
+    const showSidebar = pathname !== "/otc/onboarding";
+
+    return (
+        <div className="flex min-h-screen bg-black/30">
+            {showSidebar && <OtcSidebar />}
+            <main className={cn(
+                "flex-1 transition-all duration-300",
+                showSidebar ? "lg:ml-64 p-6 lg:p-10" : "w-full"
+            )}>
+                <div className={cn("mx-auto", showSidebar ? "max-w-7xl" : "")}>
+                    {children}
+                </div>
+            </main>
+        </div>
+    );
 }
