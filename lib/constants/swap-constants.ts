@@ -8,13 +8,13 @@ export const SWAP_CONSTANTS = {
       ? "0x94cc0aa7b1f31f9076e7300300db79fbd2e3f6dc" // Base Sepolia SwapRouter
       : "0x2626164c24022c6e176b30a30b31174eaa0f368a"), // Base Mainnet SwapRouter
   USDC: IS_TESTNET
-    ? "0x036CbD53842c5426634e7929541eC2318f3dCF7e" // Base Sepolia USDC
+    ? "0x036cbd53842c5426634e7929541ec2318f3dcf7e" // Base Sepolia USDC
     : "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base Mainnet USDC
   CNGN: IS_TESTNET
-    ? "0x401306C9b05Ddd6aAA6758066fB9D796783A0963" // Base Sepolia CNGN (example)
+    ? "0x401306c9b05ddd6aaa6758066fb9d796783a0963" // Base Sepolia CNGN (example)
     : "0x46c85152bfe9f96829aa94755d9f915f9b10ef5f", // Base Mainnet CNGN
   USDT: IS_TESTNET
-    ? "0x560866166CD34Ba4854f3bA2eB87771B7C13cc92" // Base Sepolia USDT (example)
+    ? "0x560866166cd34ba4854f3ba2eb87771b7c13cc92" // Base Sepolia USDT (example)
     : "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", // Base Mainnet USDT
   USDC_DECIMALS: 6,
   CNGN_DECIMALS: 6,
