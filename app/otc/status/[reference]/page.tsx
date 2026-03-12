@@ -184,7 +184,7 @@ export default function OtcTransactionStatusPage() {
                                     <div className="space-y-4 md:border-l md:border-primary/10 md:pl-6">
                                         <div className="space-y-1">
                                             <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Bank Name</p>
-                                            <p className="text-base font-semibold text-white">SafeHaven Microfinance Bank</p>
+                                            <p className="text-base font-semibold text-white">{transaction.issuance.bankName}</p>
                                         </div>
                                         <div className="space-y-1">
                                             <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Account Name</p>

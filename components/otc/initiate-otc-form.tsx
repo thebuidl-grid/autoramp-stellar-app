@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/select";
 
 const initiateSchema = z.object({
-    quantity: z.coerce.number().positive("Quantity must be greater than 0"),
+    quantity: z.coerce.number().min(10000, "Minimum quantity is 10,000"),
     token: z.string().min(1, "Token is required"),
     network: z.string().min(1, "Network is required"),
     chain: z.string().optional(),
@@ -319,7 +319,7 @@ export function InitiateOtcForm() {
                                         <div className="space-y-1 md:text-right">
                                             <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Amount to Send</p>
                                             <div className="flex items-center md:justify-end gap-2">
-                                                <p className="text-xl font-bold text-white tracking-tight">₦{successData.amount?.toLocaleString()}</p>
+                                                <p className="text-xl font-bold text-white tracking-tight">₦{Number(successData.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                                                 <button 
                                                     onClick={() => handleCopy(successData.amount?.toString() || "", "Amount")}
                                                     className="p-1 hover:bg-black/20 rounded-md transition-colors text-primary"
@@ -332,7 +332,7 @@ export function InitiateOtcForm() {
                                     <div className="grid grid-cols-2 gap-4 pt-4 border-t border-primary/10">
                                         <div className="space-y-1">
                                             <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Bank Name</p>
-                                            <p className="text-sm font-medium">SafeHaven MFB</p>
+                                            <p className="text-sm font-medium">{successData.issuance.bankName}</p>
                                         </div>
                                         <div className="space-y-1 md:text-right">
                                             <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Account Name</p>
@@ -340,10 +340,21 @@ export function InitiateOtcForm() {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="bg-primary/10 p-3 flex gap-2 items-start text-xs text-primary/90">
-                                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                                    <p>Transfer exactly <strong>₦{successData.amount?.toLocaleString()}</strong> to the account above. Your tokens will be deployed automatically once confirmed.</p>
-                                </div>
+                                {successData.note && successData.note.length > 0 ? (
+                                    <div className="bg-primary/10 p-4 space-y-2 border-t border-primary/10">
+                                        {successData.note.map((note, idx) => (
+                                            <div key={idx} className="flex gap-2 items-start text-xs text-primary/90">
+                                                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                                <p dangerouslySetInnerHTML={{ __html: note.replace(/₦([\d,]+)/g, '<strong>₦$1</strong>') }} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="bg-primary/10 p-3 flex gap-2 items-start text-xs text-primary/90">
+                                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                        <p>Transfer exactly <strong>₦{Number(successData.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> to the account above. Your tokens will be deployed automatically once confirmed.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
