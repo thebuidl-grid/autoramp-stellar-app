@@ -9,17 +9,21 @@ import {
     ArrowRight,
     BadgeCheck,
     Loader2,
+    TrendingUp,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useAdminOtcUsers } from "@/lib/hooks/use-admin-otc";
 import { formatDate } from "@/lib/utils";
+import { useOtcRate } from "@/lib/hooks";
 
 export default function AdminDashboardPage() {
     const { data: otcData, isLoading: isOtcLoading } = useAdminOtcUsers(1, 5);
+    const { data: rateData, isLoading: isRateLoading } = useOtcRate("USDC");
     const recentOtcUsers = otcData?.users?.slice(0, 5) || [];
     const otcTotal = otcData?.pagination?.total ?? 0;
+    const currentRate = rateData?.rate || 0;
 
     return (
         <div className="space-y-8">
@@ -39,6 +43,25 @@ export default function AdminDashboardPage() {
                     <CardContent>
                         <div className="text-2xl font-bold">Operational</div>
                         <p className="text-xs text-muted-foreground">All systems go</p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">OTC Market Rate</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-primary" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">
+                            {isRateLoading ? (
+                                <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : currentRate ? (
+                                `₦${currentRate.toLocaleString()}`
+                            ) : (
+                                "---"
+                            )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">USDC / NGN</p>
                     </CardContent>
                 </Card>
             </div>

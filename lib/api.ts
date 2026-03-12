@@ -933,7 +933,9 @@ export interface OtcTransaction extends Transaction {
     bankCode: string;
     accountNumber: string;
     accountName: string;
+    bankName: string;
   };
+  note?: string[];
 }
 
 // ============== API Groups ==============
