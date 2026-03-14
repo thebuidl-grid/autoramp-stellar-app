@@ -63,6 +63,7 @@ export const getChainMetadata = (
 
 export const SUPPORTED_CHAINS = IS_TESTNET
   ? ([
+      base, // Default to Mainnet even in testnet mode for connection priority
       baseSepolia,
       sepolia,
       arbitrumSepolia,

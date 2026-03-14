@@ -9,14 +9,15 @@ import {
   injectedWallet,
   rainbowWallet,
   walletConnectWallet,
-  baseAccount,
   metaMaskWallet,
   rabbyWallet,
   oktoWallet,
   okxWallet,
+  phantomWallet,
+  trustWallet,
 } from "@rainbow-me/rainbowkit/wallets";
 import { createConfig, http } from "wagmi";
-import { base, mainnet } from "wagmi/chains";
+import { SUPPORTED_CHAINS } from "./constants/networks";
 
 // Get project ID from environment
 const projectId =
@@ -27,17 +28,20 @@ const connectors =
     ? connectorsForWallets(
         [
           {
-            groupName: "Available",
-            wallets: [injectedWallet],
+            groupName: "Popular",
+            wallets: [
+              injectedWallet,
+              metaMaskWallet,
+              rainbowWallet,
+              phantomWallet,
+            ],
           },
           {
-            groupName: "Recommended",
+            groupName: "Others",
             wallets: [
-              rainbowWallet,
               walletConnectWallet,
-              baseAccount,
-              metaMaskWallet,
               rabbyWallet,
+              trustWallet,
               oktoWallet,
               okxWallet,
             ],
@@ -55,10 +59,10 @@ const connectors =
  */
 export const wagmiConfig = createConfig({
   connectors,
-  chains: [base, mainnet],
-  transports: {
-    [base.id]: http(),
-    [mainnet.id]: http(),
-  },
+  chains: SUPPORTED_CHAINS as any,
+  multiInjectedProviderDiscovery: true,
+  transports: Object.fromEntries(
+    SUPPORTED_CHAINS.map((chain) => [chain.id, http()]),
+  ),
   ssr: false, // Disabled for client-only hydration via RootProvider
 });
