@@ -171,7 +171,7 @@ export default function OtcTransactionStatusPage() {
                                         <div className="space-y-1">
                                             <p className="text-xs text-primary/70 font-medium uppercase tracking-wider">Amount to Send</p>
                                             <div className="flex items-center gap-2">
-                                                <p className="text-xl font-bold text-white">₦{transaction.amount?.toLocaleString()}</p>
+                                                <p className="text-xl font-bold text-white">₦{Number(transaction.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                                                 <button 
                                                     onClick={() => handleCopy(transaction.amount?.toString() || "", "Amount")}
                                                     className="p-1 hover:bg-black/20 rounded-md transition-colors text-primary"
@@ -197,7 +197,7 @@ export default function OtcTransactionStatusPage() {
                                 <div className="flex items-start gap-3 w-full">
                                     <AlertCircle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                                     <p className="text-sm text-primary/90">
-                                        Transfer exactly <span className="font-bold">₦{transaction.amount?.toLocaleString()}</span> to the account above. Your tokens will be deployed automatically once the deposit is confirmed.
+                                        Transfer exactly <span className="font-bold">₦{Number(transaction.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span> to the account above. Your tokens will be deployed automatically once the deposit is confirmed.
                                     </p>
                                 </div>
                             </CardFooter>
@@ -223,14 +223,14 @@ export default function OtcTransactionStatusPage() {
                                 <div className="space-y-1">
                                     <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Order Quantity</p>
                                     <p className="text-3xl font-bold tracking-tight">
-                                        {transaction.quantity} <span className="text-muted-foreground text-xl">{transaction.token}</span>
+                                        {transaction.quantity.toLocaleString()} <span className="text-muted-foreground text-xl">{transaction.token}</span>
                                     </p>
                                 </div>
                                 {transaction.rate && (
                                     <div className="space-y-1">
                                         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Exchange Rate</p>
                                         <p className="text-base font-semibold text-foreground">
-                                            ₦{transaction.rate.toLocaleString()} <span className="text-muted-foreground text-sm font-normal">/ {transaction.token}</span>
+                                            ₦{transaction.rate.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className="text-muted-foreground text-sm font-normal">/ {transaction.token}</span>
                                         </p>
                                     </div>
                                 )}
