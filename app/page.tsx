@@ -277,6 +277,12 @@ export default function HomePage() {
 
   // Swap execution (for USDC to NGN sell and swap tab)
   // Determine which token to check allowance for based on swap data
+  const [quoteAmountOut, setQuoteAmountOut] = useState<bigint>(0n);
+  const [isQuoteLoading, setIsQuoteLoading] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState(0);
+  const [isLiquidityAvailable, setIsLiquidityAvailable] = useState(true);
+  const [allowanceTarget, setAllowanceTarget] = useState<string>(SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY);
+
   const tokenAddressForAllowance = swapData?.swapParams?.tokenIn
     ? swapData.swapParams.tokenIn.toLowerCase() ===
       SWAP_CONSTANTS.USDC.toLowerCase()
@@ -296,10 +302,10 @@ export default function HomePage() {
     abi: ERC20_ABI,
     functionName: "allowance",
     args:
-      address && SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY
+      address && allowanceTarget
         ? ([
             address as `0x${string}`,
-            SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY as `0x${string}`,
+            allowanceTarget as `0x${string}`,
           ] as const)
         : undefined,
     query: {
@@ -327,7 +333,7 @@ export default function HomePage() {
     useWaitForTransactionReceipt({ hash: approveHash });
 
   const {
-    sendTransaction: executeSwap,
+    sendTransactionAsync: executeSwap,
     data: swapHash,
     isPending: isExecuting,
   } = useSendTransaction();
@@ -609,10 +615,6 @@ export default function HomePage() {
     ? parseUnits(parseFormattedNumber(sellAmount).toString(), quoteDecimalsIn)
     : 0n;
 
-  const [quoteAmountOut, setQuoteAmountOut] = useState<bigint>(0n);
-  const [isQuoteLoading, setIsQuoteLoading] = useState(false);
-  const [exchangeRate, setExchangeRate] = useState(0);
-  const [isLiquidityAvailable, setIsLiquidityAvailable] = useState(true);
 
   useEffect(() => {
     const fetchQuote = async () => {
@@ -625,12 +627,11 @@ export default function HomePage() {
       setIsQuoteLoading(true);
       setIsLiquidityAvailable(true); // Reset before fetch
       try {
-        const response = await axios.get("/api/swap/quote", {
+        const response = await axios.get("/api/swap/price", {
           params: {
             sellToken: quoteTokenIn,
             buyToken: quoteTokenOut,
             sellAmount: parsedQuoteAmount.toString(),
-            ...(address ? { taker: address } : {}),
             slippagePercentage: 0.05,
             chainId: chainId || targetChain, // Dynamic chain support
           },
@@ -651,6 +652,12 @@ export default function HomePage() {
           setQuoteAmountOut(0n);
           setExchangeRate(0);
           return;
+        }
+
+        if (response.data.issues?.allowance?.spender) {
+          setAllowanceTarget(response.data.issues.allowance.spender);
+        } else if (response.data.allowanceTarget) {
+          setAllowanceTarget(response.data.allowanceTarget);
         }
 
         const outAmount = BigInt(quote.buyAmount);
@@ -773,8 +780,11 @@ export default function HomePage() {
           offrampDestination: { bankCode, accountNumber },
         },
         {
-          onSuccess: (response) => {
-            const updatedResponse = { ...response.data };
+          onSuccess: (response: { data: any }) => {
+            const updatedResponse = {
+              ...response.data,
+              allowanceTarget: allowanceTarget, // PERSIST THE CAPTURED ALLOWANCE TARGET
+            };
             if (cryptoType === "USDT") {
               if (updatedResponse.swapParams) {
                 updatedResponse.swapParams.tokenIn = SWAP_CONSTANTS.USDT;
@@ -889,52 +899,68 @@ export default function HomePage() {
 
   // Handle swap execution
   const handleApprove = async () => {
-    if (!swapData || !address) return;
+    if (!address || !swapData) {
+      toast({
+        title: "Connection Error",
+        description: "Please ensure your wallet is connected.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      // 1. Setup Tokens
-      const tokenInAddress = swapData.swapParams.tokenIn;
+      const isTokenInUSDC =
+        swapData.swapParams.tokenIn.toLowerCase() ===
+        SWAP_CONSTANTS.USDC.toLowerCase();
+      const isTokenInUSDT =
+        swapData.swapParams.tokenIn.toLowerCase() ===
+        SWAP_CONSTANTS.USDT.toLowerCase();
 
-      const isUSDC =
-        tokenInAddress.toLowerCase() === SWAP_CONSTANTS.USDC.toLowerCase();
-      const isUSDT =
-        tokenInAddress.toLowerCase() === SWAP_CONSTANTS.USDT.toLowerCase();
-
-      const tokenAddress = isUSDC
+      const tokenAddress = isTokenInUSDC
         ? SWAP_CONSTANTS.USDC
-        : isUSDT
+        : isTokenInUSDT
           ? SWAP_CONSTANTS.USDT
           : SWAP_CONSTANTS.CNGN;
 
-      const decimals = isUSDC
+      const decimals = isTokenInUSDC
         ? SWAP_CONSTANTS.USDC_DECIMALS
-        : isUSDT
+        : isTokenInUSDT
           ? SWAP_CONSTANTS.USDT_DECIMALS
           : SWAP_CONSTANTS.CNGN_DECIMALS;
 
-      // 2. Parse Amount Safely
-      const rawAmountString = swapData.swapParams.amountIn;
-      const tokenAmount = parseUnits(rawAmountString, decimals);
+      const amountIn = BigInt(swapData.swapParams.amountIn.toString());
 
-      const spender = swapData?.allowanceTarget || SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY;
+      const spender =
+        swapData?.allowanceTarget || SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY;
 
-      approveToken({
+      console.log("Approving token via HomePage:", { tokenAddress, spender, amountIn: amountIn.toString() });
+
+      writeContract({
         address: tokenAddress as `0x${string}`,
         abi: ERC20_ABI,
         functionName: "approve",
-        args: [spender as `0x${string}`, tokenAmount],
+        args: [spender as `0x${string}`, amountIn],
       });
     } catch (error: any) {
-      console.error("Approval logic error:", error);
+      console.error("Approve error in HomePage:", error);
       toast({
         title: "Approval Failed",
-        description: error.message || "Failed to prepare approval",
+        description: error.message || "Failed to approve token",
         variant: "destructive",
       });
     }
   };
 
   const handleExecuteSwap = async () => {
-    if (!address || !swapData || !SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY) return;
+    console.log("handleExecuteSwap details in HomePage:", { address, swapData });
+    if (!address || !swapData) {
+      toast({
+        title: "Swap Error",
+        description: "Missing wallet address or swap data. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const isTokenInUSDC =
       swapData.swapParams.tokenIn.toLowerCase() ===
@@ -949,9 +975,10 @@ export default function HomePage() {
         ? SWAP_CONSTANTS.USDT_DECIMALS
         : SWAP_CONSTANTS.CNGN_DECIMALS;
 
-    const amountIn = parseUnits(swapData.swapParams.amountIn.toString(), decimals);
+    const amountIn = BigInt(swapData.swapParams.amountIn.toString());
 
     try {
+      console.log("Fetching firm quote via HomePage...");
       // 1. Fetch Quote from our proxy
       const response = await axios.get("/api/swap/quote", {
         params: {
@@ -960,27 +987,46 @@ export default function HomePage() {
           sellAmount: amountIn.toString(),
           taker: address,
           slippagePercentage: swapData.swapParams.slippage || 0.05,
+          chainId: chainId || 8453,
         },
       });
 
       const quote = response.data;
-      
+      console.log("Quote received in HomePage:", quote);
+
       if (!quote || !quote.transaction) {
         throw new Error("Invalid swap quote: missing transaction data");
       }
-      
+
+      console.log("Triggering wallet transaction from HomePage...");
       // 2. Execute Swap via sendTransaction - v2 returns fields in a nested 'transaction' object
-      executeSwap({
+      // Apply 15% buffer to gas as recommended for 0x API
+      const gasEstimate = quote.transaction.gas ? BigInt(quote.transaction.gas) : undefined;
+      const gasWithBuffer = gasEstimate ? (gasEstimate * 115n) / 100n : undefined;
+
+      await executeSwap({
+        account: address as `0x${string}`,
         to: quote.transaction.to as `0x${string}`,
         data: quote.transaction.data as `0x${string}`,
-        value: quote.transaction.value ? hexToBigInt(quote.transaction.value) : BigInt(0),
+        value: quote.transaction.value && hexToBigInt(quote.transaction.value) > 0n
+          ? hexToBigInt(quote.transaction.value)
+          : BigInt(0),
+        gas: gasWithBuffer,
+        chainId: chainId,
       });
+      console.log("Transaction submitted via HomePage successfully");
     } catch (error: any) {
-      const errorMessage = error.response?.data?.reason || error.message || "Failed to execute swap";
-      toast({ 
-        title: "Swap Failed", 
-        description: errorMessage, 
-        variant: "destructive" 
+      console.error("Swap execution error in HomePage:", error);
+      const errorMessage =
+        error.response?.data?.reason ||
+        error.response?.data?.description ||
+        error.message ||
+        "Failed to execute swap";
+      
+      toast({
+        title: "Swap Failed",
+        description: errorMessage,
+        variant: "destructive",
       });
     }
   };
@@ -1158,7 +1204,7 @@ export default function HomePage() {
           ? SWAP_CONSTANTS.USDT_DECIMALS
           : SWAP_CONSTANTS.CNGN_DECIMALS;
 
-      const amountIn = parseUnits(swapData.swapParams.amountIn.toString(), decimals);
+      const amountIn = BigInt(swapData.swapParams.amountIn.toString());
       return amountIn > allowance;
     })();
 
