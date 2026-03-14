@@ -10,18 +10,16 @@ export async function GET(request: NextRequest) {
   const taker = searchParams.get("takerAddress") || searchParams.get("taker");
   const slippagePercentage = searchParams.get("slippagePercentage") || "0.05";
 
-  if (!sellToken || !buyToken || !sellAmount || !taker) {
+  if (!sellToken || !buyToken || !sellAmount) {
     return NextResponse.json(
       {
-        error:
-          "Missing required parameters (sellToken, buyToken, sellAmount, taker)",
+        error: "Missing required parameters (sellToken, buyToken, sellAmount)",
       },
       { status: 400 },
     );
   }
 
   const apiKey = process.env.ZEROEX_API_KEY;
-
   if (!apiKey) {
     console.error("ZEROEX_API_KEY is not set");
     return NextResponse.json(
@@ -37,16 +35,26 @@ export async function GET(request: NextRequest) {
       ? 84532
       : 8453;
 
+  const isQuote = !!taker;
+  const endpoint = isQuote
+    ? "https://api.0x.org/swap/permit2/quote"
+    : "https://api.0x.org/swap/permit2/price";
+
   try {
-    const response = await axios.get("https://api.0x.org/swap/permit2/quote", {
-      params: {
-        chainId,
-        sellToken,
-        buyToken,
-        sellAmount,
-        taker,
-        slippagePercentage,
-      },
+    const params: any = {
+      chainId,
+      sellToken,
+      buyToken,
+      sellAmount,
+      slippagePercentage,
+    };
+
+    if (taker) {
+      params.taker = taker;
+    }
+
+    const response = await axios.get(endpoint, {
+      params,
       headers: {
         "0x-api-key": apiKey,
         "0x-version": "v2",
