@@ -13,7 +13,7 @@ interface BridgeSectionProps {
   onChainClick?: () => void;
   disabled?: boolean;
   isLoading?: boolean;
-  userBalance?: number;
+  userBalance?: string;
   onPercentageClick?: (value: string) => void;
   direction: "from" | "to";
 }
@@ -33,7 +33,7 @@ export function BridgeSection({
   const handlePercent = (percent: number) => {
     if (userBalance === undefined || !onPercentageClick) return;
 
-    const value = userBalance * percent;
+    const value = parseFloat(userBalance) * percent;
     const formatted = parseFloat(value.toFixed(6)).toString();
 
     onPercentageClick(formatted);
@@ -108,7 +108,7 @@ export function BridgeSection({
             <span className="w-1.5 h-1.5 rounded-full bg-green-500/50 animate-pulse" />
             Balance:{" "}
             <span className="text-white/60">
-              {userBalance.toLocaleString(undefined, {
+              {parseFloat(userBalance).toLocaleString(undefined, {
                 maximumFractionDigits: 6,
               })}
             </span>

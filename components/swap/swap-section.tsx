@@ -15,7 +15,7 @@ interface SwapSectionProps {
   isLoading?: boolean;
 
   // New Props
-  userBalance?: number;
+  userBalance?: string;
   onPercentageClick?: (value: string) => void;
 }
 
@@ -33,12 +33,10 @@ export function SwapSection({
   const handlePercent = (percent: number) => {
     if (userBalance === undefined || !onPercentageClick) return;
 
-    // Calculate percentage
-    const value = userBalance * percent;
+    // Calculate percentage as number (safe for this transient UI logic)
+    const value = parseFloat(userBalance) * percent;
 
-    // logic to handle decimals or "floor" slightly to avoid "insufficient funds" due to gas
-    // For simplicity, we keep up to 6 decimal places (standard for USDC/CNGN)
-    // and remove trailing zeros/dots.
+    // Standardize to 6 decimals (USDC/CNGN)
     const formatted = parseFloat(value.toFixed(6)).toString();
 
     onPercentageClick(formatted);
@@ -83,7 +81,7 @@ export function SwapSection({
         {userBalance !== undefined && (
           <div className="text-right text-[10px] text-white/30">
             Balance:{" "}
-            {userBalance.toLocaleString(undefined, {
+            {parseFloat(userBalance).toLocaleString(undefined, {
               maximumFractionDigits: 6,
             })}
           </div>
