@@ -1,4 +1,4 @@
-import { IS_TESTNET } from "./networks";
+import { IS_TESTNET } from "../../constants/networks";
 
 // Base network contract addresses
 export const SWAP_CONSTANTS = {
