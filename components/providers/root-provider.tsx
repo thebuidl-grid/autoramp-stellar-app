@@ -1,5 +1,9 @@
 'use client';
 
+// IMPORTANT: This must be imported before any @circle-fin or @stellar packages
+// to disable BigNumber.DEBUG which throws on >15 significant digit numbers.
+import "@/lib/bignumber-fix";
+
 import { ReactNode, useEffect, useState } from 'react';
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { Toaster } from "@/components/ui/toast";

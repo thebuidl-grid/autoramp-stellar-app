@@ -68,7 +68,12 @@ export function InitiateOtcForm() {
     const onSubmit = async (data: InitiateFormValues) => {
         setIsSubmitting(true);
         try {
-            const response = await otcApi.initiate(data);
+            // Round quantity to 6 decimal places to avoid BigNumber precision errors
+            const roundedData = {
+                ...data,
+                quantity: Number(data.quantity.toFixed(6))
+            };
+            const response = await otcApi.initiate(roundedData);
             
             toast({
                 title: "Transaction Initiated",
