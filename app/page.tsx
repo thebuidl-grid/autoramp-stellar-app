@@ -630,7 +630,7 @@ export default function HomePage() {
             sellToken: quoteTokenIn,
             buyToken: quoteTokenOut,
             sellAmount: parsedQuoteAmount.toString(),
-            taker: address || "0x0000000000000000000000000000000000000000",
+            ...(address ? { taker: address } : {}),
             slippagePercentage: 0.05,
             chainId: chainId || targetChain, // Dynamic chain support
           },
