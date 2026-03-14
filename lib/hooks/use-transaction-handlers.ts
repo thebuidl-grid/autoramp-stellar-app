@@ -65,62 +65,101 @@ export function useTransactionHandlers({
     }
 
     if (!sellAmount || !bankCode || !accountNumber) {
-      toast({ title: "Missing fields", description: "Please fill in all required fields", variant: "destructive" });
+      toast({
+        title: "Missing fields",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
       return;
     }
 
     if (!accountResolved || !accountName) {
-      toast({ title: "Invalid account", description: "Please ensure the account number is valid and resolved", variant: "destructive" });
+      toast({
+        title: "Invalid account",
+        description: "Please ensure the account number is valid and resolved",
+        variant: "destructive",
+      });
       return;
     }
 
     const parsedAmount = parseFormattedNumber(sellAmount);
     if (cryptoType === "CNGN" && parsedAmount < 100) {
-      toast({ title: "Invalid amount", description: "Minimum amount for CNGN is 100", variant: "destructive" });
+      toast({
+        title: "Invalid amount",
+        description: "Minimum amount for CNGN is 100",
+        variant: "destructive",
+      });
       return;
     }
     if (cryptoType === "USDC" && parsedAmount < 1) {
-      toast({ title: "Invalid amount", description: "Minimum amount for USDC is 1", variant: "destructive" });
+      toast({
+        title: "Invalid amount",
+        description: "Minimum amount for USDC is 1",
+        variant: "destructive",
+      });
       return;
     }
     if (parsedAmount <= 0) {
-      toast({ title: "Invalid amount", description: "Please enter a valid amount", variant: "destructive" });
+      toast({
+        title: "Invalid amount",
+        description: "Please enter a valid amount",
+        variant: "destructive",
+      });
       return;
     }
 
     if (cryptoType === "CNGN") {
       // CNGN to NGN: Direct offramp
-      const amountToSend = Math.round(parsedAmount);
       offRamp.mutate(
-        { network: "base", amount: amountToSend, destination: { bankCode, accountNumber } },
+        {
+          network: "base",
+          amount: Number(parseFloat(sellAmount.replace(/,/g, "")).toFixed(6)),
+          destination: { bankCode, accountNumber },
+        },
         {
           onSuccess: (response) => {
             setTransactionData(response.data);
             setStep("pending");
           },
-        }
+        },
       );
     } else if (cryptoType === "USDC") {
       // USDC to NGN: Swap flow
       if (!isConnected || !address) {
-        toast({ title: "Wallet not connected", description: "Please connect your wallet to continue", variant: "destructive" });
+        toast({
+          title: "Wallet not connected",
+          description: "Please connect your wallet to continue",
+          variant: "destructive",
+        });
         return;
       }
 
       if (!ngnEstimate?.estimatedNgn) {
-        toast({ title: "Rate calculation in progress", description: "Please wait for the estimated NGN value", variant: "destructive" });
+        toast({
+          title: "Rate calculation in progress",
+          description: "Please wait for the estimated NGN value",
+          variant: "destructive",
+        });
         return;
       }
 
       const ngnAmount = Math.round(ngnEstimate.estimatedNgn);
       initializeSwap.mutate(
-        { amount: ngnAmount, usdcAmount: parsedAmount, slippage: 0.05, network: "base", offrampDestination: { bankCode, accountNumber } },
+        {
+          amount: ngnAmount,
+          usdcAmount: Number(
+            parseFloat(sellAmount.replace(/,/g, "")).toFixed(6),
+          ),
+          slippage: 0.05,
+          network: "base",
+          offrampDestination: { bankCode, accountNumber },
+        },
         {
           onSuccess: (response) => {
             setSwapData(response.data);
             setStep("execute");
           },
-        }
+        },
       );
     }
   }, [
@@ -150,24 +189,36 @@ export function useTransactionHandlers({
     }
 
     if (!buyAmount || !walletAddress) {
-      toast({ title: "Missing fields", description: "Please fill in all required fields", variant: "destructive" });
+      toast({
+        title: "Missing fields",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
       return;
     }
 
     const parsedAmount = parseFloat(buyAmount);
     if (isNaN(parsedAmount) || parsedAmount < 100) {
-      toast({ title: "Invalid amount", description: "Minimum amount is 100 NGN", variant: "destructive" });
+      toast({
+        title: "Invalid amount",
+        description: "Minimum amount is 100 NGN",
+        variant: "destructive",
+      });
       return;
     }
 
     onRamp.mutate(
-      { network: "base", amount: parsedAmount, destination: { address: walletAddress } },
+      {
+        network: "base",
+        amount: Math.round(parseFloat(buyAmount.replace(/,/g, ""))),
+        destination: { address: walletAddress },
+      },
       {
         onSuccess: (response) => {
           setTransactionData(response.data);
           setStep("pending");
         },
-      }
+      },
     );
   }, [
     isAuthenticated,
@@ -182,26 +233,54 @@ export function useTransactionHandlers({
 
   const handleSwap = useCallback(async () => {
     if (!isConnected || !address) {
-      toast({ title: "Wallet not connected", description: "Please connect your wallet to continue", variant: "destructive" });
+      toast({
+        title: "Wallet not connected",
+        description: "Please connect your wallet to continue",
+        variant: "destructive",
+      });
       return;
     }
 
     if (!sellAmount) {
-      toast({ title: "Missing amount", description: "Please enter an amount to swap", variant: "destructive" });
+      toast({
+        title: "Missing amount",
+        description: "Please enter an amount to swap",
+        variant: "destructive",
+      });
       return;
     }
 
     const parsedAmount = parseFormattedNumber(sellAmount);
-    if (fromCryptoType === "CNGN" && toCryptoType === "USDC" && parsedAmount < 100) {
-      toast({ title: "Invalid amount", description: "Minimum amount for CNGN to USDC swap is 100 CNGN", variant: "destructive" });
+    if (
+      fromCryptoType === "CNGN" &&
+      toCryptoType === "USDC" &&
+      parsedAmount < 100
+    ) {
+      toast({
+        title: "Invalid amount",
+        description: "Minimum amount for CNGN to USDC swap is 100 CNGN",
+        variant: "destructive",
+      });
       return;
     }
-    if (fromCryptoType === "USDC" && toCryptoType === "CNGN" && parsedAmount < 1) {
-      toast({ title: "Invalid amount", description: "Minimum amount for USDC to CNGN swap is 1 USDC", variant: "destructive" });
+    if (
+      fromCryptoType === "USDC" &&
+      toCryptoType === "CNGN" &&
+      parsedAmount < 1
+    ) {
+      toast({
+        title: "Invalid amount",
+        description: "Minimum amount for USDC to CNGN swap is 1 USDC",
+        variant: "destructive",
+      });
       return;
     }
     if (parsedAmount <= 0) {
-      toast({ title: "Invalid amount", description: "Please enter a valid amount", variant: "destructive" });
+      toast({
+        title: "Invalid amount",
+        description: "Please enter a valid amount",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -223,8 +302,10 @@ export function useTransactionHandlers({
       },
       recipientAddress: address, // User's wallet address (they receive the swapped tokens)
       swapParams: {
-        tokenIn: fromCryptoType === "USDC" ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN,
-        tokenOut: toCryptoType === "USDC" ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN,
+        tokenIn:
+          fromCryptoType === "USDC" ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN,
+        tokenOut:
+          toCryptoType === "USDC" ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN,
         amountIn: parsedAmount.toString(),
         recipient: address,
         slippage: 0.05,
@@ -236,8 +317,8 @@ export function useTransactionHandlers({
       {
         fromTokenType: fromCryptoType,
         toTokenType: toCryptoType,
-        fromAmount: parsedAmount,
-        toAmount: toAmount,
+        fromAmount: Number(parseFloat(sellAmount.replace(/,/g, "")).toFixed(6)),
+        toAmount: Number(parseFloat(toAmount.toString()).toFixed(6)),
         exchangeRate: exchangeRate,
         sourceAddress: address,
         destinationAddress: address,
@@ -254,13 +335,15 @@ export function useTransactionHandlers({
           setStep("execute");
         },
         onError: (error: any) => {
-          toast({ 
-            title: "Swap Creation Failed", 
-            description: error.response?.data?.message || "Failed to create swap transaction", 
-            variant: "destructive" 
+          toast({
+            title: "Swap Creation Failed",
+            description:
+              error.response?.data?.message ||
+              "Failed to create swap transaction",
+            variant: "destructive",
           });
         },
-      }
+      },
     );
   }, [
     isConnected,
@@ -274,16 +357,19 @@ export function useTransactionHandlers({
     setStep,
   ]);
 
-  const handleSubmit = useCallback((e: React.FormEvent) => {
-    e.preventDefault();
-    if (activeTab === "sell") {
-      handleSell();
-    } else if (activeTab === "buy") {
-      handleBuy();
-    } else if (activeTab === "swap") {
-      handleSwap();
-    }
-  }, [activeTab, handleSell, handleBuy, handleSwap]);
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      if (activeTab === "sell") {
+        handleSell();
+      } else if (activeTab === "buy") {
+        handleBuy();
+      } else if (activeTab === "swap") {
+        handleSwap();
+      }
+    },
+    [activeTab, handleSell, handleBuy, handleSwap],
+  );
 
   return {
     handleSell,
@@ -291,10 +377,11 @@ export function useTransactionHandlers({
     handleSwap,
     handleSubmit,
     isLoading: {
-      sell: offRamp.isPending || (cryptoType === "USDC" && initializeSwap.isPending),
+      sell:
+        offRamp.isPending ||
+        (cryptoType === "USDC" && initializeSwap.isPending),
       buy: onRamp.isPending,
       swap: createSimpleSwap.isPending,
     },
   };
 }
-
