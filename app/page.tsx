@@ -12,7 +12,7 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
-import { formatNumber } from "@/lib/utils";
+import { formatNumber, cn } from "@/lib/utils";
 import { TabButton } from "@/components/swap/tab-button";
 import { SwapSection } from "@/components/swap/swap-section";
 import { CryptoSelectionModal } from "@/components/swap/crypto-selection-modal";
@@ -62,6 +62,8 @@ import {
 } from "@/lib/constants/swap-constants";
 import { IS_TESTNET, SUPPORTED_CHAINS } from "@/lib/constants/networks";
 import { parseUnits, formatUnits, hexToBigInt } from "viem";
+import { PriceView } from "@/components/swap/PriceView";
+import { QuoteView } from "@/components/swap/QuoteView";
 import { useTransactionStore } from "@/lib/store";
 import axios from "axios";
 import { AlertTriangle as LucideAlertTriangle } from "lucide-react";
@@ -278,6 +280,8 @@ export default function HomePage() {
   // Swap execution (for USDC to NGN sell and swap tab)
   // Determine which token to check allowance for based on swap data
   const [quoteAmountOut, setQuoteAmountOut] = useState<bigint>(0n);
+  const [showQuote, setShowQuote] = useState(false);
+  const [priceDataForQuote, setPriceDataForQuote] = useState<any>(null);
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(0);
   const [isLiquidityAvailable, setIsLiquidityAvailable] = useState(true);
@@ -311,9 +315,8 @@ export default function HomePage() {
     query: {
       enabled:
         !!address &&
-        !!SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY &&
-        step === "execute" &&
-        !!swapData,
+        !!allowanceTarget &&
+        (step === "execute" || (activeTab === "swap" && !!priceDataForQuote)),
     },
   });
 
@@ -662,6 +665,7 @@ export default function HomePage() {
 
         const outAmount = BigInt(quote.buyAmount);
         setQuoteAmountOut(outAmount);
+        setPriceDataForQuote(quote); // Store full data
 
         const { exchangeRate: rate } = calculateExchangeRate(
           parseFormattedNumber(sellAmount),
@@ -1414,10 +1418,6 @@ export default function HomePage() {
                               quoteDecimalsOut,
                             );
 
-                            // For Sell tab (CNGN/NGN), we usually want 0 decimals (NGN is fiat-like here)
-                            // For Swap tab (USDC/CNGN), we might want decimals.
-                            // Adjust formatting based on context if needed.
-
                             return parseFloat(formatted).toLocaleString(
                               "en-US",
                               {
@@ -1427,11 +1427,8 @@ export default function HomePage() {
                             );
                           }
                           return "0.00";
-                          // ---------------------------------------------
                         })()
                       : (() => {
-                          // --- LOGIC FOR SELL (CNGN ONLY) ---
-                          // CNGN to NGN is 1:1, no swap needed
                           if (!sellAmount) return "";
                           const parsed = parseFormattedNumber(sellAmount);
                           return parsed.toLocaleString("en-NG");
@@ -1455,7 +1452,80 @@ export default function HomePage() {
                   (needsConversion && isLoadingEstimate) ||
                   (activeTab === "swap" && isQuoteLoading)
                 }
+                footer={activeTab === "swap" && priceDataForQuote ? (
+                  <div className="flex flex-col gap-1 text-[10px]">
+                    <div className="flex justify-between items-center">
+                      <span className="text-white/40">Indicative Rate:</span>
+                      <span className="text-white/60 font-medium">
+                        1 {fromCryptoType} = {exchangeRate.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {toCryptoType}
+                      </span>
+                    </div>
+                    {isConnected && allowance !== undefined && (
+                      <div className="flex justify-between items-center border-t border-white/5 pt-1">
+                        <span className="text-white/40">Allowance:</span>
+                        <span className={cn("font-medium", parsedQuoteAmount > allowance ? "text-yellow-500/80" : "text-green-500/80")}>
+                          {parsedQuoteAmount > allowance ? "Approval Required" : "Approved"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ) : undefined}
               />
+
+              {activeTab === "swap" && !showQuote && (
+                <div className="space-y-4">
+                  {isConnected && allowance !== undefined && parsedQuoteAmount > allowance ? (
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (!allowanceTarget) return;
+                        approveToken({
+                          address: getTokenAddress(fromCryptoType) as `0x${string}`,
+                          abi: ERC20_ABI,
+                          functionName: "approve",
+                          args: [allowanceTarget as `0x${string}`, parsedQuoteAmount],
+                        });
+                      }}
+                      disabled={isApproving || isWaitingApproval || !priceDataForQuote}
+                      className="w-full h-14 bg-secondary text-black hover:bg-secondary/90 rounded-xl font-bold"
+                    >
+                      {isApproving || isWaitingApproval ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Approving {fromCryptoType}...
+                        </>
+                      ) : (
+                        `Approve ${fromCryptoType}`
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={() => setShowQuote(true)}
+                      disabled={isQuoteLoading || !priceDataForQuote || !isLiquidityAvailable}
+                      className="w-full h-14 bg-secondary text-black hover:bg-secondary/90 rounded-xl font-bold"
+                    >
+                      Review Trade
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "swap" && showQuote && (
+                <QuoteView
+                  sellToken={getTokenAddress(fromCryptoType)}
+                  buyToken={getTokenAddress(toCryptoType)}
+                  sellAmount={sellAmount}
+                  sellDecimals={getTokenDecimals(fromCryptoType)}
+                  buyDecimals={getTokenDecimals(toCryptoType)}
+                  chainId={chainId || targetChain}
+                  priceData={priceDataForQuote}
+                  onBack={() => setShowQuote(false)}
+                  onSuccess={(hash) => {
+                    setStep("completed");
+                  }}
+                />
+              )}
             </>
           )}
 
@@ -1627,32 +1697,30 @@ export default function HomePage() {
             </div>
           ) : null}
 
-          <Button
-            type="submit"
-            className="w-full h-14 text-sm md:font-medium rounded-xl bg-secondary hover:bg-secondary/90 text-black"
-            disabled={
-              (activeTab === "sell" &&
-                (!accountResolved || !accountName || resolveAccount.isPending)) ||
-              (activeTab === "swap" && (!isLiquidityAvailable || quoteAmountOut === 0n))
-            }
-            isLoading={
-              (activeTab === "sell" && offRamp.isPending) ||
-              (activeTab === "sell" &&
-                cryptoType === "USDC" &&
-                initializeSwap.isPending) ||
-              (activeTab === "buy" && onRamp.isPending) ||
-              (activeTab === "swap" && createSimpleSwap.isPending) ||
-              (activeTab === "bridge" && isBridging)
-            }
-          >
-            {activeTab === "buy"
-              ? "BUY"
-              : activeTab === "sell"
-                ? "SELL"
-                : activeTab === "swap"
-                  ? "SWAP"
-                  : "BRIDGE"}
-          </Button>
+            {activeTab !== "swap" && (
+              <Button
+                type="submit"
+                className="w-full h-14 text-sm md:font-medium rounded-xl bg-secondary hover:bg-secondary/90 text-black"
+                disabled={
+                  (activeTab === "sell" &&
+                    (!accountResolved || !accountName || resolveAccount.isPending))
+                }
+                isLoading={
+                  (activeTab === "sell" && offRamp.isPending) ||
+                  (activeTab === "sell" &&
+                    cryptoType === "USDC" &&
+                    initializeSwap.isPending) ||
+                  (activeTab === "buy" && onRamp.isPending) ||
+                  (activeTab === "bridge" && isBridging)
+                }
+              >
+                {activeTab === "buy"
+                  ? "BUY"
+                  : activeTab === "sell"
+                    ? "SELL"
+                    : "BRIDGE"}
+              </Button>
+            )}
             </form>
         </div>
       );
