@@ -54,7 +54,8 @@ export function useSwapExecution({
       : SWAP_CONSTANTS.CNGN
     : SWAP_CONSTANTS.USDC; // Default to USDC
 
-  const spender = SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY;
+  const spender =
+    swapData?.allowanceTarget || SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY;
 
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: tokenAddressForAllowance as `0x${string}`,
@@ -78,7 +79,7 @@ export function useSwapExecution({
     useWaitForTransactionReceipt({ hash: approveHash });
 
   const {
-    sendTransaction: executeSwap,
+    sendTransactionAsync: executeSwap,
     data: swapHash,
     isPending: isExecuting,
   } = useSendTransaction();
@@ -122,8 +123,15 @@ export function useSwapExecution({
               setStep("pending");
             }
           },
-          onError: () => {
+          onError: (error: any) => {
+            console.error("Failed to update swap after execution:", error);
             hasUpdatedSwap.current = false;
+            toast({
+              title: "Update Failed",
+              description:
+                "Transaction was successful but we couldn't update the record. Please contact support.",
+              variant: "destructive",
+            });
           },
         },
       );
@@ -145,30 +153,29 @@ export function useSwapExecution({
   }, [swapHash]);
 
   const handleApprove = async () => {
-    if (!swapData || !address) return;
+    if (!swapData || !address) {
+      toast({
+        title: "Connection Error",
+        description: "Please ensure your wallet is connected.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
-      const rawAmount = swapData.swapParams.amountIn;
-      // If the amount has many decimal places (more than 15), parseFloat will fail with precision error.
-      // Standardize: if it doesn't look like units (no large numbers), treat as human readable.
-      // But actually, we should just ensure we never pass "dirty" numbers.
       const isUSDC =
         swapData.swapParams.tokenIn.toLowerCase() ===
         SWAP_CONSTANTS.USDC.toLowerCase();
       const tokenAddress = isUSDC ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN;
-      const decimals = isUSDC
-        ? SWAP_CONSTANTS.USDC_DECIMALS
-        : SWAP_CONSTANTS.CNGN_DECIMALS;
-
-      // Safety: If rawAmount looks like a unit string already (no dots, large number),
-      // but usually the backend should return human readable in swapParams.
-      // For now, let's just make sure we don't parseFloat it.
-      const amountIn = parseUnits(
-        swapData.swapParams.amountIn.toString(),
-        decimals,
-      );
+      const amountIn = BigInt(swapData.swapParams.amountIn.toString());
 
       const spender =
         swapData?.allowanceTarget || SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY;
+
+      console.log("Approving token:", {
+        tokenAddress,
+        spender,
+        amountIn: amountIn.toString(),
+      });
 
       approveToken({
         address: tokenAddress as `0x${string}`,
@@ -177,6 +184,7 @@ export function useSwapExecution({
         args: [spender as `0x${string}`, amountIn],
       });
     } catch (error: any) {
+      console.error("Approve error:", error);
       toast({
         title: "Approval Failed",
         description: error.message || "Failed to approve token",
@@ -186,17 +194,20 @@ export function useSwapExecution({
   };
 
   const handleExecuteSwap = async () => {
-    if (!address || !swapData) return;
+    console.log("handleExecuteSwap details:", { address, swapData });
+    if (!address || !swapData) {
+      toast({
+        title: "Swap Error",
+        description: "Missing wallet address or swap data. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    const isUSDC =
-      swapData.swapParams.tokenIn.toLowerCase() ===
-      SWAP_CONSTANTS.USDC.toLowerCase();
-    const decimals = isUSDC
-      ? SWAP_CONSTANTS.USDC_DECIMALS
-      : SWAP_CONSTANTS.CNGN_DECIMALS;
-    const amountIn = parseUnits(swapData.swapParams.amountIn, decimals);
+    const amountIn = BigInt(swapData.swapParams.amountIn.toString());
 
     try {
+      console.log("Fetching firm quote for execution...");
       // Use 0x API exclusively
       const response = await axios.get("/api/swap/quote", {
         params: {
@@ -210,24 +221,42 @@ export function useSwapExecution({
       });
 
       const quote = response.data;
+      console.log("Quote received:", quote);
 
       if (!quote || !quote.transaction) {
         throw new Error("Invalid swap quote: missing transaction data");
       }
 
+      console.log("Triggering wallet transaction...");
       // 2. Execute Swap via sendTransaction - v2 returns fields in a nested 'transaction' object
-      executeSwap({
+      // Apply 15% buffer to gas as recommended for 0x API
+      const gasEstimate = quote.transaction.gas
+        ? BigInt(quote.transaction.gas)
+        : undefined;
+      const gasWithBuffer = gasEstimate
+        ? (gasEstimate * 115n) / 100n
+        : undefined;
+
+      await executeSwap({
+        account: address as `0x${string}`,
         to: quote.transaction.to as `0x${string}`,
         data: quote.transaction.data as `0x${string}`,
-        value: quote.transaction.value
-          ? hexToBigInt(quote.transaction.value)
-          : BigInt(0),
+        value:
+          quote.transaction.value && hexToBigInt(quote.transaction.value) > 0n
+            ? hexToBigInt(quote.transaction.value)
+            : BigInt(0),
+        gas: gasWithBuffer,
+        chainId: chainId,
       });
+      console.log("Transaction submitted successfully");
     } catch (error: any) {
+      console.error("Swap execution error:", error);
       const errorMessage =
         error.response?.data?.reason ||
+        error.response?.data?.description ||
         error.message ||
         "Failed to execute swap";
+
       toast({
         title: "Swap Failed",
         description: errorMessage,
@@ -241,16 +270,7 @@ export function useSwapExecution({
     swapData &&
     allowance !== undefined &&
     (() => {
-      const isUSDC =
-        swapData.swapParams.tokenIn.toLowerCase() ===
-        SWAP_CONSTANTS.USDC.toLowerCase();
-      const decimals = isUSDC
-        ? SWAP_CONSTANTS.USDC_DECIMALS
-        : SWAP_CONSTANTS.CNGN_DECIMALS;
-      const amountIn = parseUnits(
-        swapData.swapParams.amountIn.toString(),
-        decimals,
-      );
+      const amountIn = BigInt(swapData.swapParams.amountIn.toString());
       return amountIn > allowance;
     })();
 

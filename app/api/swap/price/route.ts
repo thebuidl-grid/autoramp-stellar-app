@@ -7,14 +7,12 @@ export async function GET(request: NextRequest) {
   const sellToken = searchParams.get("sellToken");
   const buyToken = searchParams.get("buyToken");
   const sellAmount = searchParams.get("sellAmount");
-  const taker = searchParams.get("takerAddress") || searchParams.get("taker");
   const slippagePercentage = searchParams.get("slippagePercentage") || "0.05";
 
-  if (!sellToken || !buyToken || !sellAmount || !taker) {
+  if (!sellToken || !buyToken || !sellAmount) {
     return NextResponse.json(
       {
-        error:
-          "Missing required parameters (sellToken, buyToken, sellAmount, taker)",
+        error: "Missing required parameters (sellToken, buyToken, sellAmount)",
       },
       { status: 400 },
     );
@@ -37,13 +35,12 @@ export async function GET(request: NextRequest) {
       : 8453;
 
   try {
-    const response = await axios.get("https://api.0x.org/swap/permit2/quote", {
+    const response = await axios.get("https://api.0x.org/swap/permit2/price", {
       params: {
         chainId,
         sellToken,
         buyToken,
         sellAmount,
-        taker,
         slippagePercentage,
       },
       headers: {
@@ -55,15 +52,15 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     if (error.response?.data) {
       console.error(
-        "0x API Proxy Error Details:",
+        "0x Price API Error Details:",
         JSON.stringify(error.response.data, null, 2),
       );
     } else {
-      console.error("0x API Proxy Error:", error.message);
+      console.error("0x Price API Error:", error.message);
     }
     const status = error.response?.status || 500;
     const data = error.response?.data || {
-      error: "Failed to fetch quote from 0x",
+      error: "Failed to fetch price from 0x",
     };
     return NextResponse.json(data, { status });
   }
