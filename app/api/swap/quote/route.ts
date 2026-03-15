@@ -10,10 +10,11 @@ export async function GET(request: NextRequest) {
   const taker = searchParams.get("takerAddress") || searchParams.get("taker");
   const slippagePercentage = searchParams.get("slippagePercentage") || "0.05";
 
-  if (!sellToken || !buyToken || !sellAmount) {
+  if (!sellToken || !buyToken || !sellAmount || !taker) {
     return NextResponse.json(
       {
-        error: "Missing required parameters (sellToken, buyToken, sellAmount)",
+        error:
+          "Missing required parameters (sellToken, buyToken, sellAmount, taker)",
       },
       { status: 400 },
     );
@@ -35,26 +36,16 @@ export async function GET(request: NextRequest) {
       ? 84532
       : 8453;
 
-  const isQuote = !!taker;
-  const endpoint = isQuote
-    ? "https://api.0x.org/swap/permit2/quote"
-    : "https://api.0x.org/swap/permit2/price";
-
   try {
-    const params: any = {
-      chainId,
-      sellToken,
-      buyToken,
-      sellAmount,
-      slippagePercentage,
-    };
-
-    if (taker) {
-      params.taker = taker;
-    }
-
-    const response = await axios.get(endpoint, {
-      params,
+    const response = await axios.get("https://api.0x.org/swap/permit2/quote", {
+      params: {
+        chainId,
+        sellToken,
+        buyToken,
+        sellAmount,
+        taker,
+        slippagePercentage,
+      },
       headers: {
         "0x-api-key": apiKey,
         "0x-version": "v2",
