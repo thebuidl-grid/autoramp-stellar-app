@@ -62,7 +62,6 @@ import {
 } from "@/lib/constants/swap-constants";
 import { IS_TESTNET, SUPPORTED_CHAINS } from "@/lib/constants/networks";
 import { parseUnits, formatUnits, hexToBigInt } from "viem";
-import { PriceView } from "@/components/swap/PriceView";
 import { QuoteView } from "@/components/swap/QuoteView";
 import { useTransactionStore } from "@/lib/store";
 import axios from "axios";
