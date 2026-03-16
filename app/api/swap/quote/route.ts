@@ -37,20 +37,23 @@ export async function GET(request: NextRequest) {
       : 8453;
 
   try {
-    const response = await axios.get("https://api.0x.org/swap/permit2/quote", {
-      params: {
-        chainId,
-        sellToken,
-        buyToken,
-        sellAmount,
-        taker,
-        slippagePercentage,
+    const response = await axios.get(
+      "https://api.0x.org/swap/allowance-holder/quote",
+      {
+        params: {
+          chainId,
+          sellToken,
+          buyToken,
+          sellAmount,
+          taker,
+          slippagePercentage,
+        },
+        headers: {
+          "0x-api-key": apiKey,
+          "0x-version": "v2",
+        },
       },
-      headers: {
-        "0x-api-key": apiKey,
-        "0x-version": "v2",
-      },
-    });
+    );
     return NextResponse.json(response.data);
   } catch (error: any) {
     if (error.response?.data) {

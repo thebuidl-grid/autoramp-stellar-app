@@ -17,6 +17,7 @@ interface SwapSectionProps {
   // New Props
   userBalance?: string;
   onPercentageClick?: (value: string) => void;
+  footer?: React.ReactNode;
 }
 
 export function SwapSection({
@@ -29,6 +30,7 @@ export function SwapSection({
   isLoading = false,
   userBalance,
   onPercentageClick,
+  footer,
 }: SwapSectionProps) {
   const handlePercent = (percent: number) => {
     if (userBalance === undefined || !onPercentageClick) return;
@@ -86,6 +88,8 @@ export function SwapSection({
             })}
           </div>
         )}
+        
+        {footer && <div className="mt-2 pt-2 border-t border-white/5">{footer}</div>}
       </div>
     </div>
   );
