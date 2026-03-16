@@ -35,6 +35,7 @@ import {
 } from "wagmi";
 import { parseUnits, hexToBigInt } from "viem";
 import { SWAP_CONSTANTS, ERC20_ABI } from "@/lib/constants/swap-constants";
+import { useRouter } from "next/navigation";
 
 export function useSwapExecution({
   swapData,
@@ -45,6 +46,7 @@ export function useSwapExecution({
   const { toast } = useToast();
   const { address, chainId } = useAccount();
   const updateSwap = useUpdateSwapAfterExecution();
+  const router = useRouter();
 
   // Determine which token to check allowance for based on swap data
   const tokenAddressForAllowance = swapData?.swapParams?.tokenIn
@@ -119,6 +121,10 @@ export function useSwapExecution({
                   "Your swap transaction has been completed successfully!",
                 variant: "default",
               });
+              // Redirect to history page after successful swap
+              setTimeout(() => {
+                router.push("/history");
+              }, 2000);
             } else {
               setStep("pending");
             }
