@@ -343,6 +343,7 @@ export default function HomePage() {
     useWaitForTransactionReceipt({ hash: swapHash });
 
   const hasUpdatedSwap = useRef(false);
+  const isSubmittingSwap = useRef(false);
   useEffect(() => {
     if (
       isSwapSuccess &&
@@ -400,10 +401,11 @@ export default function HomePage() {
 
 
   useEffect(() => {
-    if (isApproved && isAutoSwapping) {
+    if (isApproved && isAutoSwapping && !isSubmittingSwap.current) {
+      setIsAutoSwapping(false); // Reset immediately to prevent re-triggering
       handleExecuteSwap();
     }
-  }, [isApproved, isAutoSwapping]);
+  }, [isApproved, isAutoSwapping, setIsAutoSwapping]);
 
   const tabs = [
     { id: "buy" as const, label: "Buy" },
@@ -957,6 +959,8 @@ export default function HomePage() {
   };
 
   const handleExecuteSwap = async () => {
+    if (isSubmittingSwap.current) return;
+    isSubmittingSwap.current = true;
     console.log("handleExecuteSwap details in HomePage:", { address, swapData });
     if (!address || !swapData) {
       toast({
@@ -964,6 +968,7 @@ export default function HomePage() {
         description: "Missing wallet address or swap data. Please try again.",
         variant: "destructive",
       });
+      isSubmittingSwap.current = false;
       return;
     }
 
@@ -1033,6 +1038,8 @@ export default function HomePage() {
         description: errorMessage,
         variant: "destructive",
       });
+    } finally {
+      isSubmittingSwap.current = false;
     }
   };
 
