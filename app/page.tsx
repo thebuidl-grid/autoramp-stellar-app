@@ -26,8 +26,6 @@ import { ChainSelectionModal } from "@/components/swap/chain-selection-modal";
 import { HeroBackground } from "@/components/hero/hero-background";
 import {
   useBanks,
-  useEstimateNgn,
-  useUsdNgnRate,
   useOffRamp,
   useOnRamp,
   useInitializeSwap,
@@ -163,38 +161,6 @@ export default function HomePage() {
 
   const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
   const parsedBuyAmount = buyAmount ? parseFormattedNumber(buyAmount) : null;
-
-  let amountToConvert: number | null = null;
-  let needsConversion = false;
-
-  if (activeTab === "sell") {
-    if (cryptoType === "USDC" && parsedSellAmount && parsedSellAmount > 0) {
-      amountToConvert = parsedSellAmount;
-      needsConversion = true;
-    }
-  } else if (activeTab === "buy") {
-    if (cryptoType === "USDC" && parsedBuyAmount && parsedBuyAmount > 0) {
-      amountToConvert = parsedBuyAmount;
-      needsConversion = true;
-    }
-  }
-
-  const {
-    data: ngnEstimate,
-    isLoading: isLoadingEstimate,
-    error: ngnEstimateError,
-  } = useEstimateNgn(needsConversion ? amountToConvert : null);
-  const { data: usdNgnRate } = useUsdNgnRate();
-
-  // Handle 401 errors for NGN estimate endpoint
-  useEffect(() => {
-    if (
-      ngnEstimateError &&
-      (ngnEstimateError as any)?.response?.status === 401
-    ) {
-      setIsAuthModalOpen(true);
-    }
-  }, [ngnEstimateError, setIsAuthModalOpen]);
 
   // WebSocket for transaction updates
   const handleWebSocketUpdate = useCallback(
@@ -1468,10 +1434,7 @@ export default function HomePage() {
                     : undefined
                 }
                 disabled={true}
-                isLoading={
-                  (needsConversion && isLoadingEstimate) ||
-                  (activeTab === "swap" && isQuoteLoading)
-                }
+                isLoading={activeTab === "swap" && isQuoteLoading}
                 footer={activeTab === "swap" && priceDataForQuote ? (
                   <div className="flex flex-col gap-1 text-[10px]">
                     <div className="flex justify-between items-center">
