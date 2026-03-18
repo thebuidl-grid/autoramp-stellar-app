@@ -1111,6 +1111,14 @@ export default function HomePage() {
     }
 
     // 2. Preparation
+    const isInUSDC = fromCryptoType === "USDC";
+    const isInUSDT = fromCryptoType === "USDT";
+    const tokenInDecimals = isInUSDC
+      ? SWAP_CONSTANTS.USDC_DECIMALS
+      : isInUSDT
+        ? SWAP_CONSTANTS.USDT_DECIMALS
+        : SWAP_CONSTANTS.CNGN_DECIMALS;
+
     const isToUSDC = toCryptoType === "USDC";
     const isToUSDT = toCryptoType === "USDT";
     const tokenOutDecimals = isToUSDC
@@ -1118,6 +1126,9 @@ export default function HomePage() {
       : isToUSDT
         ? SWAP_CONSTANTS.USDT_DECIMALS
         : SWAP_CONSTANTS.CNGN_DECIMALS;
+
+    // Fix: Use atomic units for amountIn in swapParams to ensure correct allowance checks
+    const amountInAtomic = parseUnits(sellAmount.replace(/,/g, ""), tokenInDecimals);
 
     const { toAmount, exchangeRate } = calculateExchangeRate(
       parsedAmount,
@@ -1145,7 +1156,7 @@ export default function HomePage() {
       swapParams: {
         tokenIn: getTokenAddress(fromCryptoType),
         tokenOut: getTokenAddress(toCryptoType),
-        amountIn: sellAmount.replace(/,/g, ""),
+        amountIn: amountInAtomic.toString(), // Use atomic units
         recipient: address,
         slippage: 0.05,
       },
@@ -1169,6 +1180,7 @@ export default function HomePage() {
             swap: response.data,
             recipientAddress: address,
             swapParams: swapResponseData.swapParams,
+            allowanceTarget: allowanceTarget, // Fix: Include allowanceTarget for approval step
           });
           setStep("execute");
         },
