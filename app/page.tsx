@@ -12,7 +12,7 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
-import { formatNumber, cn } from "@/lib/utils";
+import { formatNumber, cn, safeBigInt } from "@/lib/utils";
 import { TabButton } from "@/components/swap/tab-button";
 import { SwapSection } from "@/components/swap/swap-section";
 import { CryptoSelectionModal } from "@/components/swap/crypto-selection-modal";
@@ -60,13 +60,13 @@ import {
   SWAP_CONSTANTS,
   ERC20_ABI,
 } from "@/lib/constants/swap-constants";
-import { IS_TESTNET, SUPPORTED_CHAINS } from "@/lib/constants/networks";
 import { parseUnits, formatUnits, hexToBigInt } from "viem";
 import { QuoteView } from "@/components/swap/QuoteView";
 import { useTransactionStore } from "@/lib/store";
 import axios from "axios";
 import { AlertTriangle as LucideAlertTriangle } from "lucide-react";
 import { USDC_ADDRESSES } from "@/lib/constants/bridge-constants";
+import { SUPPORTED_CHAINS, IS_TESTNET } from "@/lib/constants/networks";
 
 export default function HomePage() {
   const { toast } = useToast();
@@ -663,11 +663,8 @@ export default function HomePage() {
         }
 
         // The 0x price API can return buyAmount as a decimal string (e.g. "0.1").
-        // BigInt() cannot handle decimals, so we floor it to the nearest integer first.
-        const buyAmountSafe = quote.buyAmount.includes(".")
-          ? quote.buyAmount.split(".")[0]
-          : quote.buyAmount;
-        const outAmount = BigInt(buyAmountSafe || "0");
+        // safeBigInt() handles decimals by flooring to the nearest integer.
+        const outAmount = safeBigInt(quote.buyAmount);
         setQuoteAmountOut(outAmount);
         setPriceDataForQuote(quote); // Store full data
 
@@ -936,7 +933,7 @@ export default function HomePage() {
           ? SWAP_CONSTANTS.USDT_DECIMALS
           : SWAP_CONSTANTS.CNGN_DECIMALS;
 
-      const amountIn = BigInt(swapData.swapParams.amountIn.toString());
+      const amountIn = safeBigInt(swapData.swapParams.amountIn);
 
       const spender =
         swapData?.allowanceTarget || SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY;
@@ -983,7 +980,7 @@ export default function HomePage() {
         ? SWAP_CONSTANTS.USDT_DECIMALS
         : SWAP_CONSTANTS.CNGN_DECIMALS;
 
-    const amountIn = BigInt(swapData.swapParams.amountIn.toString());
+    const amountIn = safeBigInt(swapData.swapParams.amountIn);
 
     try {
       console.log("Fetching firm quote via HomePage...");
@@ -1009,7 +1006,7 @@ export default function HomePage() {
       console.log("Triggering wallet transaction from HomePage...");
       // 2. Execute Swap via sendTransaction - v2 returns fields in a nested 'transaction' object
       // Apply 15% buffer to gas as recommended for 0x API
-      const gasEstimate = quote.transaction.gas ? BigInt(quote.transaction.gas) : undefined;
+      const gasEstimate = quote.transaction.gas ? safeBigInt(quote.transaction.gas) : undefined;
       const gasWithBuffer = gasEstimate ? (gasEstimate * 115n) / 100n : undefined;
 
       await executeSwap({
@@ -1212,7 +1209,7 @@ export default function HomePage() {
           ? SWAP_CONSTANTS.USDT_DECIMALS
           : SWAP_CONSTANTS.CNGN_DECIMALS;
 
-      const amountIn = BigInt(swapData.swapParams.amountIn.toString());
+      const amountIn = safeBigInt(swapData.swapParams.amountIn);
       return amountIn > allowance;
     })();
 
