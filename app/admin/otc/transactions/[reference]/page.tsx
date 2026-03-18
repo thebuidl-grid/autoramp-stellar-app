@@ -11,6 +11,8 @@ import { ArrowLeft, Loader2, CheckCircle2, Clock, XCircle, ArrowRightLeft, Alert
 import Link from "next/link";
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits } from "viem";
+import { safeBigInt } from "@/lib/utils";
+
 
 export default function AdminOtcTransactionPage() {
     const params = useParams();
@@ -107,9 +109,9 @@ export default function AdminOtcTransactionPage() {
             sendTransaction({
                 to: swapQuote.to,
                 data: swapQuote.data as `0x${string}`,
-                value: swapQuote.value ? BigInt(swapQuote.value) : undefined,
-                gas: swapQuote.gas ? BigInt(swapQuote.gas) : undefined,
-                gasPrice: swapQuote.gasPrice ? BigInt(swapQuote.gasPrice) : undefined,
+                value: swapQuote.value ? safeBigInt(swapQuote.value) : undefined,
+                gas: swapQuote.gas ? safeBigInt(swapQuote.gas) : undefined,
+                gasPrice: swapQuote.gasPrice ? safeBigInt(swapQuote.gasPrice) : undefined,
             });
         } catch (err: any) {
             setIsExecuting(false);

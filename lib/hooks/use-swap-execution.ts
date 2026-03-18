@@ -35,6 +35,7 @@ import {
 } from "wagmi";
 import { parseUnits, hexToBigInt } from "viem";
 import { SWAP_CONSTANTS, ERC20_ABI } from "@/lib/constants/swap-constants";
+import { safeBigInt } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 
 export function useSwapExecution({
@@ -172,7 +173,7 @@ export function useSwapExecution({
         swapData.swapParams.tokenIn.toLowerCase() ===
         SWAP_CONSTANTS.USDC.toLowerCase();
       const tokenAddress = isUSDC ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN;
-      const amountIn = BigInt(swapData.swapParams.amountIn.toString());
+      const amountIn = safeBigInt(swapData.swapParams.amountIn);
 
       const spender =
         swapData?.allowanceTarget || SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY;
@@ -210,7 +211,7 @@ export function useSwapExecution({
       return;
     }
 
-    const amountIn = BigInt(swapData.swapParams.amountIn.toString());
+    const amountIn = safeBigInt(swapData.swapParams.amountIn);
 
     try {
       console.log("Fetching firm quote for execution...");
@@ -237,7 +238,7 @@ export function useSwapExecution({
       // 2. Execute Swap via sendTransaction - v2 returns fields in a nested 'transaction' object
       // Apply 15% buffer to gas as recommended for 0x API
       const gasEstimate = quote.transaction.gas
-        ? BigInt(quote.transaction.gas)
+        ? safeBigInt(quote.transaction.gas)
         : undefined;
       const gasWithBuffer = gasEstimate
         ? (gasEstimate * 115n) / 100n
@@ -276,7 +277,7 @@ export function useSwapExecution({
     swapData &&
     allowance !== undefined &&
     (() => {
-      const amountIn = BigInt(swapData.swapParams.amountIn.toString());
+      const amountIn = safeBigInt(swapData.swapParams.amountIn);
       return amountIn > allowance;
     })();
 
