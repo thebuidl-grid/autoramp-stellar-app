@@ -7,6 +7,8 @@ import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from "wa
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, AlertTriangle, ArrowLeft } from "lucide-react";
 import { SWAP_CONSTANTS } from "@/lib/constants/swap-constants";
+import { safeBigInt } from "@/lib/utils";
+
 
 interface QuoteViewProps {
   sellToken: string;
@@ -32,6 +34,7 @@ export function QuoteView({
   onSuccess,
 }: QuoteViewProps) {
   const { address } = useAccount();
+
   const [quote, setQuote] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +93,7 @@ export function QuoteView({
     if (!quote?.transaction) return;
 
     // Apply 15% gas buffer as recommended
-    const gasEstimate = quote.transaction.gas ? BigInt(quote.transaction.gas) : undefined;
+    const gasEstimate = quote.transaction.gas ? safeBigInt(quote.transaction.gas) : undefined;
     const gasWithBuffer = gasEstimate ? (gasEstimate * 115n) / 100n : undefined;
 
     sendTransaction({
@@ -128,7 +131,7 @@ export function QuoteView({
 
   if (!quote) return null;
 
-  const buyAmountFormatted = quote.buyAmount ? formatUnits(BigInt(quote.buyAmount), buyDecimals) : "0";
+  const buyAmountFormatted = quote.buyAmount ? formatUnits(safeBigInt(quote.buyAmount), buyDecimals) : "0";
 
   return (
     <div className="space-y-6">

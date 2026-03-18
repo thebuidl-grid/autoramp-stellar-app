@@ -12,7 +12,7 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
-import { formatNumber, cn } from "@/lib/utils";
+import { formatNumber, cn, safeBigInt } from "@/lib/utils";
 import { TabButton } from "@/components/swap/tab-button";
 import { SwapSection } from "@/components/swap/swap-section";
 import { CryptoSelectionModal } from "@/components/swap/crypto-selection-modal";
@@ -26,8 +26,6 @@ import { ChainSelectionModal } from "@/components/swap/chain-selection-modal";
 import { HeroBackground } from "@/components/hero/hero-background";
 import {
   useBanks,
-  useEstimateNgn,
-  useUsdNgnRate,
   useOffRamp,
   useOnRamp,
   useInitializeSwap,
@@ -60,13 +58,13 @@ import {
   SWAP_CONSTANTS,
   ERC20_ABI,
 } from "@/lib/constants/swap-constants";
-import { IS_TESTNET, SUPPORTED_CHAINS } from "@/lib/constants/networks";
 import { parseUnits, formatUnits, hexToBigInt } from "viem";
 import { QuoteView } from "@/components/swap/QuoteView";
 import { useTransactionStore } from "@/lib/store";
 import axios from "axios";
 import { AlertTriangle as LucideAlertTriangle } from "lucide-react";
 import { USDC_ADDRESSES } from "@/lib/constants/bridge-constants";
+import { SUPPORTED_CHAINS, IS_TESTNET } from "@/lib/constants/networks";
 
 export default function HomePage() {
   const { toast } = useToast();
@@ -163,38 +161,6 @@ export default function HomePage() {
 
   const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
   const parsedBuyAmount = buyAmount ? parseFormattedNumber(buyAmount) : null;
-
-  let amountToConvert: number | null = null;
-  let needsConversion = false;
-
-  if (activeTab === "sell") {
-    if (cryptoType === "USDC" && parsedSellAmount && parsedSellAmount > 0) {
-      amountToConvert = parsedSellAmount;
-      needsConversion = true;
-    }
-  } else if (activeTab === "buy") {
-    if (cryptoType === "USDC" && parsedBuyAmount && parsedBuyAmount > 0) {
-      amountToConvert = parsedBuyAmount;
-      needsConversion = true;
-    }
-  }
-
-  const {
-    data: ngnEstimate,
-    isLoading: isLoadingEstimate,
-    error: ngnEstimateError,
-  } = useEstimateNgn(needsConversion ? amountToConvert : null);
-  const { data: usdNgnRate } = useUsdNgnRate();
-
-  // Handle 401 errors for NGN estimate endpoint
-  useEffect(() => {
-    if (
-      ngnEstimateError &&
-      (ngnEstimateError as any)?.response?.status === 401
-    ) {
-      setIsAuthModalOpen(true);
-    }
-  }, [ngnEstimateError, setIsAuthModalOpen]);
 
   // WebSocket for transaction updates
   const handleWebSocketUpdate = useCallback(
@@ -343,6 +309,7 @@ export default function HomePage() {
     useWaitForTransactionReceipt({ hash: swapHash });
 
   const hasUpdatedSwap = useRef(false);
+  const isSubmittingSwap = useRef(false);
   useEffect(() => {
     if (
       isSwapSuccess &&
@@ -400,10 +367,11 @@ export default function HomePage() {
 
 
   useEffect(() => {
-    if (isApproved && isAutoSwapping) {
+    if (isApproved && isAutoSwapping && !isSubmittingSwap.current) {
+      setIsAutoSwapping(false); // Reset immediately to prevent re-triggering
       handleExecuteSwap();
     }
-  }, [isApproved, isAutoSwapping]);
+  }, [isApproved, isAutoSwapping, setIsAutoSwapping]);
 
   const tabs = [
     { id: "buy" as const, label: "Buy" },
@@ -663,11 +631,8 @@ export default function HomePage() {
         }
 
         // The 0x price API can return buyAmount as a decimal string (e.g. "0.1").
-        // BigInt() cannot handle decimals, so we floor it to the nearest integer first.
-        const buyAmountSafe = quote.buyAmount.includes(".")
-          ? quote.buyAmount.split(".")[0]
-          : quote.buyAmount;
-        const outAmount = BigInt(buyAmountSafe || "0");
+        // safeBigInt() handles decimals by flooring to the nearest integer.
+        const outAmount = safeBigInt(quote.buyAmount);
         setQuoteAmountOut(outAmount);
         setPriceDataForQuote(quote); // Store full data
 
@@ -936,7 +901,7 @@ export default function HomePage() {
           ? SWAP_CONSTANTS.USDT_DECIMALS
           : SWAP_CONSTANTS.CNGN_DECIMALS;
 
-      const amountIn = BigInt(swapData.swapParams.amountIn.toString());
+      const amountIn = safeBigInt(swapData.swapParams.amountIn);
 
       const spender =
         swapData?.allowanceTarget || SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY;
@@ -960,6 +925,8 @@ export default function HomePage() {
   };
 
   const handleExecuteSwap = async () => {
+    if (isSubmittingSwap.current) return;
+    isSubmittingSwap.current = true;
     console.log("handleExecuteSwap details in HomePage:", { address, swapData });
     if (!address || !swapData) {
       toast({
@@ -967,6 +934,7 @@ export default function HomePage() {
         description: "Missing wallet address or swap data. Please try again.",
         variant: "destructive",
       });
+      isSubmittingSwap.current = false;
       return;
     }
 
@@ -983,7 +951,7 @@ export default function HomePage() {
         ? SWAP_CONSTANTS.USDT_DECIMALS
         : SWAP_CONSTANTS.CNGN_DECIMALS;
 
-    const amountIn = BigInt(swapData.swapParams.amountIn.toString());
+    const amountIn = safeBigInt(swapData.swapParams.amountIn);
 
     try {
       console.log("Fetching firm quote via HomePage...");
@@ -1009,7 +977,7 @@ export default function HomePage() {
       console.log("Triggering wallet transaction from HomePage...");
       // 2. Execute Swap via sendTransaction - v2 returns fields in a nested 'transaction' object
       // Apply 15% buffer to gas as recommended for 0x API
-      const gasEstimate = quote.transaction.gas ? BigInt(quote.transaction.gas) : undefined;
+      const gasEstimate = quote.transaction.gas ? safeBigInt(quote.transaction.gas) : undefined;
       const gasWithBuffer = gasEstimate ? (gasEstimate * 115n) / 100n : undefined;
 
       await executeSwap({
@@ -1036,6 +1004,8 @@ export default function HomePage() {
         description: errorMessage,
         variant: "destructive",
       });
+    } finally {
+      isSubmittingSwap.current = false;
     }
   };
 
@@ -1107,6 +1077,14 @@ export default function HomePage() {
     }
 
     // 2. Preparation
+    const isInUSDC = fromCryptoType === "USDC";
+    const isInUSDT = fromCryptoType === "USDT";
+    const tokenInDecimals = isInUSDC
+      ? SWAP_CONSTANTS.USDC_DECIMALS
+      : isInUSDT
+        ? SWAP_CONSTANTS.USDT_DECIMALS
+        : SWAP_CONSTANTS.CNGN_DECIMALS;
+
     const isToUSDC = toCryptoType === "USDC";
     const isToUSDT = toCryptoType === "USDT";
     const tokenOutDecimals = isToUSDC
@@ -1114,6 +1092,9 @@ export default function HomePage() {
       : isToUSDT
         ? SWAP_CONSTANTS.USDT_DECIMALS
         : SWAP_CONSTANTS.CNGN_DECIMALS;
+
+    // Fix: Use atomic units for amountIn in swapParams to ensure correct allowance checks
+    const amountInAtomic = parseUnits(sellAmount.replace(/,/g, ""), tokenInDecimals);
 
     const { toAmount, exchangeRate } = calculateExchangeRate(
       parsedAmount,
@@ -1141,7 +1122,7 @@ export default function HomePage() {
       swapParams: {
         tokenIn: getTokenAddress(fromCryptoType),
         tokenOut: getTokenAddress(toCryptoType),
-        amountIn: sellAmount.replace(/,/g, ""),
+        amountIn: amountInAtomic.toString(), // Use atomic units
         recipient: address,
         slippage: 0.05,
       },
@@ -1165,6 +1146,7 @@ export default function HomePage() {
             swap: response.data,
             recipientAddress: address,
             swapParams: swapResponseData.swapParams,
+            allowanceTarget: allowanceTarget, // Fix: Include allowanceTarget for approval step
           });
           setStep("execute");
         },
@@ -1212,7 +1194,7 @@ export default function HomePage() {
           ? SWAP_CONSTANTS.USDT_DECIMALS
           : SWAP_CONSTANTS.CNGN_DECIMALS;
 
-      const amountIn = BigInt(swapData.swapParams.amountIn.toString());
+      const amountIn = safeBigInt(swapData.swapParams.amountIn);
       return amountIn > allowance;
     })();
 
@@ -1452,10 +1434,7 @@ export default function HomePage() {
                     : undefined
                 }
                 disabled={true}
-                isLoading={
-                  (needsConversion && isLoadingEstimate) ||
-                  (activeTab === "swap" && isQuoteLoading)
-                }
+                isLoading={activeTab === "swap" && isQuoteLoading}
                 footer={activeTab === "swap" && priceDataForQuote ? (
                   <div className="flex flex-col gap-1 text-[10px]">
                     <div className="flex justify-between items-center">
