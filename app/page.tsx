@@ -662,7 +662,12 @@ export default function HomePage() {
           setAllowanceTarget(response.data.allowanceTarget);
         }
 
-        const outAmount = BigInt(quote.buyAmount);
+        // The 0x price API can return buyAmount as a decimal string (e.g. "0.1").
+        // BigInt() cannot handle decimals, so we floor it to the nearest integer first.
+        const buyAmountSafe = quote.buyAmount.includes(".")
+          ? quote.buyAmount.split(".")[0]
+          : quote.buyAmount;
+        const outAmount = BigInt(buyAmountSafe || "0");
         setQuoteAmountOut(outAmount);
         setPriceDataForQuote(quote); // Store full data
 
