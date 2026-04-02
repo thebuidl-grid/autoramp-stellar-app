@@ -6,7 +6,7 @@ import { formatUnits, parseUnits, hexToBigInt } from "viem";
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle, AlertTriangle, ArrowLeft } from "lucide-react";
+import { Loader2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { SWAP_CONSTANTS } from "@/lib/constants/swap-constants";
 import { safeBigInt } from "@/lib/utils";
 
@@ -21,6 +21,7 @@ interface QuoteViewProps {
   priceData: any;
   onBack: () => void;
   onSuccess: (hash: string) => void;
+  onTxSubmitted?: (hash: string, buyAmount: string) => void;
 }
 
 export function QuoteView({
@@ -33,6 +34,7 @@ export function QuoteView({
   priceData,
   onBack,
   onSuccess,
+  onTxSubmitted,
 }: QuoteViewProps) {
   const { address } = useAccount();
   const { openConnectModal } = useConnectModal();
@@ -86,6 +88,15 @@ export function QuoteView({
   const { isLoading: isWaitingForConfirmation, isSuccess } = useWaitForTransactionReceipt({ hash });
 
   useEffect(() => {
+    if (hash && onTxSubmitted && quote) {
+      const buyAmountFormatted = quote.buyAmount
+        ? formatUnits(safeBigInt(quote.buyAmount), buyDecimals)
+        : "0";
+      onTxSubmitted(hash, buyAmountFormatted);
+    }
+  }, [hash]);
+
+  useEffect(() => {
     if (isSuccess && hash) {
       onSuccess(hash);
     }
@@ -116,6 +127,27 @@ export function QuoteView({
       <div className="flex flex-col items-center justify-center p-8 space-y-4">
         <Loader2 className="w-8 h-8 animate-spin text-secondary" />
         <p className="text-white/70">Fetching firm quote and reserving liquidity...</p>
+      </div>
+    );
+  }
+
+  if (isSubmitting) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 space-y-4 text-center">
+        <Loader2 className="w-10 h-10 animate-spin text-secondary" />
+        <p className="text-white font-semibold text-lg">Waiting for wallet confirmation...</p>
+        <p className="text-white/50 text-sm">Please confirm the transaction in your wallet</p>
+      </div>
+    );
+  }
+
+  if (isWaitingForConfirmation) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 space-y-4 text-center">
+        <Loader2 className="w-10 h-10 animate-spin text-secondary" />
+        <p className="text-white font-semibold text-lg">Transaction submitted</p>
+        <p className="text-white/50 text-sm">Waiting for on-chain confirmation...</p>
+        {hash && <p className="text-white/30 text-xs font-mono">{hash.slice(0, 10)}...{hash.slice(-8)}</p>}
       </div>
     );
   }
@@ -174,29 +206,11 @@ export function QuoteView({
         </Button>
         <Button
           onClick={handlePlaceOrder}
-          disabled={isSubmitting || isWaitingForConfirmation}
           className="flex-[2] bg-secondary text-black hover:bg-secondary/90 h-14 rounded-xl font-bold"
         >
-          {isSubmitting || isWaitingForConfirmation ? (
-            <>
-              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              {isWaitingForConfirmation ? "Confirming..." : "Processing..."}
-            </>
-          ) : (
-            "Place Order"
-          )}
+          Place Order
         </Button>
       </div>
-
-      {isSuccess && (
-        <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl flex flex-col items-center gap-2">
-            <div className="flex items-center gap-2">
-                <CheckCircle className="text-green-500 w-5 h-5" />
-                <span className="text-green-500 font-semibold">Order Placed!</span>
-            </div>
-            <p className="text-white/50 text-xs">Transaction hash: {hash?.slice(0, 10)}...{hash?.slice(-8)}</p>
-        </div>
-      )}
     </div>
   );
 }

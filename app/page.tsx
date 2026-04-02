@@ -1492,6 +1492,29 @@ export default function HomePage() {
                   chainId={chainId || targetChain}
                   priceData={priceDataForQuote}
                   onBack={() => setShowQuote(false)}
+                  onTxSubmitted={(hash, buyAmount) => {
+                    createSimpleSwap.mutate(
+                      {
+                        fromTokenType: fromCryptoType,
+                        toTokenType: toCryptoType,
+                        fromAmount: parseFloat(sellAmount.replace(/,/g, "")),
+                        toAmount: parseFloat(buyAmount),
+                        exchangeRate: parseFloat(buyAmount) / parseFloat(sellAmount.replace(/,/g, "")),
+                        sourceAddress: address!,
+                        destinationAddress: address!,
+                        network: "base",
+                        slippage: 0.05,
+                      },
+                      {
+                        onSuccess: (response) => {
+                          updateSwap.mutate({
+                            reference: response.data.reference,
+                            data: { transactionHash: hash, sourceAddress: address! },
+                          });
+                        },
+                      }
+                    );
+                  }}
                   onSuccess={(hash) => {
                     setStep("completed");
                   }}
