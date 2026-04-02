@@ -1472,7 +1472,18 @@ export default function HomePage() {
                   ) : (
                     <Button
                       type="button"
-                      onClick={() => setShowQuote(true)}
+                      onClick={() => {
+                        const parsed = parseFormattedNumber(sellAmount);
+                        if (fromCryptoType === "CNGN" && parsed < 100) {
+                          toast({ title: "Amount too low", description: "Minimum swap amount is 100 CNGN", variant: "destructive" });
+                          return;
+                        }
+                        if (toCryptoType === "CNGN" && quoteAmountOut < parseUnits("100", SWAP_CONSTANTS.CNGN_DECIMALS)) {
+                          toast({ title: "Amount too low", description: "Minimum received amount is 100 CNGN", variant: "destructive" });
+                          return;
+                        }
+                        setShowQuote(true);
+                      }}
                       disabled={isQuoteLoading || !priceDataForQuote || !isLiquidityAvailable || !walletAddress}
                       className="w-full h-14 bg-secondary text-black hover:bg-secondary/90 rounded-xl font-bold"
                     >
