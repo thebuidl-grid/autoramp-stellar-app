@@ -118,7 +118,6 @@ export function QuoteView({
       data: quote.transaction.data as `0x${string}`,
       value: quote.transaction.value ? hexToBigInt(quote.transaction.value) : undefined,
       gas: gasWithBuffer,
-      chainId,
     });
   };
 
