@@ -1473,6 +1473,10 @@ export default function HomePage() {
                     <Button
                       type="button"
                       onClick={() => {
+                        if (!isAuthenticated()) {
+                          setIsAuthModalOpen(true);
+                          return;
+                        }
                         const parsed = parseFormattedNumber(sellAmount);
                         if (fromCryptoType === "CNGN" && parsed < 100) {
                           toast({ title: "Amount too low", description: "Minimum swap amount is 100 CNGN", variant: "destructive" });
