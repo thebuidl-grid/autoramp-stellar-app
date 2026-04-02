@@ -1473,7 +1473,7 @@ export default function HomePage() {
                     <Button
                       type="button"
                       onClick={() => setShowQuote(true)}
-                      disabled={isQuoteLoading || !priceDataForQuote || !isLiquidityAvailable}
+                      disabled={isQuoteLoading || !priceDataForQuote || !isLiquidityAvailable || !walletAddress}
                       className="w-full h-14 bg-secondary text-black hover:bg-secondary/90 rounded-xl font-bold"
                     >
                       Review Trade
@@ -1501,7 +1501,7 @@ export default function HomePage() {
                         toAmount: parseFloat(buyAmount),
                         exchangeRate: parseFloat(buyAmount) / parseFloat(sellAmount.replace(/,/g, "")),
                         sourceAddress: address!,
-                        destinationAddress: address!,
+                        destinationAddress: walletAddress || address!,
                         network: "base",
                         slippage: 0.05,
                       },
