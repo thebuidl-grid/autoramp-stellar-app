@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { formatUnits, parseUnits, hexToBigInt } from "viem";
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, AlertTriangle, ArrowLeft } from "lucide-react";
 import { SWAP_CONSTANTS } from "@/lib/constants/swap-constants";
@@ -34,6 +35,7 @@ export function QuoteView({
   onSuccess,
 }: QuoteViewProps) {
   const { address } = useAccount();
+  const { openConnectModal } = useConnectModal();
 
   const [quote, setQuote] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,7 +63,7 @@ export function QuoteView({
           params: {
             sellToken,
             buyToken,
-            sellAmount: parseUnits(sellAmount, sellDecimals).toString(),
+            sellAmount: parseUnits(sellAmount.replace(/,/g, ""), sellDecimals).toString(),
             taker: address,
             chainId,
             slippagePercentage: 0.05,
@@ -90,6 +92,10 @@ export function QuoteView({
   }, [isSuccess, hash, onSuccess]);
 
   const handlePlaceOrder = () => {
+    if (!address) {
+      openConnectModal?.();
+      return;
+    }
     if (!quote?.transaction) return;
 
     // Apply 15% gas buffer as recommended
