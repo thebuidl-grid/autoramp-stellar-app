@@ -1472,8 +1472,23 @@ export default function HomePage() {
                   ) : (
                     <Button
                       type="button"
-                      onClick={() => setShowQuote(true)}
-                      disabled={isQuoteLoading || !priceDataForQuote || !isLiquidityAvailable}
+                      onClick={() => {
+                        if (!isAuthenticated()) {
+                          setIsAuthModalOpen(true);
+                          return;
+                        }
+                        const parsed = parseFormattedNumber(sellAmount);
+                        if (fromCryptoType === "CNGN" && parsed < 100) {
+                          toast({ title: "Amount too low", description: "Minimum swap amount is 100 CNGN", variant: "destructive" });
+                          return;
+                        }
+                        if (toCryptoType === "CNGN" && quoteAmountOut < parseUnits("100", SWAP_CONSTANTS.CNGN_DECIMALS)) {
+                          toast({ title: "Amount too low", description: "Minimum received amount is 100 CNGN", variant: "destructive" });
+                          return;
+                        }
+                        setShowQuote(true);
+                      }}
+                      disabled={isQuoteLoading || !priceDataForQuote || !isLiquidityAvailable || !walletAddress}
                       className="w-full h-14 bg-secondary text-black hover:bg-secondary/90 rounded-xl font-bold"
                     >
                       Review Trade
@@ -1492,6 +1507,29 @@ export default function HomePage() {
                   chainId={chainId || targetChain}
                   priceData={priceDataForQuote}
                   onBack={() => setShowQuote(false)}
+                  onTxSubmitted={(hash, buyAmount) => {
+                    createSimpleSwap.mutate(
+                      {
+                        fromTokenType: fromCryptoType,
+                        toTokenType: toCryptoType,
+                        fromAmount: parseFloat(sellAmount.replace(/,/g, "")),
+                        toAmount: parseFloat(buyAmount),
+                        exchangeRate: parseFloat(buyAmount) / parseFloat(sellAmount.replace(/,/g, "")),
+                        sourceAddress: address!,
+                        destinationAddress: walletAddress || address!,
+                        network: "base",
+                        slippage: 0.05,
+                      },
+                      {
+                        onSuccess: (response) => {
+                          updateSwap.mutate({
+                            reference: response.data.reference,
+                            data: { transactionHash: hash, sourceAddress: address! },
+                          });
+                        },
+                      }
+                    );
+                  }}
                   onSuccess={(hash) => {
                     setStep("completed");
                   }}
