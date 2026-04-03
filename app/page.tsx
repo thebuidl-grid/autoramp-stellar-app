@@ -594,6 +594,7 @@ export default function HomePage() {
     resetForm(); // Reset transaction store state
     setAccountName(null);
     setAccountResolved(false);
+    setShowQuote(false);
   };
 
   const lastResolvedRef = useRef<{
@@ -1531,6 +1532,7 @@ export default function HomePage() {
                     );
                   }}
                   onSuccess={(hash) => {
+                    setShowQuote(false);
                     setStep("completed");
                   }}
                 />
