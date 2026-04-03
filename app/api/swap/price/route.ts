@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
         },
       },
     );
+    console.log("0x Price API Response:", JSON.stringify(response.data, null, 2));
     return NextResponse.json(response.data);
   } catch (error: any) {
     if (error.response?.data) {
