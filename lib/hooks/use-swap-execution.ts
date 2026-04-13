@@ -12,28 +12,23 @@ export interface UseSwapExecutionProps {
 }
 
 export interface UseSwapExecutionReturn {
-  allowance: bigint | undefined;
   isApproving: boolean;
-  isApproved: boolean;
   isExecuting: boolean;
   isSwapSuccess: boolean;
   swapHash: `0x${string}` | undefined;
-  needsApproval: boolean;
-  handleApprove: () => void;
   handleExecuteSwap: () => void;
-  refetchAllowance: () => void;
 }
 
-// Add these imports at the top
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   useWriteContract,
   useWaitForTransactionReceipt,
-  useReadContract,
   useAccount,
   useSendTransaction,
+  useConfig,
 } from "wagmi";
-import { parseUnits, hexToBigInt } from "viem";
+import { waitForTransactionReceipt } from "@wagmi/core";
+import { hexToBigInt, maxUint256 } from "viem";
 import { SWAP_CONSTANTS, ERC20_ABI } from "@/lib/constants/swap-constants";
 import { safeBigInt } from "@/lib/utils";
 import { useRouter } from "next/navigation";
@@ -46,40 +41,13 @@ export function useSwapExecution({
 }: UseSwapExecutionProps): UseSwapExecutionReturn {
   const { toast } = useToast();
   const { address, chainId } = useAccount();
+  const config = useConfig();
   const updateSwap = useUpdateSwapAfterExecution();
   const router = useRouter();
 
-  // Determine which token to check allowance for based on swap data
-  const tokenAddressForAllowance = swapData?.swapParams?.tokenIn
-    ? swapData.swapParams.tokenIn.toLowerCase() ===
-      SWAP_CONSTANTS.USDC.toLowerCase()
-      ? SWAP_CONSTANTS.USDC
-      : SWAP_CONSTANTS.CNGN
-    : SWAP_CONSTANTS.USDC; // Default to USDC
+  const [isApproving, setIsApproving] = useState(false);
 
-  const spender =
-    swapData?.allowanceTarget || SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY;
-
-  const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    address: tokenAddressForAllowance as `0x${string}`,
-    abi: ERC20_ABI,
-    functionName: "allowance",
-    args:
-      address && spender
-        ? ([address as `0x${string}`, spender as `0x${string}`] as const)
-        : undefined,
-    query: {
-      enabled: !!address && !!spender && step === "execute" && !!swapData,
-    },
-  });
-
-  const {
-    writeContract: approveToken,
-    data: approveHash,
-    isPending: isApproving,
-  } = useWriteContract();
-  const { isLoading: isWaitingApproval, isSuccess: isApproved } =
-    useWaitForTransactionReceipt({ hash: approveHash });
+  const { writeContractAsync } = useWriteContract();
 
   const {
     sendTransactionAsync: executeSwap,
@@ -90,10 +58,7 @@ export function useSwapExecution({
     useWaitForTransactionReceipt({ hash: swapHash });
 
   const hasUpdatedSwap = useRef(false);
-
-  useEffect(() => {
-    if (isApproved) refetchAllowance();
-  }, [isApproved, refetchAllowance]);
+  const isSubmittingSwap = useRef(false);
 
   useEffect(() => {
     if (
@@ -112,17 +77,13 @@ export function useSwapExecution({
         },
         {
           onSuccess: () => {
-            // For swap tab, mark as completed immediately (no WebSocket needed)
-            // For sell tab, go to pending state (uses WebSocket for offramp updates)
             if (activeTab === "swap") {
               setStep("completed");
               toast({
                 title: "Swap Completed",
-                description:
-                  "Your swap transaction has been completed successfully!",
+                description: "Your swap transaction has been completed successfully!",
                 variant: "default",
               });
-              // Redirect to history page after successful swap
               setTimeout(() => {
                 router.push("/history");
               }, 2000);
@@ -143,106 +104,80 @@ export function useSwapExecution({
         },
       );
     }
-  }, [
-    isSwapSuccess,
-    swapHash,
-    swapData,
-    address,
-    step,
-    updateSwap,
-    activeTab,
-    toast,
-    setStep,
-  ]);
+  }, [isSwapSuccess, swapHash, swapData, address, step, updateSwap, activeTab, toast, setStep]);
 
   useEffect(() => {
     hasUpdatedSwap.current = false;
   }, [swapHash]);
 
-  const handleApprove = async () => {
+  const handleExecuteSwap = useCallback(async () => {
+    if (isSubmittingSwap.current) return;
+    isSubmittingSwap.current = true;
+
     if (!swapData || !address) {
       toast({
         title: "Connection Error",
         description: "Please ensure your wallet is connected.",
         variant: "destructive",
       });
+      isSubmittingSwap.current = false;
       return;
     }
-    try {
-      const isUSDC =
-        swapData.swapParams.tokenIn.toLowerCase() ===
-        SWAP_CONSTANTS.USDC.toLowerCase();
-      const tokenAddress = isUSDC ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN;
-      const amountIn = safeBigInt(swapData.swapParams.amountIn);
 
-      const spender =
-        swapData?.allowanceTarget || SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY;
-
-      console.log("Approving token:", {
-        tokenAddress,
-        spender,
-        amountIn: amountIn.toString(),
-      });
-
-      approveToken({
-        address: tokenAddress as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: "approve",
-        args: [spender as `0x${string}`, amountIn],
-      });
-    } catch (error: any) {
-      console.error("Approve error:", error);
-      toast({
-        title: "Approval Failed",
-        description: error.message || "Failed to approve token",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleExecuteSwap = async () => {
-    console.log("handleExecuteSwap details:", { address, swapData });
-    if (!address || !swapData) {
-      toast({
-        title: "Swap Error",
-        description: "Missing wallet address or swap data. Please try again.",
-        variant: "destructive",
-      });
-      return;
-    }
+    const isTokenInUSDC =
+      swapData.swapParams.tokenIn.toLowerCase() === SWAP_CONSTANTS.USDC.toLowerCase();
+    const isTokenInUSDT =
+      swapData.swapParams.tokenIn.toLowerCase() === SWAP_CONSTANTS.USDT.toLowerCase();
+    const tokenAddress = isTokenInUSDC
+      ? SWAP_CONSTANTS.USDC
+      : isTokenInUSDT
+        ? SWAP_CONSTANTS.USDT
+        : SWAP_CONSTANTS.CNGN;
 
     const amountIn = safeBigInt(swapData.swapParams.amountIn);
+    const slippage = isTokenInUSDT
+      ? Math.max(swapData.swapParams.slippage || 0.05, 0.1)
+      : swapData.swapParams.slippage || 0.05;
 
     try {
-      console.log("Fetching firm quote for execution...");
-      // Use 0x API exclusively
+      // 1. Fetch allowance-holder quote
       const response = await axios.get("/api/swap/quote", {
         params: {
           sellToken: swapData.swapParams.tokenIn,
           buyToken: swapData.swapParams.tokenOut,
           sellAmount: amountIn.toString(),
           taker: address,
-          slippagePercentage: swapData.swapParams.slippage || 0.05,
+          slippagePercentage: slippage,
           chainId: chainId || 8453,
         },
       });
 
       const quote = response.data;
-      console.log("Quote received:", quote);
 
       if (!quote || !quote.transaction) {
         throw new Error("Invalid swap quote: missing transaction data");
       }
 
-      console.log("Triggering wallet transaction...");
-      // 2. Execute Swap via sendTransaction - v2 returns fields in a nested 'transaction' object
-      // Apply 15% buffer to gas as recommended for 0x API
-      const gasEstimate = quote.transaction.gas
-        ? safeBigInt(quote.transaction.gas)
-        : undefined;
-      const gasWithBuffer = gasEstimate
-        ? (gasEstimate * 115n) / 100n
-        : undefined;
+      // 2. Approve if needed (MaxUint256 — one-time per token, never needs repeating)
+      if (quote.issues?.allowance) {
+        const spender = quote.issues.allowance.spender as `0x${string}`;
+        setIsApproving(true);
+
+        const approveHash = await writeContractAsync({
+          address: tokenAddress as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [spender, maxUint256],
+        });
+
+        // Wait for approval to confirm on-chain before proceeding
+        await waitForTransactionReceipt(config, { hash: approveHash });
+        setIsApproving(false);
+      }
+
+      // 3. Execute swap
+      const gasEstimate = quote.transaction.gas ? safeBigInt(quote.transaction.gas) : undefined;
+      const gasWithBuffer = gasEstimate ? (gasEstimate * 115n) / 100n : undefined;
 
       await executeSwap({
         account: address as `0x${string}`,
@@ -255,42 +190,37 @@ export function useSwapExecution({
         gas: gasWithBuffer,
         chainId: chainId,
       });
-      console.log("Transaction submitted successfully");
     } catch (error: any) {
       console.error("Swap execution error:", error);
+      setIsApproving(false);
+      // User rejected wallet prompt — don't show error toast
+      if (
+        error?.message?.toLowerCase().includes("user rejected") ||
+        error?.message?.toLowerCase().includes("user denied")
+      ) {
+        isSubmittingSwap.current = false;
+        return;
+      }
       const errorMessage =
         error.response?.data?.reason ||
         error.response?.data?.description ||
         error.message ||
         "Failed to execute swap";
-
       toast({
         title: "Swap Failed",
         description: errorMessage,
         variant: "destructive",
       });
+    } finally {
+      isSubmittingSwap.current = false;
     }
-  };
-
-  // Determine if approval is needed based on the input token
-  const needsApproval =
-    swapData &&
-    allowance !== undefined &&
-    (() => {
-      const amountIn = safeBigInt(swapData.swapParams.amountIn);
-      return amountIn > allowance;
-    })();
+  }, [swapData, address, chainId, config, writeContractAsync, executeSwap, toast]);
 
   return {
-    allowance,
-    isApproving: isApproving || isWaitingApproval,
-    isApproved,
+    isApproving,
     isExecuting: isExecuting || isWaitingSwap,
     isSwapSuccess,
     swapHash,
-    needsApproval: !!needsApproval,
-    handleApprove,
     handleExecuteSwap,
-    refetchAllowance,
   };
 }
