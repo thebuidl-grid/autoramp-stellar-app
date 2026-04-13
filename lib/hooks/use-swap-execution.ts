@@ -1,3 +1,17 @@
+import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  useWriteContract,
+  useWaitForTransactionReceipt,
+  useAccount,
+  useSendTransaction,
+  useSignTypedData,
+  useConfig,
+} from "wagmi";
+import { waitForTransactionReceipt } from "@wagmi/core";
+import { hexToBigInt, maxUint256, concat } from "viem";
+import { SWAP_CONSTANTS, ERC20_ABI } from "@/lib/constants/swap-constants";
+import { safeBigInt } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 import { useUpdateSwapAfterExecution } from "./use-swap";
 import { useToast } from "@/components/ui/toast";
 import axios from "axios";
@@ -13,25 +27,12 @@ export interface UseSwapExecutionProps {
 
 export interface UseSwapExecutionReturn {
   isApproving: boolean;
+  isSigning: boolean;
   isExecuting: boolean;
   isSwapSuccess: boolean;
   swapHash: `0x${string}` | undefined;
   handleExecuteSwap: () => void;
 }
-
-import { useEffect, useRef, useState, useCallback } from "react";
-import {
-  useWriteContract,
-  useWaitForTransactionReceipt,
-  useAccount,
-  useSendTransaction,
-  useConfig,
-} from "wagmi";
-import { waitForTransactionReceipt } from "@wagmi/core";
-import { hexToBigInt, maxUint256 } from "viem";
-import { SWAP_CONSTANTS, ERC20_ABI } from "@/lib/constants/swap-constants";
-import { safeBigInt } from "@/lib/utils";
-import { useRouter } from "next/navigation";
 
 export function useSwapExecution({
   swapData,
@@ -46,8 +47,10 @@ export function useSwapExecution({
   const router = useRouter();
 
   const [isApproving, setIsApproving] = useState(false);
+  const [isSigning, setIsSigning] = useState(false);
 
   const { writeContractAsync } = useWriteContract();
+  const { signTypedDataAsync } = useSignTypedData();
 
   const {
     sendTransactionAsync: executeSwap,
@@ -139,9 +142,8 @@ export function useSwapExecution({
       ? Math.max(swapData.swapParams.slippage || 0.05, 0.1)
       : swapData.swapParams.slippage || 0.05;
 
-    try {
-      // 1. Fetch allowance-holder quote
-      const response = await axios.get("/api/swap/quote", {
+    const fetchPermit2Quote = async () => {
+      const res = await axios.get("/api/swap/permit2-quote", {
         params: {
           sellToken: swapData.swapParams.tokenIn,
           buyToken: swapData.swapParams.tokenOut,
@@ -151,14 +153,18 @@ export function useSwapExecution({
           chainId: chainId || 8453,
         },
       });
+      return res.data;
+    };
 
-      const quote = response.data;
+    try {
+      // 1. Fetch Permit2 quote
+      let quote = await fetchPermit2Quote();
 
-      if (!quote || !quote.transaction) {
+      if (!quote?.transaction) {
         throw new Error("Invalid swap quote: missing transaction data");
       }
 
-      // 2. Approve if needed (MaxUint256 — one-time per token, never needs repeating)
+      // 2. One-time approval if needed — await on-chain confirmation, then re-fetch a fresh quote
       if (quote.issues?.allowance) {
         const spender = quote.issues.allowance.spender as `0x${string}`;
         setIsApproving(true);
@@ -170,19 +176,42 @@ export function useSwapExecution({
           args: [spender, maxUint256],
         });
 
-        // Wait for approval to confirm on-chain before proceeding
         await waitForTransactionReceipt(config, { hash: approveHash });
         setIsApproving(false);
+
+        // Re-fetch quote now that approval is confirmed — old quote may have expired
+        quote = await fetchPermit2Quote();
+        if (!quote?.transaction) {
+          throw new Error("Failed to get fresh quote after approval");
+        }
       }
 
-      // 3. Execute swap
+      // 3. Sign EIP-712 Permit2 message (off-chain, free — no gas)
+      //    Strip EIP712Domain from types: wagmi derives it from the domain field and
+      //    passing it explicitly causes MetaMask to produce a malformed signature.
+      let txData = quote.transaction.data as `0x${string}`;
+      if (quote.permit2?.eip712) {
+        setIsSigning(true);
+        const { domain, types, message, primaryType } = quote.permit2.eip712;
+        const { EIP712Domain: _removed, ...cleanTypes } = types as Record<string, unknown>;
+        const signature = await signTypedDataAsync({
+          domain,
+          types: cleanTypes as any,
+          primaryType,
+          message,
+        });
+        txData = concat([txData, signature]) as `0x${string}`;
+        setIsSigning(false);
+      }
+
+      // 4. Execute swap — single on-chain transaction
       const gasEstimate = quote.transaction.gas ? safeBigInt(quote.transaction.gas) : undefined;
       const gasWithBuffer = gasEstimate ? (gasEstimate * 115n) / 100n : undefined;
 
       await executeSwap({
         account: address as `0x${string}`,
         to: quote.transaction.to as `0x${string}`,
-        data: quote.transaction.data as `0x${string}`,
+        data: txData,
         value:
           quote.transaction.value && hexToBigInt(quote.transaction.value) > 0n
             ? hexToBigInt(quote.transaction.value)
@@ -193,7 +222,8 @@ export function useSwapExecution({
     } catch (error: any) {
       console.error("Swap execution error:", error);
       setIsApproving(false);
-      // User rejected wallet prompt — don't show error toast
+      setIsSigning(false);
+      // User rejected a wallet popup — silently exit, don't toast
       if (
         error?.message?.toLowerCase().includes("user rejected") ||
         error?.message?.toLowerCase().includes("user denied")
@@ -214,10 +244,11 @@ export function useSwapExecution({
     } finally {
       isSubmittingSwap.current = false;
     }
-  }, [swapData, address, chainId, config, writeContractAsync, executeSwap, toast]);
+  }, [swapData, address, chainId, config, writeContractAsync, signTypedDataAsync, executeSwap, toast]);
 
   return {
     isApproving,
+    isSigning,
     isExecuting: isExecuting || isWaitingSwap,
     isSwapSuccess,
     swapHash,

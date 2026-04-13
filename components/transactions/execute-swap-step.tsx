@@ -102,12 +102,22 @@ export function ExecuteSwapStep({
       <Button
         onClick={swapExecution.handleExecuteSwap}
         className="w-full h-14"
-        disabled={swapExecution.isApproving || swapExecution.isExecuting || swapExecution.isSwapSuccess}
+        disabled={
+          swapExecution.isApproving ||
+          swapExecution.isSigning ||
+          swapExecution.isExecuting ||
+          swapExecution.isSwapSuccess
+        }
       >
         {swapExecution.isApproving ? (
           <>
             <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            Approving token...
+            Approving — confirm in wallet...
+          </>
+        ) : swapExecution.isSigning ? (
+          <>
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+            Sign the message in your wallet...
           </>
         ) : swapExecution.isExecuting ? (
           <>
