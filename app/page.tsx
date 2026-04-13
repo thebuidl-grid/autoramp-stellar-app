@@ -51,6 +51,7 @@ import {
   useChainId,
   useSwitchChain,
   useConfig,
+  useSignTypedData,
 } from "wagmi";
 import { waitForTransactionReceipt } from "@wagmi/core";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
@@ -58,7 +59,7 @@ import {
   SWAP_CONSTANTS,
   ERC20_ABI,
 } from "@/lib/constants/swap-constants";
-import { parseUnits, formatUnits, hexToBigInt, maxUint256 } from "viem";
+import { parseUnits, formatUnits, hexToBigInt, maxUint256, concat } from "viem";
 import { QuoteView } from "@/components/swap/QuoteView";
 import { useTransactionStore } from "@/lib/store";
 import axios from "axios";
@@ -169,6 +170,7 @@ export default function HomePage() {
   };
   const [copied, setCopied] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
+  const [isSigning, setIsSigning] = useState(false);
   const [isAddWalletDialogOpen, setIsAddWalletDialogOpen] = useState(false);
   const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
   const [isBuyConfirmationModalOpen, setIsBuyConfirmationModalOpen] =
@@ -188,6 +190,7 @@ export default function HomePage() {
   const [exchangeRate, setExchangeRate] = useState(0);
   const [isLiquidityAvailable, setIsLiquidityAvailable] = useState(true);
   const { writeContractAsync } = useWriteContract();
+  const { signTypedDataAsync } = useSignTypedData();
 
   const config = useConfig();
   const chainId = useChainId();
@@ -217,7 +220,7 @@ export default function HomePage() {
   const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
   const parsedBuyAmount = buyAmount ? parseFormattedNumber(buyAmount) : null;
 
-  // Handle swap execution: approve (if needed) then swap — one button click
+  // Handle swap execution via Permit2: approve (once) → sign EIP-712 (free) → swap (1 tx)
   const handleExecuteSwap = useCallback(async () => {
     if (isSubmittingSwap.current) return;
     isSubmittingSwap.current = true;
@@ -243,14 +246,12 @@ export default function HomePage() {
         : SWAP_CONSTANTS.CNGN;
 
     const amountIn = safeBigInt(swapData.swapParams.amountIn);
-    // USDT uses a higher slippage due to multi-hop routing (USDT→USDC→CNGN)
     const slippage = isTokenInUSDT
       ? Math.max(swapData.swapParams.slippage || 0.05, 0.1)
       : swapData.swapParams.slippage || 0.05;
 
-    try {
-      // 1. Fetch allowance-holder quote
-      const response = await axios.get("/api/swap/quote", {
+    const fetchPermit2Quote = async () => {
+      const res = await axios.get("/api/swap/permit2-quote", {
         params: {
           sellToken: swapData.swapParams.tokenIn,
           buyToken: swapData.swapParams.tokenOut,
@@ -260,14 +261,18 @@ export default function HomePage() {
           chainId: chainId || 8453,
         },
       });
+      return res.data;
+    };
 
-      const quote = response.data;
+    try {
+      // 1. Fetch Permit2 quote
+      let quote = await fetchPermit2Quote();
 
-      if (!quote || !quote.transaction) {
+      if (!quote?.transaction) {
         throw new Error("Invalid swap quote: missing transaction data");
       }
 
-      // 2. Approve if needed (MaxUint256 — one-time per token, never needs repeating)
+      // 2. One-time approval if needed — await on-chain confirmation, then re-fetch a fresh quote
       if (quote.issues?.allowance) {
         const spender = quote.issues.allowance.spender as `0x${string}`;
         setIsApproving(true);
@@ -279,19 +284,42 @@ export default function HomePage() {
           args: [spender, maxUint256],
         });
 
-        // Wait for approval to confirm on-chain before proceeding
         await waitForTransactionReceipt(config, { hash: approveHash });
         setIsApproving(false);
+
+        // Re-fetch quote — old one may have expired during the approval wait
+        quote = await fetchPermit2Quote();
+        if (!quote?.transaction) {
+          throw new Error("Failed to get fresh quote after approval");
+        }
       }
 
-      // 3. Execute swap
+      // 3. Sign EIP-712 Permit2 message (off-chain, no gas)
+      //    Strip EIP712Domain from types — wagmi derives it from domain internally;
+      //    including it explicitly causes MetaMask to produce a malformed signature.
+      let txData = quote.transaction.data as `0x${string}`;
+      if (quote.permit2?.eip712) {
+        setIsSigning(true);
+        const { domain, types, message, primaryType } = quote.permit2.eip712;
+        const { EIP712Domain: _removed, ...cleanTypes } = types as Record<string, unknown>;
+        const signature = await signTypedDataAsync({
+          domain,
+          types: cleanTypes as any,
+          primaryType,
+          message,
+        });
+        txData = concat([txData, signature]) as `0x${string}`;
+        setIsSigning(false);
+      }
+
+      // 4. Execute swap — single on-chain transaction
       const gasEstimate = quote.transaction.gas ? safeBigInt(quote.transaction.gas) : undefined;
       const gasWithBuffer = gasEstimate ? (gasEstimate * 115n) / 100n : undefined;
 
       await executeSwap({
         account: address as `0x${string}`,
         to: quote.transaction.to as `0x${string}`,
-        data: quote.transaction.data as `0x${string}`,
+        data: txData,
         value:
           quote.transaction.value && hexToBigInt(quote.transaction.value) > 0n
             ? hexToBigInt(quote.transaction.value)
@@ -302,7 +330,8 @@ export default function HomePage() {
     } catch (error: any) {
       console.error("Swap execution error:", error);
       setIsApproving(false);
-      // User rejected wallet prompt — don't show error toast
+      setIsSigning(false);
+      // User rejected a wallet popup — silently exit
       if (
         error?.message?.toLowerCase().includes("user rejected") ||
         error?.message?.toLowerCase().includes("user denied")
@@ -323,7 +352,7 @@ export default function HomePage() {
     } finally {
       isSubmittingSwap.current = false;
     }
-  }, [address, swapData, chainId, config, writeContractAsync, executeSwap, toast]);
+  }, [address, swapData, chainId, config, writeContractAsync, signTypedDataAsync, executeSwap, toast]);
 
   // WebSocket for transaction updates
   const handleWebSocketUpdate = useCallback(
@@ -1703,6 +1732,7 @@ export default function HomePage() {
             className="w-full h-14"
             disabled={
               isApproving ||
+              isSigning ||
               isExecuting ||
               isWaitingSwap ||
               isSwapSuccess
@@ -1711,7 +1741,12 @@ export default function HomePage() {
             {isApproving ? (
               <>
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Approving token...
+                Approving — confirm in wallet...
+              </>
+            ) : isSigning ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Sign the message in your wallet...
               </>
             ) : isExecuting || isWaitingSwap ? (
               <>
