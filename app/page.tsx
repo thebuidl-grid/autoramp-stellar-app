@@ -50,13 +50,15 @@ import {
   useReadContract,
   useChainId,
   useSwitchChain,
+  useConfig,
 } from "wagmi";
+import { waitForTransactionReceipt } from "@wagmi/core";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import {
   SWAP_CONSTANTS,
   ERC20_ABI,
 } from "@/lib/constants/swap-constants";
-import { parseUnits, formatUnits, hexToBigInt } from "viem";
+import { parseUnits, formatUnits, hexToBigInt, maxUint256 } from "viem";
 import { QuoteView } from "@/components/swap/QuoteView";
 import { useTransactionStore } from "@/lib/store";
 import axios from "axios";
@@ -166,7 +168,7 @@ export default function HomePage() {
     };
   };
   const [copied, setCopied] = useState(false);
-  const [isAutoSwapping, setIsAutoSwapping] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [isAddWalletDialogOpen, setIsAddWalletDialogOpen] = useState(false);
   const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
   const [isBuyConfirmationModalOpen, setIsBuyConfirmationModalOpen] =
@@ -185,65 +187,26 @@ export default function HomePage() {
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(0);
   const [isLiquidityAvailable, setIsLiquidityAvailable] = useState(true);
-  const [allowanceTarget, setAllowanceTarget] = useState<string>(SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY);
+  const { writeContractAsync } = useWriteContract();
 
-  const tokenAddressForAllowance = useMemo(() => {
-    if (swapData?.swapParams?.tokenIn) {
-      const lowerTokenIn = swapData.swapParams.tokenIn.toLowerCase();
-      if (lowerTokenIn === SWAP_CONSTANTS.USDC.toLowerCase()) return SWAP_CONSTANTS.USDC;
-      if (lowerTokenIn === SWAP_CONSTANTS.USDT.toLowerCase()) return SWAP_CONSTANTS.USDT;
-      return SWAP_CONSTANTS.CNGN;
-    }
-    if (activeTab === "swap" || activeTab === "sell") {
-      return getTokenAddress(fromCryptoType);
-    }
-    return SWAP_CONSTANTS.USDC;
-  }, [swapData, activeTab, fromCryptoType, getTokenAddress]);
-
-  const {
-    data: allowance,
-    refetch: refetchAllowance,
-    isLoading: isCheckingAllowance,
-  } = useReadContract({
-    address: tokenAddressForAllowance as `0x${string}`,
-    abi: ERC20_ABI,
-    functionName: "allowance",
-    args:
-      address && allowanceTarget
-        ? ([
-            address as `0x${string}`,
-            allowanceTarget as `0x${string}`,
-          ] as const)
-        : undefined,
-    query: {
-      enabled:
-        !!address &&
-        !!allowanceTarget &&
-        (step === "execute" || (activeTab === "swap" && !!priceDataForQuote)),
-    },
-  });
-
-  const {
-    writeContract: approveToken,
-    data: approveHash,
-    isPending: isApproving,
-  } = useWriteContract();
-
+  const config = useConfig();
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
   const isUnsupportedNetwork = isConnected && !SUPPORTED_CHAINS.some(c => c.id === chainId);
   const targetChain = IS_TESTNET ? 84532 : 8453; // Base Sepolia or Base Mainnet
   const targetChainName = IS_TESTNET ? "Base Sepolia" : "Base";
-  const { isLoading: isWaitingApproval, isSuccess: isApproved } =
-    useWaitForTransactionReceipt({ hash: approveHash });
 
   const {
     sendTransactionAsync: executeSwap,
     data: swapHash,
     isPending: isExecuting,
   } = useSendTransaction();
-  const { isLoading: isWaitingSwap, isSuccess: isSwapSuccess } =
-    useWaitForTransactionReceipt({ hash: swapHash });
+  const {
+    isLoading: isWaitingSwap,
+    isSuccess: isSwapSuccess,
+    isError: isSwapReceiptError,
+    error: swapReceiptError,
+  } = useWaitForTransactionReceipt({ hash: swapHash });
 
   const hasUpdatedSwap = useRef(false);
   const isSubmittingSwap = useRef(false);
@@ -254,64 +217,11 @@ export default function HomePage() {
   const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
   const parsedBuyAmount = buyAmount ? parseFormattedNumber(buyAmount) : null;
 
-  // Handle swap execution
-  const handleApprove = async () => {
-    if (!address || !swapData) {
-      toast({
-        title: "Connection Error",
-        description: "Please ensure your wallet is connected.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      const isTokenInUSDC =
-        swapData.swapParams.tokenIn.toLowerCase() ===
-        SWAP_CONSTANTS.USDC.toLowerCase();
-      const isTokenInUSDT =
-        swapData.swapParams.tokenIn.toLowerCase() ===
-        SWAP_CONSTANTS.USDT.toLowerCase();
-
-      const tokenAddress = isTokenInUSDC
-        ? SWAP_CONSTANTS.USDC
-        : isTokenInUSDT
-          ? SWAP_CONSTANTS.USDT
-          : SWAP_CONSTANTS.CNGN;
-
-      const decimals = isTokenInUSDC
-        ? SWAP_CONSTANTS.USDC_DECIMALS
-        : isTokenInUSDT
-          ? SWAP_CONSTANTS.USDT_DECIMALS
-          : SWAP_CONSTANTS.CNGN_DECIMALS;
-
-      const amountIn = safeBigInt(swapData.swapParams.amountIn);
-
-      const spender =
-        swapData?.allowanceTarget || SWAP_CONSTANTS.ZEROEX_EXCHANGE_PROXY;
-
-      console.log("Approving token via HomePage:", { tokenAddress, spender, amountIn: amountIn.toString() });
-
-      approveToken({
-        address: tokenAddress as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: "approve",
-        args: [spender as `0x${string}`, amountIn],
-      });
-    } catch (error: any) {
-      console.error("Approve error in HomePage:", error);
-      toast({
-        title: "Approval Failed",
-        description: error.message || "Failed to approve token",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleExecuteSwap = async () => {
+  // Handle swap execution: approve (if needed) then swap — one button click
+  const handleExecuteSwap = useCallback(async () => {
     if (isSubmittingSwap.current) return;
     isSubmittingSwap.current = true;
-    console.log("handleExecuteSwap details in HomePage:", { address, swapData });
+
     if (!address || !swapData) {
       toast({
         title: "Swap Error",
@@ -323,44 +233,58 @@ export default function HomePage() {
     }
 
     const isTokenInUSDC =
-      swapData.swapParams.tokenIn.toLowerCase() ===
-      SWAP_CONSTANTS.USDC.toLowerCase();
+      swapData.swapParams.tokenIn.toLowerCase() === SWAP_CONSTANTS.USDC.toLowerCase();
     const isTokenInUSDT =
-      swapData.swapParams.tokenIn.toLowerCase() ===
-      SWAP_CONSTANTS.USDT.toLowerCase();
-
-    const decimals = isTokenInUSDC
-      ? SWAP_CONSTANTS.USDC_DECIMALS
+      swapData.swapParams.tokenIn.toLowerCase() === SWAP_CONSTANTS.USDT.toLowerCase();
+    const tokenAddress = isTokenInUSDC
+      ? SWAP_CONSTANTS.USDC
       : isTokenInUSDT
-        ? SWAP_CONSTANTS.USDT_DECIMALS
-        : SWAP_CONSTANTS.CNGN_DECIMALS;
+        ? SWAP_CONSTANTS.USDT
+        : SWAP_CONSTANTS.CNGN;
 
     const amountIn = safeBigInt(swapData.swapParams.amountIn);
+    // USDT uses a higher slippage due to multi-hop routing (USDT→USDC→CNGN)
+    const slippage = isTokenInUSDT
+      ? Math.max(swapData.swapParams.slippage || 0.05, 0.1)
+      : swapData.swapParams.slippage || 0.05;
 
     try {
-      console.log("Fetching firm quote via HomePage...");
-      // 1. Fetch Quote from our proxy
+      // 1. Fetch allowance-holder quote
       const response = await axios.get("/api/swap/quote", {
         params: {
           sellToken: swapData.swapParams.tokenIn,
           buyToken: swapData.swapParams.tokenOut,
           sellAmount: amountIn.toString(),
           taker: address,
-          slippagePercentage: swapData.swapParams.slippage || 0.05,
+          slippagePercentage: slippage,
           chainId: chainId || 8453,
         },
       });
 
       const quote = response.data;
-      console.log("Quote received in HomePage:", quote);
 
       if (!quote || !quote.transaction) {
         throw new Error("Invalid swap quote: missing transaction data");
       }
 
-      console.log("Triggering wallet transaction from HomePage...");
-      // 2. Execute Swap via sendTransaction - v2 returns fields in a nested 'transaction' object
-      // Apply 15% buffer to gas as recommended for 0x API
+      // 2. Approve if needed (MaxUint256 — one-time per token, never needs repeating)
+      if (quote.issues?.allowance) {
+        const spender = quote.issues.allowance.spender as `0x${string}`;
+        setIsApproving(true);
+
+        const approveHash = await writeContractAsync({
+          address: tokenAddress as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [spender, maxUint256],
+        });
+
+        // Wait for approval to confirm on-chain before proceeding
+        await waitForTransactionReceipt(config, { hash: approveHash });
+        setIsApproving(false);
+      }
+
+      // 3. Execute swap
       const gasEstimate = quote.transaction.gas ? safeBigInt(quote.transaction.gas) : undefined;
       const gasWithBuffer = gasEstimate ? (gasEstimate * 115n) / 100n : undefined;
 
@@ -368,21 +292,29 @@ export default function HomePage() {
         account: address as `0x${string}`,
         to: quote.transaction.to as `0x${string}`,
         data: quote.transaction.data as `0x${string}`,
-        value: quote.transaction.value && hexToBigInt(quote.transaction.value) > 0n
-          ? hexToBigInt(quote.transaction.value)
-          : BigInt(0),
+        value:
+          quote.transaction.value && hexToBigInt(quote.transaction.value) > 0n
+            ? hexToBigInt(quote.transaction.value)
+            : BigInt(0),
         gas: gasWithBuffer,
         chainId: chainId,
       });
-      console.log("Transaction submitted via HomePage successfully");
     } catch (error: any) {
-      console.error("Swap execution error in HomePage:", error);
+      console.error("Swap execution error:", error);
+      setIsApproving(false);
+      // User rejected wallet prompt — don't show error toast
+      if (
+        error?.message?.toLowerCase().includes("user rejected") ||
+        error?.message?.toLowerCase().includes("user denied")
+      ) {
+        isSubmittingSwap.current = false;
+        return;
+      }
       const errorMessage =
         error.response?.data?.reason ||
         error.response?.data?.description ||
         error.message ||
         "Failed to execute swap";
-      
       toast({
         title: "Swap Failed",
         description: errorMessage,
@@ -391,7 +323,7 @@ export default function HomePage() {
     } finally {
       isSubmittingSwap.current = false;
     }
-  };
+  }, [address, swapData, chainId, config, writeContractAsync, executeSwap, toast]);
 
   // WebSocket for transaction updates
   const handleWebSocketUpdate = useCallback(
@@ -447,20 +379,6 @@ export default function HomePage() {
   useEffect(() => {
     hasUpdatedSwap.current = false;
   }, [swapHash]);
-
-  useEffect(() => {
-    if (isApproved) {
-      refetchAllowance();
-    }
-  }, [isApproved, refetchAllowance]);
-
-  // Handle automatic swap after approval
-  useEffect(() => {
-    if (isApproved && isAutoSwapping && !isSubmittingSwap.current) {
-      setIsAutoSwapping(false); // Reset immediately to prevent re-triggering
-      handleExecuteSwap();
-    }
-  }, [isApproved, isAutoSwapping, setIsAutoSwapping, handleExecuteSwap]);
 
   const reference =
     transactionData?.databaseRecord?.reference ||
@@ -769,12 +687,6 @@ export default function HomePage() {
           return;
         }
 
-        if (response.data.issues?.allowance?.spender) {
-          setAllowanceTarget(response.data.issues.allowance.spender);
-        } else if (response.data.allowanceTarget) {
-          setAllowanceTarget(response.data.allowanceTarget);
-        }
-
         // The 0x price API can return buyAmount as a decimal string (e.g. "0.1").
         // safeBigInt() handles decimals by flooring to the nearest integer.
         const outAmount = safeBigInt(quote.buyAmount);
@@ -881,10 +793,7 @@ export default function HomePage() {
         },
         {
           onSuccess: (response: { data: any }) => {
-            const updatedResponse = {
-              ...response.data,
-              allowanceTarget: allowanceTarget, // PERSIST THE CAPTURED ALLOWANCE TARGET
-            };
+            const updatedResponse = { ...response.data };
             if (cryptoType === "USDT") {
               if (updatedResponse.swapParams) {
                 updatedResponse.swapParams.tokenIn = SWAP_CONSTANTS.USDT;
@@ -1135,7 +1044,6 @@ export default function HomePage() {
             swap: response.data,
             recipientAddress: address,
             swapParams: swapResponseData.swapParams,
-            allowanceTarget: allowanceTarget, // Fix: Include allowanceTarget for approval step
           });
           setStep("execute");
         },
@@ -1164,28 +1072,6 @@ export default function HomePage() {
       handleBridge();
     }
   };
-
-  // Determine if approval is needed based on the input token
-  const needsApproval =
-    swapData &&
-    allowance !== undefined &&
-    (() => {
-      const isUSDC =
-        swapData.swapParams.tokenIn.toLowerCase() ===
-        SWAP_CONSTANTS.USDC.toLowerCase();
-      const isUSDT =
-        swapData.swapParams.tokenIn.toLowerCase() ===
-        SWAP_CONSTANTS.USDT.toLowerCase();
-
-      const decimals = isUSDC
-        ? SWAP_CONSTANTS.USDC_DECIMALS
-        : isUSDT
-          ? SWAP_CONSTANTS.USDT_DECIMALS
-          : SWAP_CONSTANTS.CNGN_DECIMALS;
-
-      const amountIn = safeBigInt(swapData.swapParams.amountIn);
-      return amountIn > allowance;
-    })();
 
   // Helper to handle percentage clicks
   // We need to format the raw number (e.g. 1000.5) back to your input format (e.g. "1,000.5")
@@ -1432,69 +1318,48 @@ export default function HomePage() {
                         1 {fromCryptoType} = {exchangeRate.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {toCryptoType}
                       </span>
                     </div>
-                    {isConnected && allowance !== undefined && (
-                      <div className="flex justify-between items-center border-t border-white/5 pt-1">
-                        <span className="text-white/40">Allowance:</span>
-                        <span className={cn("font-medium", parsedQuoteAmount > allowance ? "text-yellow-500/80" : "text-green-500/80")}>
-                          {parsedQuoteAmount > allowance ? "Approval Required" : "Approved"}
-                        </span>
-                      </div>
-                    )}
                   </div>
                 ) : undefined}
               />
 
               {activeTab === "swap" && !showQuote && (
                 <div className="space-y-4">
-                  {isConnected && allowance !== undefined && parsedQuoteAmount > allowance ? (
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        if (!allowanceTarget) return;
-                        approveToken({
-                          address: getTokenAddress(fromCryptoType) as `0x${string}`,
-                          abi: ERC20_ABI,
-                          functionName: "approve",
-                          args: [allowanceTarget as `0x${string}`, parsedQuoteAmount],
-                        });
-                      }}
-                      disabled={isApproving || isWaitingApproval || !priceDataForQuote}
-                      className="w-full h-14 bg-secondary text-black hover:bg-secondary/90 rounded-xl font-bold"
-                    >
-                      {isApproving || isWaitingApproval ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Approving {fromCryptoType}...
-                        </>
-                      ) : (
-                        `Approve ${fromCryptoType}`
-                      )}
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        if (!isAuthenticated()) {
-                          setIsAuthModalOpen(true);
-                          return;
-                        }
-                        const parsed = parseFormattedNumber(sellAmount);
-                        if (fromCryptoType === "CNGN" && parsed < 100) {
-                          toast({ title: "Amount too low", description: "Minimum swap amount is 100 CNGN", variant: "destructive" });
-                          return;
-                        }
-                        if (toCryptoType === "CNGN" && quoteAmountOut < parseUnits("100", SWAP_CONSTANTS.CNGN_DECIMALS)) {
-                          toast({ title: "Amount too low", description: "Minimum received amount is 100 CNGN", variant: "destructive" });
-                          return;
-                        }
-                        setShowQuote(true);
-                      }}
-                      disabled={isQuoteLoading || !priceDataForQuote || !isLiquidityAvailable || !walletAddress}
-                      className="w-full h-14 bg-secondary text-black hover:bg-secondary/90 rounded-xl font-bold"
-                    >
-                      Review Trade
-                    </Button>
+                  {/* Warn when USDT is used — USDC has better liquidity for CNGN */}
+                  {fromCryptoType === "USDT" && toCryptoType === "CNGN" && (
+                    <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
+                      <LucideAlertTriangle className="text-yellow-400 w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <p className="text-yellow-300/80 text-xs">
+                        USDT → CNGN has limited liquidity. For best results, use <strong>USDC</strong> instead — it has a direct pool with CNGN. Minimum recommended: <strong>1 USDT</strong>.
+                      </p>
+                    </div>
                   )}
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (!isAuthenticated()) {
+                        setIsAuthModalOpen(true);
+                        return;
+                      }
+                      const parsed = parseFormattedNumber(sellAmount);
+                      if (fromCryptoType === "CNGN" && parsed < 100) {
+                        toast({ title: "Amount too low", description: "Minimum swap amount is 100 CNGN", variant: "destructive" });
+                        return;
+                      }
+                      if (fromCryptoType === "USDT" && parsed < 1) {
+                        toast({ title: "Amount too low", description: "Minimum swap amount for USDT is 1 USDT. Use USDC for smaller amounts.", variant: "destructive" });
+                        return;
+                      }
+                      if (toCryptoType === "CNGN" && quoteAmountOut < parseUnits("100", SWAP_CONSTANTS.CNGN_DECIMALS)) {
+                        toast({ title: "Amount too low", description: "Minimum received amount is 100 CNGN", variant: "destructive" });
+                        return;
+                      }
+                      setShowQuote(true);
+                    }}
+                    disabled={isQuoteLoading || !priceDataForQuote || !isLiquidityAvailable || !isConnected}
+                    className="w-full h-14 bg-secondary text-black hover:bg-secondary/90 rounded-xl font-bold"
+                  >
+                    Review Trade
+                  </Button>
                 </div>
               )}
 
@@ -1738,16 +1603,6 @@ export default function HomePage() {
     }
 
     if (step === "execute" && swapData) {
-      const handleUnifiedSwap = () => {
-        if (needsApproval && !isApproved) {
-          // Start the chain: Approve -> Wait -> Auto-Swap
-          setIsAutoSwapping(true);
-          handleApprove();
-        } else {
-          // Direct Swap (Already approved)
-          handleExecuteSwap();
-        }
-      };
       // 1. EXTRACT DATA FROM THE SNAPSHOT
       // We rely strictly on swapData because this is the transaction
       // the user clicked to create. We do NOT use live hooks here.
@@ -1802,8 +1657,6 @@ export default function HomePage() {
         );
       }
 
-      const tokenToApprove = fromToken;
-
       return (
         <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl p-4 lg:p-6 space-y-4">
           <div className="text-center mb-6">
@@ -1846,28 +1699,19 @@ export default function HomePage() {
             </div>
           </div>
           <Button
-            onClick={handleUnifiedSwap}
+            onClick={handleExecuteSwap}
             className="w-full h-14"
             disabled={
-              isCheckingAllowance ||
               isApproving ||
-              isWaitingApproval ||
               isExecuting ||
               isWaitingSwap ||
               isSwapSuccess
             }
           >
-            {isCheckingAllowance ? (
+            {isApproving ? (
               <>
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Checking Allowance...
-              </>
-            ) : isApproving || isWaitingApproval ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                {isWaitingApproval
-                  ? "Finalizing Approval..."
-                  : "Approving Token..."}
+                Approving token...
               </>
             ) : isExecuting || isWaitingSwap ? (
               <>
@@ -1879,22 +1723,27 @@ export default function HomePage() {
                 <CheckCircle className="w-5 h-5 mr-2" />
                 Swap Successful!
               </>
-            ) : needsApproval && !isApproved ? (
-              `Approve & Swap ${tokenToApprove}`
             ) : (
               "Confirm Swap"
             )}
           </Button>
 
-          {/* Optional: Informational text during the "gap" */}
-          {isAutoSwapping && isWaitingApproval && (
-            <p className="text-xs text-center text-white/50 mt-2">
-              Please wait. The swap transaction will prompt automatically after
-              approval.
-            </p>
+          {isSwapReceiptError && swapHash && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+              <div className="flex items-center gap-2 mb-2">
+                <LucideAlertTriangle className="text-red-400" size={20} />
+                <span className="text-red-400 font-semibold">
+                  Transaction Reverted
+                </span>
+              </div>
+              <p className="text-red-300/70 text-xs mb-2">
+                {swapReceiptError?.message || "The swap transaction was rejected on-chain."}
+              </p>
+              <code className="text-xs text-white/40 break-all">{swapHash}</code>
+            </div>
           )}
 
-          {swapHash && (
+          {swapHash && !isSwapReceiptError && (
             <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
               <div className="flex items-center gap-2 mb-2">
                 <CheckCircle className="text-green-400" size={20} />
