@@ -21,15 +21,12 @@ export function ExecuteSwapStep({
   const fromAmount = Number(swapData.swap.fromAmount);
   const fromToken = swapData.swap.fromTokenType || (swapData.swapParams?.tokenIn?.toLowerCase() === SWAP_CONSTANTS.USDC.toLowerCase() ? "USDC" : "CNGN");
   const toToken = swapData.swap.toTokenType || (swapData.swapParams?.tokenOut?.toLowerCase() === SWAP_CONSTANTS.USDC.toLowerCase() ? "USDC" : "CNGN");
-  
-  // For sell tab (USDC to NGN), calculate NGN amount using USD/NGN rate
-  // For swap tab, use the toAmount directly
+
   let displayAmount: number;
   let displayCurrency: string;
   let exchangeRateDisplay: React.ReactNode = null;
-  
+
   if (swapData.swapParams?.tokenOut?.toLowerCase() === SWAP_CONSTANTS.CNGN.toLowerCase() && swapData.swapParams?.tokenIn?.toLowerCase() === SWAP_CONSTANTS.USDC.toLowerCase()) {
-    // This is USDC to NGN (sell flow) - use USD/NGN rate
     const rate = ngnEstimate?.usdNgnRate || (swapData.swap.exchangeRate && swapData.swap.exchangeRate > 1 ? swapData.swap.exchangeRate : null);
     displayAmount = rate ? fromAmount * rate : (swapData.swap.toAmount ? Number(swapData.swap.toAmount) : 0);
     displayCurrency = "NGN";
@@ -42,9 +39,7 @@ export function ExecuteSwapStep({
       );
     }
   } else {
-    // This is a swap (USDC ↔ CNGN)
     if (fromToken === "CNGN" && toToken === "USDC" && usdNgnRate) {
-      // CNGN to USDC: Divide by USD/NGN rate
       displayAmount = fromAmount / usdNgnRate;
       displayCurrency = toToken;
       exchangeRateDisplay = (
@@ -54,7 +49,6 @@ export function ExecuteSwapStep({
         </div>
       );
     } else if (fromToken === "USDC" && toToken === "CNGN" && ngnEstimate?.usdNgnRate) {
-      // USDC to CNGN: Multiply by USD/NGN rate
       displayAmount = fromAmount * ngnEstimate.usdNgnRate;
       displayCurrency = toToken;
       exchangeRateDisplay = (
@@ -64,7 +58,6 @@ export function ExecuteSwapStep({
         </div>
       );
     } else {
-      // Fallback to toAmount if rates not available
       displayAmount = swapData.swap.toAmount ? Number(swapData.swap.toAmount) : fromAmount;
       displayCurrency = toToken;
       if (swapData.swap.exchangeRate) {
@@ -77,8 +70,6 @@ export function ExecuteSwapStep({
       }
     }
   }
-  
-  const tokenToApprove = swapData.swapParams?.tokenIn?.toLowerCase() === SWAP_CONSTANTS.USDC.toLowerCase() ? "USDC" : "CNGN";
 
   return (
     <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl p-6 space-y-4">
@@ -95,7 +86,7 @@ export function ExecuteSwapStep({
         <div className="flex justify-between">
           <span className="text-white/70">To (estimated)</span>
           <span className="text-white font-bold">
-            {displayCurrency === "USDC" 
+            {displayCurrency === "USDC"
               ? displayAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
               : displayAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })
             } {displayCurrency}
@@ -108,31 +99,40 @@ export function ExecuteSwapStep({
         </div>
       </div>
 
-      {swapExecution.needsApproval && !swapExecution.isApproved && (
-        <Button onClick={swapExecution.handleApprove} className="w-full h-14" disabled={swapExecution.isApproving}>
-          {swapExecution.isApproving ? (
-            <>
-              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              Approving...
-            </>
-          ) : (
-            `Approve ${tokenToApprove}`
-          )}
-        </Button>
-      )}
-
-      {(!swapExecution.needsApproval || swapExecution.isApproved) && (
-        <Button onClick={swapExecution.handleExecuteSwap} className="w-full h-14" disabled={swapExecution.isExecuting}>
-          {swapExecution.isExecuting ? (
-            <>
-              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              Executing...
-            </>
-          ) : (
-            "Execute Swap"
-          )}
-        </Button>
-      )}
+      <Button
+        onClick={swapExecution.handleExecuteSwap}
+        className="w-full h-14"
+        disabled={
+          swapExecution.isApproving ||
+          swapExecution.isSigning ||
+          swapExecution.isExecuting ||
+          swapExecution.isSwapSuccess
+        }
+      >
+        {swapExecution.isApproving ? (
+          <>
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+            Approving — confirm in wallet...
+          </>
+        ) : swapExecution.isSigning ? (
+          <>
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+            Sign the message in your wallet...
+          </>
+        ) : swapExecution.isExecuting ? (
+          <>
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+            Executing Swap...
+          </>
+        ) : swapExecution.isSwapSuccess ? (
+          <>
+            <CheckCircle className="w-5 h-5 mr-2" />
+            Swap Successful!
+          </>
+        ) : (
+          "Confirm Swap"
+        )}
+      </Button>
 
       {swapExecution.swapHash && (
         <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
@@ -146,4 +146,3 @@ export function ExecuteSwapStep({
     </div>
   );
 }
-
