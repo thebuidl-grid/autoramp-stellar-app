@@ -15,6 +15,8 @@ import {
   arbitrumSepolia,
   optimismSepolia,
   polygonAmoy,
+  bsc,
+  bscTestnet,
 } from "wagmi/chains";
 
 export const IS_TESTNET = process.env.NEXT_PUBLIC_NETWORK === "testnet";
@@ -53,6 +55,18 @@ export const CHAIN_METADATA: Record<string, ChainMetadata> = {
     name: "Solana",
     logo: "https://cryptologos.cc/logos/solana-sol-logo.png?v=040",
   },
+  bsc: {
+    name: "BNB Smart Chain",
+    logo: "https://cryptologos.cc/logos/bnb-bnb-logo.png?v=040",
+  },
+  bnbsmartchain: {
+    name: "BNB Smart Chain",
+    logo: "https://cryptologos.cc/logos/bnb-bnb-logo.png?v=040",
+  },
+  bsctestnet: {
+    name: "BSC Testnet",
+    logo: "https://cryptologos.cc/logos/bnb-bnb-logo.png?v=040",
+  },
 };
 
 export const getChainMetadata = (
@@ -63,8 +77,9 @@ export const getChainMetadata = (
 
 export const SUPPORTED_CHAINS = IS_TESTNET
   ? ([
-      base, // Default to Mainnet even in testnet mode for connection priority
+      base,
       baseSepolia,
+      bscTestnet,
       sepolia,
       arbitrumSepolia,
       optimismSepolia,
@@ -73,6 +88,7 @@ export const SUPPORTED_CHAINS = IS_TESTNET
     ] as const)
   : ([
       base,
+      bsc,
       mainnet,
       arbitrum,
       optimism,
@@ -138,6 +154,9 @@ export const getChainId = (chainName: string): number | undefined => {
     basesepolia: baseSepolia.id,
     polygon: polygon.id,
     polygonamoy: polygonAmoy.id,
+    bsc: bsc.id,
+    bnbsmartchain: bsc.id,
+    bsctestnet: bscTestnet.id,
   };
 
   return chainMapping[normalized];
