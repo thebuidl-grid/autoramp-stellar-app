@@ -179,6 +179,7 @@ interface TransactionFormState {
   walletAddress: string;
   fromChain: string;
   toChain: string;
+  rampNetwork: "base" | "bsc";
 
   // Transaction state
   step: StepType;
@@ -203,6 +204,7 @@ interface TransactionFormState {
   setWalletAddress: (address: string) => void;
   setFromChain: (chain: string) => void;
   setToChain: (chain: string) => void;
+  setRampNetwork: (network: "base" | "bsc") => void;
   setStep: (step: StepType) => void;
   setTransactionData: (data: any) => void;
   setSwapData: (data: any) => void;
@@ -226,6 +228,7 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
   walletAddress: "",
   fromChain: "Ethereum",
   toChain: "Base",
+  rampNetwork: "base",
   step: "form",
   transactionData: null,
   swapData: null,
@@ -246,6 +249,7 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
   setWalletAddress: (address) => set({ walletAddress: address }),
   setFromChain: (chain) => set({ fromChain: chain }),
   setToChain: (chain) => set({ toChain: chain }),
+  setRampNetwork: (network) => set({ rampNetwork: network }),
   setStep: (step) => set({ step }),
   setTransactionData: (data) => set({ transactionData: data }),
   setSwapData: (data) => set({ swapData: data }),
@@ -265,5 +269,6 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
       walletAddress: "",
       fromChain: "Ethereum",
       toChain: "Base",
+      rampNetwork: "base",
     }),
 }));
