@@ -182,6 +182,8 @@ export default function HomePage() {
   const toChain = useTransactionStore((state) => state.toChain);
   const setFromChain = useTransactionStore((state) => state.setFromChain);
   const setToChain = useTransactionStore((state) => state.setToChain);
+  const rampNetwork = useTransactionStore((state) => state.rampNetwork);
+  const setRampNetwork = useTransactionStore((state) => state.setRampNetwork);
 
   const [quoteAmountOut, setQuoteAmountOut] = useState<bigint>(0n);
   const [showQuote, setShowQuote] = useState(false);
@@ -790,7 +792,7 @@ export default function HomePage() {
     if (cryptoType === "CNGN") {
       offRamp.mutate(
         {
-          network: "base",
+          network: rampNetwork,
           amount: Number(parseFloat(sellAmount.replace(/,/g, "")).toFixed(6)),
           destination: { bankCode, accountNumber },
         },
@@ -817,7 +819,7 @@ export default function HomePage() {
           amount: Math.round(parseFloat(formatUnits(quoteAmountOut, SWAP_CONSTANTS.CNGN_DECIMALS))),
           usdcAmount: Number(parseFloat(sellAmount.replace(/,/g, "")).toFixed(6)),
           slippage: 0.05,
-          network: "base",
+          network: rampNetwork,
           offrampDestination: { bankCode, accountNumber },
         },
         {
@@ -921,7 +923,7 @@ export default function HomePage() {
 
     onRamp.mutate(
       {
-        network: "base",
+        network: rampNetwork,
         amount: Math.round(parseFloat(buyAmount.replace(/,/g, ""))),
         destination: { address: walletAddress },
       },
@@ -1602,6 +1604,34 @@ export default function HomePage() {
             </div>
           ) : null}
 
+          {(activeTab === "buy" || activeTab === "sell") && (
+            <div className="flex items-center gap-2 p-3 bg-black/50 rounded-xl border border-white/10">
+              <span className="text-xs text-white/50 mr-auto">Network</span>
+              {(["base", "bsc"] as const).map((net) => (
+                <button
+                  key={net}
+                  type="button"
+                  onClick={() => {
+                    setRampNetwork(net);
+                    if (activeTab === "sell" && isConnected) {
+                      const chainId = net === "bsc"
+                        ? (IS_TESTNET ? 97 : 56)
+                        : (IS_TESTNET ? 84532 : 8453);
+                      switchChain?.({ chainId });
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    rampNetwork === net
+                      ? "bg-secondary text-black"
+                      : "bg-white/5 text-white/50 hover:bg-white/10"
+                  }`}
+                >
+                  {net === "base" ? "Base" : "BSC"}
+                </button>
+              ))}
+            </div>
+          )}
+
             {activeTab !== "swap" && (
               <Button
                 type="submit"
@@ -2208,7 +2238,7 @@ export default function HomePage() {
         onConfirm={handleExecuteBuy}
         amount={buyAmount}
         walletAddress={walletAddress}
-        network="Base"
+        network={rampNetwork === "bsc" ? "BSC" : "Base"}
         isLoading={onRamp.isPending}
       />
 
