@@ -435,10 +435,18 @@ export interface SwapTransaction {
   completedAt?: string;
 }
 
+export interface PlatformTransaction {
+  id: string;
+  reference: string;
+  amount: string;
+  status: string;
+  createdAt: string;
+  _type: "onramp" | "offramp" | "swap";
+  userEmail: string;
+}
+
 export interface TransactionsResponse {
-  onramp: Transaction[];
-  offramp: Transaction[];
-  swap: SwapTransaction[];
+  data: PlatformTransaction[];
   total: number;
   page: number;
   limit: number;
@@ -728,9 +736,9 @@ export const adminApi = {
       `/admin/api-keys/analytics?period=${period}`,
     ),
 
-  getTransactions: (page: number = 1, limit: number = 10, status?: string) =>
+  getTransactions: (page: number = 1, limit: number = 10, status?: string, type?: string, search?: string) =>
     api.get<TransactionsResponse>(
-      `/admin/platform-transactions?page=${page}&limit=${limit}${status ? `&status=${status}` : ""}`,
+      `/admin/platform-transactions?page=${page}&limit=${limit}${status ? `&status=${status}` : ""}${type ? `&type=${type}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
     ),
 
   getTransactionsSummary: () =>
