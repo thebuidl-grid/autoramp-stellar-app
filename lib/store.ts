@@ -161,7 +161,7 @@ export const useUIStore = create<UIState>((set, get) => ({
  */
 
 export type TabType = "buy" | "sell" | "swap" | "bridge" | "otc";
-export type CryptoType = "CNGN" | "USDC" | "USDT";
+export type CryptoType = "CNGN" | "USDC" | "USDT" | "WETH";
 export type StepType = "form" | "pending" | "completed" | "execute";
 
 interface TransactionFormState {

@@ -146,12 +146,14 @@ export default function HomePage() {
   const getTokenAddress = useCallback((type: string) => {
     if (type === "USDC") return SWAP_CONSTANTS.USDC;
     if (type === "USDT") return SWAP_CONSTANTS.USDT;
+    if (type === "WETH") return SWAP_CONSTANTS.WETH;
     return SWAP_CONSTANTS.CNGN;
   }, []);
 
   const getTokenDecimals = (type: string) => {
     if (type === "USDC") return SWAP_CONSTANTS.USDC_DECIMALS;
     if (type === "USDT") return SWAP_CONSTANTS.USDT_DECIMALS;
+    if (type === "WETH") return SWAP_CONSTANTS.WETH_DECIMALS;
     return SWAP_CONSTANTS.CNGN_DECIMALS;
   };
 
@@ -476,6 +478,16 @@ export default function HomePage() {
     },
   });
 
+  const { data: wethBalance } = useReadContract({
+    address: SWAP_CONSTANTS.WETH as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: address ? [address as `0x${string}`] : undefined,
+    query: {
+      enabled: !!address && isConnected && activeTab === "swap",
+    },
+  });
+
 
   const tabs = [
     { id: "buy" as const, label: "Buy" },
@@ -504,12 +516,12 @@ export default function HomePage() {
     setBuyAmount(formatted);
   };
 
-  const handleCryptoSelect = (type: "CNGN" | "USDC" | "USDT") => {
+  const handleCryptoSelect = (type: "CNGN" | "USDC" | "USDT" | "WETH") => {
     setCryptoType(type);
     setIsCryptoModalOpen(false);
   };
 
-  const handleFromCryptoSelect = (type: "CNGN" | "USDC" | "USDT") => {
+  const handleFromCryptoSelect = (type: "CNGN" | "USDC" | "USDT" | "WETH") => {
     setFromCryptoType(type);
     setIsFromCryptoModalOpen(false);
     if (type === toCryptoType) {
@@ -521,7 +533,7 @@ export default function HomePage() {
     }
   };
 
-  const handleToCryptoSelect = (type: "CNGN" | "USDC" | "USDT") => {
+  const handleToCryptoSelect = (type: "CNGN" | "USDC" | "USDT" | "WETH") => {
     setToCryptoType(type);
     setIsToCryptoModalOpen(false);
     if (type === fromCryptoType) {
@@ -1034,6 +1046,7 @@ export default function HomePage() {
     const getTokenAddress = (type: string) => {
       if (type === "USDC") return SWAP_CONSTANTS.USDC;
       if (type === "USDT") return SWAP_CONSTANTS.USDT;
+      if (type === "WETH") return SWAP_CONSTANTS.WETH;
       return SWAP_CONSTANTS.CNGN;
     };
 
@@ -1136,6 +1149,8 @@ export default function HomePage() {
       activeBalance = formatUnits(cngnBalance, SWAP_CONSTANTS.CNGN_DECIMALS);
     } else if (fromCryptoType === "USDT" && usdtBalance !== undefined) {
       activeBalance = formatUnits(usdtBalance, SWAP_CONSTANTS.USDT_DECIMALS);
+    } else if (fromCryptoType === "WETH" && wethBalance !== undefined) {
+      activeBalance = formatUnits(wethBalance, SWAP_CONSTANTS.WETH_DECIMALS);
     }
   } else if (activeTab === "bridge") {
     if (usdcBalance !== undefined) {
