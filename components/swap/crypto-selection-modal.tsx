@@ -11,8 +11,8 @@ import {
 interface CryptoSelectionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  selectedCrypto: "CNGN" | "USDC" | "USDT";
-  onSelect: (crypto: "CNGN" | "USDC" | "USDT") => void;
+  selectedCrypto: "CNGN" | "USDC" | "USDT" | "WETH";
+  onSelect: (crypto: "CNGN" | "USDC" | "USDT" | "WETH") => void;
   showComingSoon?: boolean;
 }
 
@@ -44,6 +44,13 @@ export function CryptoSelectionModal({
       alt: "USDT",
       showSubtitle: true,
       comingSoon: showComingSoon,
+    },
+    {
+      id: "WETH" as const,
+      logo: "https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040",
+      alt: "WETH",
+      showSubtitle: true,
+      comingSoon: false,
     },
   ];
 
