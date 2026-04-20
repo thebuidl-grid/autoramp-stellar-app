@@ -435,6 +435,16 @@ export interface SwapTransaction {
   completedAt?: string;
 }
 
+export interface TransactionsResponse {
+  onramp: Transaction[];
+  offramp: Transaction[];
+  swap: SwapTransaction[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface PlatformTransaction {
   id: string;
   reference: string;
@@ -445,7 +455,7 @@ export interface PlatformTransaction {
   userEmail: string;
 }
 
-export interface TransactionsResponse {
+export interface AdminPlatformTransactionsResponse {
   data: PlatformTransaction[];
   total: number;
   page: number;
@@ -737,7 +747,7 @@ export const adminApi = {
     ),
 
   getTransactions: (page: number = 1, limit: number = 10, status?: string, type?: string, search?: string) =>
-    api.get<TransactionsResponse>(
+    api.get<AdminPlatformTransactionsResponse>(
       `/admin/platform-transactions?page=${page}&limit=${limit}${status ? `&status=${status}` : ""}${type ? `&type=${type}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
     ),
 
