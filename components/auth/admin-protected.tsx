@@ -65,7 +65,7 @@ export function AdminProtected({ children }: { children: React.ReactNode }) {
         }
     }, [_hasHydrated, user, token, router, setAuth, isAuthorized, isVerifying, logout]);
 
-    if (!_hasHydrated || isVerifying || (!isAuthorized && (token && user?.role === "ADMIN"))) {
+    if (!_hasHydrated || isVerifying || (!isAuthorized && token)) {
         return (
             <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
