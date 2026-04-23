@@ -16,7 +16,7 @@ export function AdminProtected({ children }: { children: React.ReactNode }) {
     const { user, token, _hasHydrated, setAuth, logout } = useAuthStore();
     const router = useRouter();
     const [isAuthorized, setIsAuthorized] = useState(false);
-    const [isVerifying, setIsVerifying] = useState(false);
+    const [isVerifying, setIsVerifying] = useState(true);
 
     useEffect(() => {
         if (!_hasHydrated) return;

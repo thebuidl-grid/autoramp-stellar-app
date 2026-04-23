@@ -37,9 +37,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // SKIP profile fetch if we are in onboarding/KYB flow
+    // SKIP profile fetch for routes that handle their own auth verification
     const isOnboardingRoute = pathname?.startsWith("/merchant/kyb") || pathname?.startsWith("/merchant/onboarding");
-    if (isOnboardingRoute) {
+    const isAdminRoute = pathname?.startsWith("/admin");
+    if (isOnboardingRoute || isAdminRoute) {
       return;
     }
 
