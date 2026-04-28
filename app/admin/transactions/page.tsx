@@ -25,8 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery } from "@tanstack/react-query";
-import { adminApi } from "@/lib/api";
-import { TransactionsOverview } from "@/components/admin/transactions/TransactionsOverview";
+import { adminApi } from "@/lib/api";import { TransactionsOverview } from "@/components/admin/transactions/TransactionsOverview";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 
 type TabType = "all" | "onramp" | "offramp" | "swap";
