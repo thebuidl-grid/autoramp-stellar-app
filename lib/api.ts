@@ -677,6 +677,47 @@ export interface MerchantsResponse {
   };
 }
 
+export interface TransferLog {
+  id: string;
+  transactionId: string;
+  type: "ONRAMP" | "OFFRAMP";
+  safehavenPayload: Record<string, unknown>;
+  stablestackPayload: {
+    request: Record<string, unknown>;
+    response: Record<string, unknown>;
+  };
+  status: "PENDING" | "COMPLETED" | "FAILED";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TransferLogsResponse {
+  logs: TransferLog[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface TransferLogDetailResponse {
+  logs: TransferLog[];
+  transaction: {
+    id: string;
+    reference: string;
+    amount: string;
+    status: string;
+    createdAt: string;
+    _type: "onramp" | "offramp";
+  };
+  user: {
+    id: string;
+    email: string;
+    phoneNumber: string;
+  };
+}
+
 export const adminApi = {
   getMe: () => api.get<AdminUser>("/admin/me"),
 
@@ -857,6 +898,28 @@ export const adminApi = {
     params.append("takerAddress", takerAddress);
     return api.get<any>(`/admin/otc/swap-quote?${params.toString()}`);
   },
+
+  // Transfer Logs
+  getTransferLogs: (
+    page: number = 1,
+    limit: number = 10,
+    transactionId?: string,
+    status?: string,
+    startDate?: string,
+    endDate?: string,
+  ) => {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("limit", limit.toString());
+    if (transactionId) params.append("transactionId", transactionId);
+    if (status) params.append("status", status);
+    if (startDate) params.append("startDate", startDate);
+    if (endDate) params.append("endDate", endDate);
+    return api.get<TransferLogsResponse>(`/admin/transfer-logs?${params.toString()}`);
+  },
+
+  getTransferLogByTransactionId: (transactionId: string) =>
+    api.get<TransferLogDetailResponse>(`/admin/transfer-logs/${transactionId}`),
 };
 // Redundant public merchant definitions moved to merchant.ts
 
