@@ -12,6 +12,7 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
+import Footer from "@/components/layout/footer";
 import { formatNumber, cn, safeBigInt } from "@/lib/utils";
 import { TabButton } from "@/components/swap/tab-button";
 import { SwapSection } from "@/components/swap/swap-section";
@@ -2278,6 +2279,8 @@ export default function HomePage() {
         }}
         chains={supportedChains}
       />
+
+      <Footer />
     </div>
   );
 }
