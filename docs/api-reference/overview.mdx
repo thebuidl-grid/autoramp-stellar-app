@@ -1,0 +1,45 @@
+---
+title: API Overview
+description: "Everything you need to know to interact with the AutoRamp API"
+---
+
+The AutoRamp API is organized around REST. Our API has predictable resource-oriented URLs, accepts form-encoded request bodies, returns JSON-encoded responses, and uses standard HTTP response codes, authentication, and verbs.
+
+## Base URL
+
+All API requests should be made to:
+
+```bash
+https://api.autoramp.com/v1
+```
+
+## Response Format
+
+All responses are returned in JSON format. A typical successful response looks like this:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "...",
+    "status": "COMPLETED"
+  }
+}
+```
+
+## Error Handling
+
+AutoRamp uses standard HTTP response codes to indicate the success or failure of an API request. Codes in the `2xx` range indicate success. Codes in the `4xx` range indicate an error that failed given the information provided (e.g., a required parameter was omitted). Codes in the `5xx` range indicate an error with AutoRamp's servers.
+
+| Code | Description |
+| --- | --- |
+| 200 | OK - Everything worked as expected. |
+| 400 | Bad Request - The request was unacceptable, often due to missing a required parameter. |
+| 401 | Unauthorized - No valid API key provided. |
+| 403 | Forbidden - The API key doesn't have permissions to perform the request. |
+| 404 | Not Found - The requested resource doesn't exist. |
+| 500 | Server Errors - Something went wrong on AutoRamp's end. |
+
+## Rate Limits
+
+While we don't strictly enforce low rate limits for business partners, we recommend staggering requests to avoid temporary blocks. If you plan to make more than 100 requests per minute, please coordinate with your account manager.
