@@ -2,7 +2,11 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // Enables passing a custom `adapter` (e.g. PGlite, for tests) into
+  // `new PrismaClient({ adapter })`. Purely additive — production code
+  // keeps using `new PrismaClient()` with DATABASE_URL, unaffected.
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -94,6 +98,15 @@ model OnrampTransaction {
   // Destination (User's wallet)
   destinationAddress String @map("destination_address")
 
+  // Cross-chain delivery: when set to something other than the corridor's
+  // own stablecoin on Stellar (payoutChain default / payoutTokenCode null),
+  // completeOnrampTransaction routes through CustodialDeliveryService.deliverOnramp
+  // instead of a plain sendFromDistribution — see that service for the
+  // swap/bridge orchestration. Null payoutTokenCode + default payoutChain
+  // is today's only behavior, unchanged.
+  payoutChain     String  @default("stellar") @map("payout_chain")
+  payoutTokenCode String? @map("payout_token_code")
+
   // Flint API Response Data
   network        String? // base, bsc, ethereum, polygon, etc.
   notifyUrl      String? @map("notify_url") @db.Text
@@ -136,6 +149,10 @@ model OfframpTransaction {
   status             TransactionStatus @default(PENDING)
   flintTransactionId String?           @map("flint_transaction_id")
   swapId             String?           @unique @map("swap_id") @db.Uuid // Reference to swap transaction (one-to-one relation)
+
+  // Stellar deposits land on a shared AutoRamp-controlled account,
+  // disambiguated by this memo (unlike Base's unique-address-per-tx model).
+  memo String? @db.VarChar(28)
 
   // Destination (Bank Account)
   bankCode      String  @map("bank_code")
@@ -198,6 +215,10 @@ model SwapTransaction {
   // Status Tracking
   status          TransactionStatus @default(PENDING)
   transactionHash String?           @map("transaction_hash") // blockchain transaction hash
+
+  // Memo used when destination is a shared AutoRamp-controlled account
+  // (e.g. swap output feeding directly into an offramp collection).
+  memo String? @db.VarChar(28)
 
   // Fees
   feeAmount   Decimal? @map("fee_amount") @db.Decimal(20, 8)
@@ -368,7 +389,186 @@ model ApiRequestLog {
   @@map("api_request_logs")
 }
 
+// Corridor: registry of which country/fiat pairs AutoRamp can actually serve,
+// and how — which local stablecoin represents that fiat on Stellar, which
+// RampProcessor provider handles the bank rail, and whether AutoRamp is
+// licensed to operate there yet. Drives corridor-aware routing instead of
+// the single hardcoded NGN/CNGN path.
+model Corridor {
+  id                     String  @id @default(uuid()) @db.Uuid
+  countryCode            String  @map("country_code") @db.VarChar(2)
+  fiatCurrency           String  @map("fiat_currency") @db.VarChar(3)
+  stablecoinCode         String  @map("stablecoin_code") @db.VarChar(12)
+  stablecoinIssuer       String  @map("stablecoin_issuer")
+  rampProcessorProvider  String  @map("ramp_processor_provider")
+  licensingStatus        LicensingStatus @default(UNLICENSED) @map("licensing_status")
+  isActive               Boolean @default(true) @map("is_active")
+  notes                  String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+
+  @@unique([countryCode, fiatCurrency])
+  @@index([isActive])
+  @@map("corridors")
+}
+
+// Chain: registry of blockchains AutoRamp's USDC bridge infra can move
+// value between — both as a CCTP source and destination (Phase 2: any
+// registered chain to any registered chain, not just inbound-to-Stellar).
+// The registry itself is chain-agnostic so adding a new chain later is a
+// row, not a code change — same pattern as Corridor.
+model Chain {
+  id                        String    @id @default(uuid()) @db.Uuid
+  name                      String    @unique @db.VarChar(32) // 'stellar', 'base', 'ethereum'
+  chainType                 ChainType @map("chain_type")
+  cctpDomain                Int       @unique @map("cctp_domain") // Circle's CCTP domain id (Stellar = 27)
+  usdcAddress               String    @map("usdc_address") // ERC-20 address (EVM) or Stellar asset issuer
+  tokenMessengerAddress     String?   @map("token_messenger_address")
+  messageTransmitterAddress String?   @map("message_transmitter_address")
+  cctpForwarderAddress      String?   @map("cctp_forwarder_address") // Stellar only
+  isActive                  Boolean   @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+
+  chainTokens ChainToken[]
+
+  @@index([isActive])
+  @@map("chains")
+}
+
+enum ChainType {
+  EVM
+  STELLAR
+}
+
+// Bridgeable-in stablecoins per EVM chain, beyond the chain's own USDC
+// (Chain.usdcAddress) — a chain can hold several (USDC, USDT, DAI, ...).
+// createTransferIntent swaps sourceTokenCode -> USDC via ZeroXSwapQuoteService
+// before the existing CCTP approve+burn when this isn't plain USDC. Stellar
+// doesn't need this table — its non-USDC "source token" case (a corridor
+// stablecoin or XLM) is resolved via the corridor registry / hardcoded
+// native asset instead, same as SwapService.resolveAsset.
+model ChainToken {
+  id        String  @id @default(uuid()) @db.Uuid
+  chainId   String  @map("chain_id") @db.Uuid
+  chain     Chain   @relation(fields: [chainId], references: [id])
+  tokenCode String  @map("token_code") // 'USDC', 'USDT', 'DAI'
+  address   String // ERC-20 address on this chain
+  decimals  Int     @default(6)
+  isActive  Boolean @default(true) @map("is_active")
+  // This token's own natural fiat currency (ISO 4217) — 'EUR' for EURC,
+  // 'BRL' for BRZ, 'NGN' for CNGNX, etc. Drives Buy/Sell's auto-populated
+  // fiat side once a named regional stablecoin is picked; a corridor for
+  // this currency may or may not exist yet (Buy/Sell disable submission
+  // when it doesn't, rather than hiding the token — see CorridorService).
+  // Generic 'USDC' isn't a ChainToken row at all (see the model comment
+  // above), so it has no fixed fiatCurrency here — the frontend treats it
+  // like XLM/BRIDGE_USDC, a hub asset with a freely user-chosen payout.
+  fiatCurrency String @map("fiat_currency") @db.VarChar(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+
+  @@unique([chainId, tokenCode])
+  @@map("chain_tokens")
+}
+
+// BridgeTransfer: tracks one CCTP burn->attest->mint cycle, in any
+// registered-chain-to-registered-chain direction. Created as PENDING_BURN
+// when a caller registers transfer intent; moves to BURNED once the
+// source-chain burn tx is known (self-reported for a Stellar source via
+// POST /bridge/transfers/:reference/register-burn, or auto-detected by
+// EvmDepositWatcherService for an EVM source), then ATTESTED/COMPLETED as
+// BridgeRelayerService (a scheduled watcher, same @Interval pattern as
+// OfframpDepositWatcherService) polls Circle's attestation service and
+// completes the destination-chain mint.
+model BridgeTransfer {
+  id                 String   @id @default(uuid()) @db.Uuid
+  reference          String   @unique
+  userId             String?  @map("user_id") @db.Uuid
+  sourceChain        String   @map("source_chain") // Chain.name
+  destinationChain   String   @default("stellar") @map("destination_chain") // Chain.name
+  destinationAddress String   @map("destination_address") // Stellar strkey or EVM 0x address, per destinationChain
+  expectedAmount     Decimal? @map("expected_amount") @db.Decimal(20, 7)
+
+  // EVM-source custodial collection leg — historical only. The EVM-source
+  // burn is now self-custodial too (the user's own connected wallet signs
+  // approve + depositForBurnWithHook directly, same as the Stellar leg), so
+  // these are permanently unpopulated for new rows; kept nullable for old data.
+  collectionAddress            String? @map("collection_address")
+  collectionAddressEncryptedKey String? @map("collection_address_encrypted_key") @db.Text
+  gasFundingTxHash              String? @map("gas_funding_tx_hash")
+
+  // Multi-stablecoin bridge-in: when set and not USDC, the source-chain leg
+  // swaps this token to USDC (via ZeroXSwapQuoteService, on an EVM source)
+  // before the existing approve+burn — see createTransferIntent. Null/USDC
+  // means "skip the swap step," today's behavior. sourceSwapMinUsdc is the
+  // slippage-floor-guaranteed USDC amount the swap quote promised; that
+  // (not the higher point-estimate) is what actually gets burned, so the
+  // burn amount can never exceed what the wallet is guaranteed to hold
+  // post-swap — any better-than-quoted execution just leaves USDC dust.
+  sourceTokenCode  String?  @map("source_token_code")
+  sourceSwapQuote  Decimal? @map("source_swap_quote") @db.Decimal(30, 6)
+  sourceSwapMinUsdc Decimal? @map("source_swap_min_usdc") @db.Decimal(20, 6)
+
+  // Swap tab: when set, the destination-chain mint is followed by minting
+  // this corridor stablecoin to the user instead of leaving raw USDC with
+  // them (see StablestackService/StellarService.sendFromDistribution and
+  // BridgeService.completeIfAttested). quotedPayoutAmount/minPayoutAmount
+  // are captured from a live quote at intent-creation time (not completion
+  // time, which can be minutes later post-attestation) — completeIfAttested
+  // refuses to pay out below minPayoutAmount, moving to PAYOUT_HELD instead
+  // of silently shortchanging the user if the rate moved against them.
+  payoutStablecoinCode String?  @map("payout_stablecoin_code")
+  payoutSlippage       Decimal  @default(0.05) @map("payout_slippage") @db.Decimal(5, 4)
+  quotedPayoutAmount   Decimal? @map("quoted_payout_amount") @db.Decimal(20, 7)
+  minPayoutAmount      Decimal? @map("min_payout_amount") @db.Decimal(20, 7)
+  payoutAmount         Decimal? @map("payout_amount") @db.Decimal(20, 7)
+  payoutTxHash         String?  @map("payout_tx_hash")
+
+  // EVM destination follow-up swap: when set, the mint (which always lands
+  // directly in destinationAddress, self-custodially — see
+  // buildDestinationEncoding) can be followed by a self-custodial swap into
+  // this ChainToken via POST /bridge/transfers/:reference/build-destination-swap,
+  // signed by the user's own connected wallet on destinationChain. Mutually
+  // exclusive with payoutStablecoinCode (that one is the Stellar-only,
+  // custodial equivalent).
+  payoutTokenCode String? @map("payout_token_code")
+
+  // Sell-any-chain fiat terminal: when set, a completed mint (redirected to
+  // AutoRamp's own distribution account, same trick payoutStablecoinCode
+  // uses) triggers a fiat payout instead of a stablecoin one — see
+  // BridgeService.deliverOfframp. Mutually exclusive with
+  // payoutStablecoinCode/payoutTokenCode.
+  payoutFiat          Boolean @default(false) @map("payout_fiat")
+  payoutBankCode      String? @map("payout_bank_code")
+  payoutAccountNumber String? @map("payout_account_number")
+  payoutFiatCurrency  String? @map("payout_fiat_currency")
+
+  burnTxHash     String? @unique @map("burn_tx_hash")
+  status         String  @default("PENDING_BURN") // PENDING_BURN, BURNED, ATTESTED, MINTED, COMPLETED, FAILED, PAYOUT_HELD (rate moved beyond payoutSlippage at completion; needs manual payout)
+  rawMessage     String? @map("raw_message") @db.Text
+  rawAttestation String? @map("raw_attestation") @db.Text
+  mintTxHash     String? @map("mint_tx_hash")
+  errorMessage   String? @map("error_message") @db.Text
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamp
+  completedAt DateTime? @map("completed_at") @db.Timestamp
+
+  @@index([status])
+  @@map("bridge_transfers")
+}
+
 // Enums
+enum LicensingStatus {
+  UNLICENSED
+  PENDING
+  LICENSED
+  PARTNERED // operating under a licensed partner/anchor, not directly licensed
+}
+
 enum UserRole {
   USER
   ADMIN
@@ -386,4 +586,5 @@ enum TransactionType {
   onramp
   offramp
   swap
+  bridge
 }

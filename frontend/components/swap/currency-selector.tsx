@@ -1,39 +1,27 @@
 "use client";
 
-import Image from "next/image";
 import { ChevronRight } from "lucide-react";
 
 interface CurrencySelectorProps {
-  type: "NGN" | "CNGN" | "USDC";
+  type: string;
   onClick?: () => void;
   showBaseLogo?: boolean;
 }
 
-export function CurrencySelector({
-  type,
-  onClick
-}: CurrencySelectorProps) {
-  const getLogo = () => {
-    switch (type) {
-      case "NGN":
-        return "/ngn-logo.png";
-      case "CNGN":
-        return "/cngn-logo.png";
-      case "USDC":
-        return "/usdc-logo.png";
-    }
-  };
+// Known logo/label overrides — anything not listed here (e.g. a newly
+// seeded corridor's stablecoin or fiat code) falls back to a generic
+// badge showing the code itself, so the UI never needs a new asset
+// before a corridor can be selected.
+const KNOWN: Record<string, { logo: string; label: string }> = {
+  NGN: { logo: "/ngn-logo.png", label: "Naira" },
+  CNGN: { logo: "/cngn-logo.png", label: "CNGN" },
+  USDC: { logo: "/usdc-logo.png", label: "USDC" },
+};
 
-  const getLabel = () => {
-    switch (type) {
-      case "NGN":
-        return "Naira";
-      case "CNGN":
-        return "CNGN";
-      case "USDC":
-        return "USDC";
-    }
-  };
+export function CurrencySelector({ type, onClick }: CurrencySelectorProps) {
+  const known = KNOWN[type.toUpperCase()];
+  const logo = known?.logo;
+  const label = known?.label ?? type.toUpperCase();
 
   const isClickable = onClick !== undefined;
 
@@ -48,20 +36,25 @@ export function CurrencySelector({
         }`}
     >
       <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
-        <img
-          src={getLogo()}
-          alt={type}
-          className="w-6 h-6 md:w-8 md:h-8 object-contain"
-        />
+        {logo ? (
+          <img
+            src={logo}
+            alt={type}
+            className="w-6 h-6 md:w-8 md:h-8 object-contain"
+          />
+        ) : (
+          <span className="text-[9px] font-semibold text-white/70">
+            {type.toUpperCase().slice(0, 4)}
+          </span>
+        )}
       </div>
       <div className="text-left">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-white/50">{getLabel()}</span>
+          <span className="text-xs text-white/50">{label}</span>
         </div>
-        <div className="text-sm font-medium text-white">{type}</div>
+        <div className="text-sm font-medium text-white">{type.toUpperCase()}</div>
       </div>
       {isClickable && <ChevronRight size={16} className="text-white/40" />}
     </button>
   );
 }
-

@@ -112,7 +112,13 @@ export const authApi = {
     api.post<AuthResponse>("/auth/admin/login", data),
 
   sendOtp: (data: SendOtpDto) =>
-    api.post<{ success: boolean; message: string }>("/auth/otp/send", data),
+    // devOtpCode is only ever present outside production, when email
+    // delivery isn't configured (see backend OtpService.sendOtp) — lets
+    // the sign-up flow still be tested end-to-end locally.
+    api.post<{ success: boolean; message: string; devOtpCode?: string }>(
+      "/auth/otp/send",
+      data
+    ),
 
   verifyOtp: (data: VerifyOtpDto) =>
     api.post<{ success: boolean; message: string }>("/auth/otp/verify", data),
@@ -254,7 +260,20 @@ export interface OnRampDto {
   amount: number;
   destination: {
     address: string;
+    // Required only when the corridor's onrampCollectionMethod is
+    // 'mobile_money' (see Corridor below) — the payer's phone for the
+    // M-Pesa STK push, e.g. '+254712345678'.
+    phoneNumber?: string;
   };
+  // Fiat currency (ISO 4217) — selects the corridor. Defaults to 'NGN'.
+  currency?: string;
+  // Chain to deliver the purchased stablecoin on (e.g. 'base', 'ethereum').
+  // Defaults to 'stellar' — today's only behavior when payoutTokenCode is
+  // also unset.
+  payoutChain?: string;
+  // Stablecoin to deliver — a corridor code (Stellar), a ChainToken code
+  // (EVM payoutChain), or 'USDC'. Defaults to the corridor's own stablecoin.
+  payoutTokenCode?: string;
 }
 
 export interface OffRampDto {
@@ -265,6 +284,8 @@ export interface OffRampDto {
     bankCode: string;
     accountNumber: string;
   };
+  // Fiat currency (ISO 4217) — selects the corridor. Defaults to 'NGN'.
+  currency?: string;
 }
 
 export interface Transaction {
@@ -338,13 +359,22 @@ export interface ResolveAccountResponse {
 }
 
 export const stablestackApi = {
-  getBanks: () =>
-    api.get<{ status: string; message: string; data: Bank[] }>("/stablestack/banks"),
+  // currency (ISO 4217) selects the corridor's bank list — defaults to the
+  // app-wide default processor's banks (NGN) when omitted.
+  getBanks: (currency?: string) => {
+    const params = new URLSearchParams();
+    if (currency) params.append("currency", currency);
+    const qs = params.toString();
+    return api.get<{ status: string; message: string; data: Bank[] }>(
+      `/stablestack/banks${qs ? `?${qs}` : ""}`,
+    );
+  },
 
-  resolveAccount: (bankCode: string, accountNumber: string) => {
+  resolveAccount: (bankCode: string, accountNumber: string, currency?: string) => {
     const params = new URLSearchParams();
     params.append("bankCode", bankCode);
     params.append("accountNumber", accountNumber);
+    if (currency) params.append("currency", currency);
     return api.get<ResolveAccountResponse>(`/stablestack/resolve-account?${params.toString()}`);
   },
 
@@ -353,6 +383,12 @@ export const stablestackApi = {
 
   offRamp: (data: OffRampDto) =>
     api.post("/stablestack/offramp", data),
+
+  // Reports the Stellar tx hash of a direct CNGN deposit for a PENDING
+  // offramp so the backend can verify it via Horizon (Flint can't see
+  // Stellar deposits itself — see backend confirmOfframpDeposit).
+  confirmOfframpDeposit: (reference: string, transactionHash: string) =>
+    api.post(`/stablestack/offramp/${reference}/confirm-deposit`, { transactionHash }),
 
   getTransactions: (id?: string, reference?: string, page?: number, limit?: number) => {
     const params = new URLSearchParams();
@@ -478,14 +514,41 @@ export interface AnalyticsDataPoint {
 // ============== Swap API ==============
 
 export interface InitializeSwapDto {
-  amount: number; // NGN amount for offramp
-  usdcAmount: number; // USDC amount for swap
+  amount: number; // fiat amount for offramp
+  fromAmount: number; // amount of fromTokenType being sold/swapped
+  // Token being sold/swapped away — 'USDC', 'XLM', 'BRIDGE_USDC', or a
+  // corridor stablecoin code. Defaults to 'USDC'. Must differ from the
+  // destination corridor's own stablecoin (that case is a direct offramp,
+  // not a swap).
+  fromTokenType?: string;
   slippage: number;
   offrampDestination: {
     bankCode: string;
     accountNumber: string;
   };
   network?: string;
+  // Fiat currency (ISO 4217) — selects the destination corridor. Defaults to 'NGN'.
+  currency?: string;
+}
+
+// A fiat/stablecoin pair AutoRamp can currently serve — drives currency
+// selectors instead of hardcoding NGN/CNGN. USDC is always tradable
+// alongside these and isn't included in this list.
+export interface Corridor {
+  countryCode: string;
+  fiatCurrency: string;
+  stablecoinCode: string;
+  // How to collect this corridor's fiat leg on Buy: the usual bank-transfer
+  // deposit account, or 'mobile_money' (KES today) — a phone number that
+  // gets an M-Pesa push prompt instead, no account to display.
+  onrampCollectionMethod: "bank_transfer" | "mobile_money";
+}
+
+export interface StellarAsset {
+  code: string;
+  // Omitted for native XLM — treat a missing issuer as native, never as
+  // `new Asset(code, undefined)` (a different, non-native asset entirely).
+  issuer?: string;
 }
 
 export interface SwapResponse {
@@ -505,11 +568,12 @@ export interface SwapResponse {
   };
   recipientAddress: string;
   swapParams: {
-    tokenIn: string;
-    tokenOut: string;
-    amountIn: string;
-    amountOutMinimum?: string; // Optional since we removed getQuote
-    recipient: string;
+    sendAsset: StellarAsset;
+    sendAmount: string;
+    destAsset: StellarAsset;
+    destMin: string;
+    destination: string;
+    memo: string;
     slippage: number;
   };
 }
@@ -517,6 +581,14 @@ export interface SwapResponse {
 export interface UpdateSwapDto {
   transactionHash: string;
   sourceAddress: string;
+}
+
+export interface SwapQuote {
+  sourceAmount: string;
+  destinationAmount: string;
+  exchangeRate: number;
+  sourceAsset: StellarAsset;
+  destAsset: StellarAsset;
 }
 
 export interface CreateSimpleSwapDto {
@@ -547,6 +619,8 @@ export interface CreateSimpleSwapResponse {
 }
 
 export const swapApi = {
+  getCorridors: () => api.get<Corridor[]>("/swap/corridors"),
+
   initializeSwap: (data: InitializeSwapDto) =>
     api.post<SwapResponse>("/swap/initialize", data),
   createSimpleSwap: (data: CreateSimpleSwapDto) =>
@@ -556,11 +630,25 @@ export const swapApi = {
     api.post(`/swap/${reference}/complete`, data),
 
   getTokenBalance: (token: string, address: string) =>
-    api.get<string>(`/swap/balance/${token}/${address}`),
+    api.get<string | null>(`/swap/balance/${token}/${address}`),
 
-  getTokenBalances: (address?: string) =>
-    api.get<Record<string, string>>(
-      `/swap/balances${address ? `?address=${address}` : ""}`,
+  getTokenBalances: (address: string) =>
+    api.get<Record<string, string | null>>(`/swap/balances?address=${address}`),
+
+  hasTrustline: (token: string, address: string) =>
+    api.get<{ hasTrustline: boolean }>(`/swap/trustline/${token}/${address}`),
+
+  // Returns a transaction (already partially signed by AutoRamp's
+  // distribution account, which sponsors the reserve) for the user's
+  // wallet to sign and submit — they pay only the negligible base fee.
+  getSponsoredTrustline: (token: string, address: string) =>
+    api.post<{ xdr: string; networkPassphrase: string }>(
+      `/swap/trustline/${token}/${address}/sponsor`,
+    ),
+
+  getQuote: (fromToken: string, toToken: string, amount: number) =>
+    api.get<SwapQuote>(
+      `/swap/quote?fromToken=${fromToken}&toToken=${toToken}&amount=${amount}`,
     ),
 
   getUsdNgnRate: () => api.get<{ rate: number }>("/swap/usd-ngn-rate"),
@@ -568,5 +656,175 @@ export const swapApi = {
   estimateNgn: (cngnAmount: number) =>
     api.get<{ estimatedNgn: number; usdNgnRate: number; usdValue: number }>(
       `/swap/estimate-ngn?cngnAmount=${cngnAmount}`,
+    ),
+};
+
+// ============== Bridge (CCTP cross-chain USDC) API ==============
+
+// A chain the CCTP bridge can move USDC to/from — drives chain selectors
+// instead of hardcoding Stellar/Base/Ethereum.
+export interface BridgeChain {
+  name: string;
+  chainType: "EVM" | "STELLAR";
+  cctpDomain: number;
+  usdcAddress: string;
+  isActive: boolean;
+}
+
+// A bridgeable-in stablecoin registered on a chain, beyond its own USDC —
+// drives the Swap tab's "USDC from" source-token selector.
+export interface BridgeChainToken {
+  tokenCode: string;
+  address: string;
+  decimals: number;
+  isActive: boolean;
+  // This token's own natural fiat currency (ISO 4217) — 'EUR' for EURC,
+  // 'BRL' for BRZ, etc. Drives Buy/Sell's auto-populated fiat side.
+  fiatCurrency: string;
+}
+
+export interface CreateBridgeTransferDto {
+  sourceChain: string;
+  destinationChain?: string;
+  // Optional only with payoutFiat set (nothing is ever delivered there —
+  // the mint is redirected to AutoRamp's own distribution account
+  // regardless — so the backend defaults it when omitted); required
+  // otherwise.
+  destinationAddress?: string;
+  // In sourceTokenCode's units (USDC unless sourceTokenCode says otherwise).
+  expectedAmount?: number;
+  // Multi-stablecoin bridge-in: the token expectedAmount is denominated
+  // in, on an EVM sourceChain — 'USDT', 'DAI', etc. Defaults to 'USDC'
+  // (skip the pre-burn swap).
+  sourceTokenCode?: string;
+  // Swap tab only: converts the bridged USDC into this corridor
+  // stablecoin instead of leaving it as raw USDC (destinationChain stellar).
+  payoutStablecoinCode?: string;
+  // Swap tab only: when destinationChain is an EVM chain, converts the
+  // bridged USDC into this ChainToken via a self-custodial follow-up swap
+  // once the transfer COMPLETEs — see bridgeApi.buildDestinationSwap.
+  // Mutually exclusive with payoutStablecoinCode.
+  payoutTokenCode?: string;
+  // Swap tab only: slippage tolerance (0-1) for the payout leg's quote —
+  // below this floor at completion time, the payout is held for manual
+  // review instead of paid out short. Defaults to 0.05 server-side.
+  payoutSlippage?: number;
+  // Sell tab: when true, the bridged USDC is paid out as fiat instead of a
+  // stablecoin — mutually exclusive with payoutStablecoinCode.
+  payoutFiat?: boolean;
+  payoutBankCode?: string;
+  payoutAccountNumber?: string;
+  payoutFiatCurrency?: string;
+  // Required for both source chain types — the connected wallet's address.
+  sourceAddress?: string;
+}
+
+export interface EvmUnsignedTransaction {
+  to: string;
+  data: string;
+  value: string;
+}
+
+export interface CreateBridgeTransferResponse {
+  reference: string;
+  sourceChain: string;
+  destinationChain: string;
+  // Stellar source: only the approve XDR — the burn XDR can't be built yet
+  // (its Soroban resource footprint depends on the allowance the approve
+  // tx grants, which only exists once that's confirmed on-chain). Sign +
+  // submit this first, then call bridgeApi.buildBurnTransaction for the
+  // burn XDR.
+  approveTransactionXdr?: string;
+  networkPassphrase?: string;
+  // EVM source: two unsigned transactions for the connected wallet to
+  // submit in sequence (approve, then depositForBurnWithHook) — building
+  // both up front is fine here since EVM calldata encoding doesn't require
+  // simulating against live state the way Soroban does.
+  approveTransaction?: EvmUnsignedTransaction;
+  burnTransaction?: EvmUnsignedTransaction;
+  // Multi-stablecoin bridge-in: present only when sourceTokenCode was a
+  // non-USDC token — sign+submit these two BEFORE approveTransaction/
+  // burnTransaction, in order: approve the source token, then swap it to
+  // USDC via 0x.
+  sourceSwapApproveTransaction?: EvmUnsignedTransaction;
+  sourceSwapTransaction?: EvmUnsignedTransaction;
+  estimatedSourceSwapUsdc?: string;
+  // Swap tab only: the payout quote captured at intent-creation time.
+  estimatedPayoutAmount?: string;
+  exchangeRate?: number;
+}
+
+export interface BuildBurnTransactionResponse {
+  burnTransactionXdr: string;
+  networkPassphrase: string;
+}
+
+export interface BridgeTransferStatus {
+  id: string;
+  reference: string;
+  sourceChain: string;
+  destinationChain: string;
+  destinationAddress: string;
+  expectedAmount?: string;
+  collectionAddress?: string;
+  sourceTokenCode?: string;
+  sourceSwapQuote?: string;
+  sourceSwapMinUsdc?: string;
+  payoutStablecoinCode?: string;
+  payoutTokenCode?: string;
+  payoutSlippage?: string;
+  quotedPayoutAmount?: string;
+  minPayoutAmount?: string;
+  payoutAmount?: string;
+  status: "PENDING_BURN" | "BURNING" | "BURNED" | "ATTESTED" | "COMPLETED" | "PAYOUT_HELD" | "FAILED";
+  burnTxHash?: string;
+  mintTxHash?: string;
+  payoutTxHash?: string;
+  errorMessage?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface BuildEvmSwapDto {
+  chainName: string;
+  sellTokenCode: string;
+  buyTokenCode: string;
+  sellAmount: number;
+  takerAddress: string;
+}
+
+export interface BuildEvmSwapResponse {
+  approveTransaction: EvmUnsignedTransaction;
+  swapTransaction: EvmUnsignedTransaction;
+  estimatedOutput: string;
+  minOutput: string;
+}
+
+export const bridgeApi = {
+  getChains: () => api.get<BridgeChain[]>("/bridge/chains"),
+
+  getChainTokens: (chain: string) => api.get<BridgeChainToken[]>(`/bridge/chain-tokens/${chain}`),
+
+  createTransfer: (data: CreateBridgeTransferDto) =>
+    api.post<CreateBridgeTransferResponse>("/bridge/transfers", data),
+
+  buildEvmSwap: (data: BuildEvmSwapDto) =>
+    api.post<BuildEvmSwapResponse>("/bridge/evm-swap", data),
+
+  buildDestinationSwap: (reference: string) =>
+    api.post<BuildEvmSwapResponse>(`/bridge/transfers/${reference}/build-destination-swap`),
+
+  buildBurnTransaction: (reference: string, sourceAddress: string) =>
+    api.post<BuildBurnTransactionResponse>(`/bridge/transfers/${reference}/burn-transaction`, { sourceAddress }),
+
+  registerBurn: (reference: string, burnTxHash: string) =>
+    api.post(`/bridge/transfers/${reference}/register-burn`, { burnTxHash }),
+
+  getStatus: (reference: string) =>
+    api.get<BridgeTransferStatus>(`/bridge/transfers/${reference}`),
+
+  getBalance: (chain: string, address: string) =>
+    api.get<{ chain: string; address: string; balance: string }>(
+      `/bridge/balance/${chain}/${encodeURIComponent(address)}`,
     ),
 };

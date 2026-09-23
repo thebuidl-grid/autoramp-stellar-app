@@ -1,20 +1,25 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNumber, IsNotEmpty, IsOptional, Min, Matches } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsNotEmpty,
+  IsOptional,
+  Min,
+  Matches,
+} from 'class-validator';
 
 export class CreateSimpleSwapDto {
-  @ApiProperty({ 
-    example: 'USDC', 
-    description: 'Token type to swap from (USDC or CNGN)',
-    enum: ['USDC', 'CNGN']
+  @ApiProperty({
+    example: 'USDC',
+    description: "Token type to swap from: 'USDC', 'XLM', 'BRIDGE_USDC' (Circle's real USDC), or a corridor stablecoin (e.g. CNGN)",
   })
   @IsString()
   @IsNotEmpty()
   fromTokenType: string;
 
-  @ApiProperty({ 
-    example: 'CNGN', 
-    description: 'Token type to swap to (USDC or CNGN)',
-    enum: ['USDC', 'CNGN']
+  @ApiProperty({
+    example: 'CNGN',
+    description: "Token type to swap to: 'USDC', 'XLM', 'BRIDGE_USDC' (Circle's real USDC), or a corridor stablecoin (e.g. CNGN)",
   })
   @IsString()
   @IsNotEmpty()
@@ -30,42 +35,50 @@ export class CreateSimpleSwapDto {
   @Min(0.000001)
   toAmount: number;
 
-  @ApiProperty({ example: 1.0, description: 'Exchange rate (fromAmount/toAmount)' })
+  @ApiProperty({
+    example: 1.0,
+    description: 'Exchange rate (fromAmount/toAmount)',
+  })
   @IsNumber()
   @Min(0.000001)
   exchangeRate: number;
 
-  @ApiProperty({ 
-    example: '0x1234567890abcdef1234567890abcdef12345678', 
-    description: 'Source wallet address (user\'s wallet)' 
+  @ApiProperty({
+    example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37',
+    description: "Source wallet address (user's Stellar public key)",
   })
   @IsString()
   @IsNotEmpty()
-  @Matches(/^0x[a-fA-F0-9]{40}$/, { message: 'Source address must be a valid Ethereum address' })
+  @Matches(/^G[A-Z2-7]{55}$/, {
+    message: 'Source address must be a valid Stellar public key',
+  })
   sourceAddress: string;
 
-  @ApiProperty({ 
-    example: '0x1234567890abcdef1234567890abcdef12345678', 
-    description: 'Destination wallet address (user\'s wallet, same as source for simple swaps)' 
+  @ApiProperty({
+    example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37',
+    description:
+      "Destination wallet address (user's wallet, same as source for simple swaps)",
   })
   @IsString()
   @IsNotEmpty()
-  @Matches(/^0x[a-fA-F0-9]{40}$/, { message: 'Destination address must be a valid Ethereum address' })
+  @Matches(/^G[A-Z2-7]{55}$/, {
+    message: 'Destination address must be a valid Stellar public key',
+  })
   destinationAddress: string;
 
-  @ApiProperty({ 
-    example: 'base', 
-    description: 'Network (defaults to base)',
-    required: false 
+  @ApiProperty({
+    example: 'stellar',
+    description: 'Network (defaults to stellar)',
+    required: false,
   })
   @IsString()
   @IsOptional()
   network?: string;
 
-  @ApiProperty({ 
-    example: 0.05, 
+  @ApiProperty({
+    example: 0.05,
     description: 'Slippage tolerance (defaults to 0.05 = 5%)',
-    required: false 
+    required: false,
   })
   @IsNumber()
   @IsOptional()

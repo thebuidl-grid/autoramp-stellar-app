@@ -1,20 +1,62 @@
-import { TokenInfo } from "../types/swap.types";
+import { Asset } from '@stellar/stellar-sdk';
+import type { Corridor } from '@prisma/client';
 
-export const ADDRESSES = {
-  AERODROME: {
-    POOL: '0x0206b696a410277ef692024c2b64ccf4eac78589',
-    ROUTER: '0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43',
-    QUOTER: '0x254cF9E1E6e233aa1AC962CB9B05b2cfeAaE15b0',
-    FACTORY: '0x420DD381b31aEf6683db6B902084cB0FFECe40Da',
-  },
-  // Uniswap V3 style Swap Router (for exactInputSingle)
-  SWAP_ROUTER: process.env.SWAP_ROUTER_ADDRESS || '0xCd45aC05fe7C014D6B2F62b3446E2A91D661a236',
-  USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-  CNGN: '0x46c85152bfe9f96829aa94755d9f915f9b10ef5f',
-  WETH: '0x4200000000000000000000000000000000000006',
-};
+/**
+ * Stellar asset definitions.
+ *
+ * CNGN is AutoRamp's own issued NGN-pegged asset — AutoRamp is the Stellar
+ * anchor for NGN, so CNGN_ISSUER_PUBLIC_KEY is AutoRamp's own issuing account.
+ *
+ * USDC_ISSUER_PUBLIC_KEY must be confirmed against Circle's official Stellar
+ * USDC docs (https://developers.circle.com/stablecoins/stellar-usdc) for the
+ * target network (testnet vs mainnet use different issuer accounts) before
+ * use. No address is hardcoded here to avoid shipping an unverified issuer
+ * that money could be sent to/from by mistake — set it explicitly via env.
+ */
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is required in config`);
+  }
+  return value;
+}
 
-export const TOKENS: Record<string, TokenInfo> = {
-  USDC: { address: ADDRESSES.USDC, symbol: 'USDC', decimals: 6 },
-  CNGN: { address: ADDRESSES.CNGN, symbol: 'CNGN', decimals: 6 },
-};
+export const ASSET_CODES = {
+  CNGN: 'CNGN',
+  USDC: 'USDC',
+} as const;
+
+export function getCngnAsset(): Asset {
+  return new Asset(ASSET_CODES.CNGN, requireEnv('CNGN_ISSUER_PUBLIC_KEY'));
+}
+
+export function getUsdcAsset(): Asset {
+  return new Asset(ASSET_CODES.USDC, requireEnv('USDC_ISSUER_PUBLIC_KEY'));
+}
+
+/**
+ * Circle's real USDC (classic Stellar asset, same code 'USDC' but a
+ * DIFFERENT issuer than getUsdcAsset() above) — deliberately kept separate
+ * from the app's own hub USDC, which stays self-issued for the NGN
+ * on/offramp corridor. This is the asset the XLM<->USDC swap route (see
+ * SwapService.resolveAsset's 'BRIDGE_USDC' case) trades into, so a user can
+ * fund a wallet with real, CCTP-bridge-compatible USDC starting from just
+ * testnet XLM (Friendbot) instead of Circle's reCAPTCHA-gated USDC faucet.
+ */
+export function getBridgeUsdcAsset(): Asset {
+  return new Asset(ASSET_CODES.USDC, requireEnv('BRIDGE_USDC_ISSUER_PUBLIC_KEY'));
+}
+
+export function getAsset(code: 'CNGN' | 'USDC'): Asset {
+  return code === 'CNGN' ? getCngnAsset() : getUsdcAsset();
+}
+
+/**
+ * Builds a Stellar Asset from a corridor row's own stablecoinCode/
+ * stablecoinIssuer — the corridor-aware counterpart to getCngnAsset(). Each
+ * new corridor (e.g. GH/GHS -> CGHS) needs no new env vars: the issuer
+ * lives in the corridors table, not in code/config.
+ */
+export function getAssetForCorridor(corridor: Pick<Corridor, 'stablecoinCode' | 'stablecoinIssuer'>): Asset {
+  return new Asset(corridor.stablecoinCode, corridor.stablecoinIssuer);
+}

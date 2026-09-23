@@ -236,10 +236,10 @@ export default function DocsPage() {
                             description="Convert NGN to CNGN. The user pays NGN to a virtual account and receives CNGN at the specified wallet address."
                             auth={true}
                             requestBody={`{
-  "network": "base",
+  "network": "stellar",
   "amount": 10000,
   "destination": {
-    "address": "0x1234567890abcdef..."
+    "address": "GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37"
   },
   "notifyUrl": "https://your-webhook.com/callback"
 }`}
@@ -264,10 +264,10 @@ export default function DocsPage() {
                             method="POST"
                             endpoint="/api/merchant/offramp"
                             title="Create Offramp (Sell Crypto)"
-                            description="Convert CNGN to NGN. Send CNGN to the deposit address and receive NGN in the specified bank account."
+                            description="Convert CNGN to NGN. Send CNGN (with the returned memo) to the deposit address and receive NGN in the specified bank account."
                             auth={true}
                             requestBody={`{
-  "network": "base",
+  "network": "stellar",
   "amount": 10000,
   "destination": {
     "bankCode": "044",
@@ -282,7 +282,8 @@ export default function DocsPage() {
     "status": "PENDING",
     "amount": 10000,
     "fiatAmount": "10000.00",
-    "depositAddress": "0xabcdef1234567890..."
+    "depositAddress": "GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37",
+    "memo": "txn_ref_abc123..."
   }
 }`}
                         />
@@ -319,6 +320,107 @@ export default function DocsPage() {
       "total": 50
     }
   }
+}`}
+                        />
+                    </div>
+                </section>
+
+                {/* USDC Bridge */}
+                <section className="mb-12">
+                    <h2 className="text-2xl font-bold text-white mb-2">USDC Bridge</h2>
+                    <p className="text-white/60 text-sm mb-6">
+                        Bring USDC in from any CCTP-supported chain (Base, Ethereum, and more) directly onto Stellar —
+                        no wrapped tokens, no manual swap. Powered by Circle&apos;s Cross-Chain Transfer Protocol (CCTP).
+                        You initiate the burn on the source chain yourself using Circle&apos;s contracts; AutoRamp
+                        tracks the attestation and completes the mint on Stellar once it&apos;s confirmed. These routes
+                        use the same base URL as above but are not under <code className="text-purple-400">/api/merchant</code> —
+                        note the path.
+                    </p>
+
+                    <div className="space-y-4">
+                        {/* List chains */}
+                        <EndpointSection
+                            method="GET"
+                            endpoint="/bridge/chains"
+                            title="List Supported Chains"
+                            description="Public, no API key required. Returns the active chains the bridge can receive USDC from, plus the Stellar-side contract addresses. Use a returned `name` as sourceChain below."
+                            auth={false}
+                            responseExample={`[
+  {
+    "name": "base",
+    "chainType": "EVM",
+    "cctpDomain": 6,
+    "usdcAddress": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    "tokenMessengerAddress": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+    "isActive": true
+  },
+  {
+    "name": "stellar",
+    "chainType": "STELLAR",
+    "cctpDomain": 27,
+    "usdcAddress": "GBJIX7LJFFINJNAO3DLM256Y6K47JWZ5GHBGQCDEWHHRTCDWQEWGIKU7",
+    "cctpForwarderAddress": "CA66Q2WFBND6V4UEB7RD4SAXSVIWMD6RA4X3U32ELVFGXV5PJK4T4VSZ",
+    "isActive": true
+  }
+]`}
+                        />
+
+                        {/* Create transfer intent */}
+                        <EndpointSection
+                            method="POST"
+                            endpoint="/bridge/transfers"
+                            title="Create Transfer Intent"
+                            description="Registers your intent to bridge USDC in from sourceChain, and returns the exact parameters your depositForBurnWithHook call must use. mintRecipient and destinationCaller MUST both be set to the returned Stellar forwarder address — using anything else makes the funds unrecoverable."
+                            auth={true}
+                            requestBody={`{
+  "sourceChain": "base",
+  "destinationAddress": "GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37",
+  "expectedAmount": 100
+}`}
+                            responseExample={`{
+  "reference": "txn_ref_IdRMlxoIJ7nOEpit",
+  "burnInstructions": {
+    "destinationDomain": 27,
+    "mintRecipient": "CA66Q2WFBND6V4UEB7RD4SAXSVIWMD6RA4X3U32ELVFGXV5PJK4T4VSZ",
+    "destinationCaller": "CA66Q2WFBND6V4UEB7RD4SAXSVIWMD6RA4X3U32ELVFGXV5PJK4T4VSZ",
+    "hookData": "0x0000...3847445150324b5051474b..."
+  }
+}`}
+                        />
+
+                        {/* Register burn */}
+                        <EndpointSection
+                            method="POST"
+                            endpoint="/bridge/transfers/:reference/register-burn"
+                            title="Register the Burn"
+                            description="Once your burn transaction is submitted on the source chain, report its hash here. This does not complete the transfer by itself — AutoRamp independently verifies the burn against Circle's attestation service before minting, so a fabricated hash simply never progresses."
+                            auth={true}
+                            requestBody={`{
+  "burnTxHash": "0xa1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
+}`}
+                            responseExample={`{
+  "reference": "txn_ref_IdRMlxoIJ7nOEpit",
+  "sourceChain": "base",
+  "destinationAddress": "GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37",
+  "burnTxHash": "0xa1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4",
+  "status": "BURNED"
+}`}
+                        />
+
+                        {/* Get status */}
+                        <EndpointSection
+                            method="GET"
+                            endpoint="/bridge/transfers/:reference"
+                            title="Get Transfer Status"
+                            description="Poll for status. Progresses PENDING_BURN → BURNED → ATTESTED → COMPLETED as AutoRamp's relayer picks up the attestation and mints on Stellar (checked every 15s)."
+                            auth={true}
+                            responseExample={`{
+  "reference": "txn_ref_IdRMlxoIJ7nOEpit",
+  "sourceChain": "base",
+  "destinationAddress": "GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37",
+  "status": "BURNED",
+  "mintTxHash": null,
+  "completedAt": null
 }`}
                         />
                     </div>

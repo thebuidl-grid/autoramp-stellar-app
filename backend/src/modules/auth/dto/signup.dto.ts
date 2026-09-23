@@ -9,7 +9,7 @@ import {
 
 /**
  * Sign Up / Login DTO (Email-only authentication)
- * 
+ *
  * Simplified authentication: user enters email, receives OTP, verifies and logs in.
  * If user exists, they are logged in. If new user, account is created automatically.
  */
@@ -29,15 +29,14 @@ export class SignUpDto {
   otpCode: string;
 
   @ApiProperty({
-    example: '0x1234567890abcdef1234567890abcdef12345678',
+    example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37',
     description: 'User wallet address (optional)',
     required: false,
   })
   @IsOptional()
   @IsString()
-  @Matches(/^0x[a-fA-F0-9]{40}$/, {
-    message: 'Wallet address must be a valid Ethereum address',
+  @Matches(/^G[A-Z2-7]{55}$/, {
+    message: 'Wallet address must be a valid Stellar public key',
   })
   walletAddress?: string;
 }
-

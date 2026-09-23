@@ -7,8 +7,8 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { TransactionsService } from './transactions.service';
-import { AdminGuard } from 'src/modules/auth/guards/admin.guard';
-import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
+import { AdminGuard } from '../../auth/guards/admin.guard';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { TransactionDto } from '../dto/transaction.dto';
 import { TransactionSummaryDto } from './dto/transaction-summary.dto';
 import { GetAnalyticsDto } from './dto/get-analytics.dto';
