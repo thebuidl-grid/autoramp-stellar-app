@@ -1,6 +1,60 @@
 {
   "openapi": "3.0.0",
   "paths": {
+    "/swap/quote": {
+      "get": {
+        "operationId": "SwapController_getQuote",
+        "parameters": [
+          {
+            "name": "fromToken",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "USDC",
+                "CNGN"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "toToken",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "USDC",
+                "CNGN"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "amount",
+            "required": true,
+            "in": "query",
+            "description": "Amount of fromToken to swap",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Quote with source/destination amounts and exchange rate"
+          }
+        },
+        "summary": "Get a live swap quote between USDC and CNGN",
+        "tags": [
+          "Swap"
+        ],
+        "security": [
+          {
+            "API-Key": []
+          }
+        ]
+      }
+    },
     "/swap/balance/{token}/{address}": {
       "get": {
         "operationId": "SwapController_getTokenBalance",
@@ -18,7 +72,7 @@
             "name": "address",
             "required": true,
             "in": "path",
-            "description": "Wallet address",
+            "description": "Stellar public key (G...)",
             "schema": {
               "type": "string"
             }
@@ -40,15 +94,97 @@
         ]
       }
     },
+    "/swap/trustline/{token}/{address}": {
+      "get": {
+        "operationId": "SwapController_hasTrustline",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "description": "Token symbol (e.g., USDC, CNGN)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "address",
+            "required": true,
+            "in": "path",
+            "description": "Stellar public key (G...)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether the trustline exists"
+          }
+        },
+        "summary": "Check whether an address has a trustline for a token",
+        "tags": [
+          "Swap"
+        ],
+        "security": [
+          {
+            "API-Key": []
+          }
+        ]
+      }
+    },
+    "/swap/trustline/{token}/{address}/sponsor": {
+      "post": {
+        "description": "Builds a transaction (partially signed by AutoRamp's distribution account) that creates a trustline for the given token, with AutoRamp sponsoring the reserve. The user's wallet must sign and submit it. Requires authentication.",
+        "operationId": "SwapController_getSponsoredTrustline",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "description": "Token symbol (e.g., USDC, CNGN)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "address",
+            "required": true,
+            "in": "path",
+            "description": "Stellar public key (G...) that will hold the trustline; must already exist on-chain",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Unsigned (by the user) transaction XDR + network passphrase"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "API-Key": []
+          }
+        ],
+        "summary": "Get a sponsored trustline transaction to sign",
+        "tags": [
+          "Swap"
+        ]
+      }
+    },
     "/swap/balances": {
       "get": {
         "operationId": "SwapController_getTokenBalances",
         "parameters": [
           {
             "name": "address",
-            "required": false,
+            "required": true,
             "in": "query",
-            "description": "Wallet address (optional; uses signer if omitted)",
+            "description": "Stellar public key (G...)",
             "schema": {
               "type": "string"
             }
@@ -246,40 +382,6 @@
         ]
       }
     },
-    "/swap": {
-      "post": {
-        "description": "DEPRECATED: Use /swap/initialize instead. Executes swap on backend. Requires authentication.",
-        "operationId": "SwapController_swap",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateSwapDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Swap transaction response"
-          },
-          "401": {
-            "description": "Unauthorized - Invalid or missing authentication"
-          }
-        },
-        "security": [
-          {
-            "API-Key": []
-          }
-        ],
-        "summary": "Execute a token swap (USDC ↔ CNGN) - DEPRECATED",
-        "tags": [
-          "Swap"
-        ]
-      }
-    },
     "/stablestack/banks": {
       "get": {
         "operationId": "StablestackController_getBanks",
@@ -414,6 +516,58 @@
         ]
       }
     },
+    "/stablestack/offramp/{reference}/confirm-deposit": {
+      "post": {
+        "description": "Reports the Stellar transaction hash of a CNGN deposit sent to the offramp collection account. Verifies it on-chain via Horizon before moving the transaction out of PENDING.",
+        "operationId": "StablestackController_confirmOfframpDeposit",
+        "parameters": [
+          {
+            "name": "reference",
+            "required": true,
+            "in": "path",
+            "description": "Offramp transaction reference",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "transactionHash": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "transactionHash"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Deposit confirmed, transaction moved to PROCESSING"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "API-Key": []
+          }
+        ],
+        "summary": "Confirm a CNGN deposit for an offramp transaction",
+        "tags": [
+          "Stablestack"
+        ]
+      }
+    },
     "/stablestack/transactions": {
       "get": {
         "description": "Requires authentication (JWT token in Authorization header or API key in x-api-key header) and verified KYC status. Returns transactions for the authenticated user.",
@@ -508,21 +662,12 @@
     }
   },
   "info": {
-    "title": "CNGN Ramp API Service",
-    "description": "API for onramp/offramp transactions, token swaps, and user management",
+    "title": "CNGN Ramp Business API",
+    "description": "Programmatic API for businesses to perform onramp, offramp, and swap operations.",
     "version": "1.0",
     "contact": {}
   },
-  "tags": [
-    {
-      "name": "Swap",
-      "description": "Token swap operations"
-    },
-    {
-      "name": "Stablestack",
-      "description": "Onramp and offramp transaction endpoints"
-    }
-  ],
+  "tags": [],
   "servers": [],
   "components": {
     "securitySchemes": {
@@ -530,7 +675,7 @@
         "type": "apiKey",
         "in": "header",
         "name": "x-api-key",
-        "description": "Enter your API key (format: sk_live_...)"
+        "description": "Your business API key generated from the admin portal."
       }
     },
     "schemas": {
@@ -549,7 +694,7 @@
           },
           "walletAddress": {
             "type": "string",
-            "example": "0x1234567890abcdef1234567890abcdef12345678",
+            "example": "GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37",
             "description": "User wallet address (optional)"
           }
         },
@@ -663,6 +808,185 @@
           }
         }
       },
+      "CreateMerchantDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "merchant@example.com",
+            "description": "Email address of the merchant"
+          },
+          "name": {
+            "type": "string",
+            "example": "John Doe",
+            "description": "Name of the contact person"
+          },
+          "businessName": {
+            "type": "string",
+            "example": "Acme Corp",
+            "description": "Business name"
+          },
+          "websiteUrl": {
+            "type": "string",
+            "example": "https://acme.com",
+            "description": "Business website URL"
+          },
+          "trafficEstimate": {
+            "type": "string",
+            "description": "Expected traffic/volume for this API key"
+          },
+          "requestLimit": {
+            "type": "string",
+            "description": "Request limit for this API key"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "businessName",
+          "websiteUrl"
+        ]
+      },
+      "TransactionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Transaction ID"
+          },
+          "userId": {
+            "type": "string",
+            "description": "User ID"
+          },
+          "reference": {
+            "type": "string",
+            "description": "Transaction Reference"
+          },
+          "status": {
+            "type": "string",
+            "description": "Transaction Status"
+          },
+          "transactionType": {
+            "type": "string",
+            "description": "Transaction Type",
+            "enum": [
+              "onramp",
+              "offramp",
+              "swap"
+            ]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Creation Timestamp"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Last Update Timestamp"
+          },
+          "completedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Completion Timestamp"
+          },
+          "amount": {
+            "type": "number",
+            "description": "On-ramp amount in NGN"
+          },
+          "tokenAmount": {
+            "type": "number",
+            "description": "On-ramp token amount in CNGN"
+          },
+          "destinationAddress": {
+            "type": "string",
+            "description": "Destination address for on-ramp"
+          },
+          "amount_offramp": {
+            "type": "number",
+            "description": "Off-ramp amount in token"
+          },
+          "fiatAmount": {
+            "type": "number",
+            "description": "Off-ramp fiat amount in NGN"
+          },
+          "bankCode": {
+            "type": "string",
+            "description": "Bank code for off-ramp"
+          },
+          "accountNumber": {
+            "type": "string",
+            "description": "Account number for off-ramp"
+          },
+          "fromTokenType": {
+            "type": "string",
+            "description": "From token type for swap"
+          },
+          "fromAmount": {
+            "type": "number",
+            "description": "From amount for swap"
+          },
+          "toTokenType": {
+            "type": "string",
+            "description": "To token type for swap"
+          },
+          "toAmount": {
+            "type": "number",
+            "description": "To amount for swap"
+          },
+          "sourceAddress": {
+            "type": "string",
+            "description": "Source address for swap"
+          },
+          "destinationAddress_swap": {
+            "type": "string",
+            "description": "Destination address for swap"
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "reference",
+          "status",
+          "transactionType",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "SummaryStats": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "number"
+          },
+          "totalAmount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "count",
+          "totalAmount"
+        ]
+      },
+      "TransactionSummaryDto": {
+        "type": "object",
+        "properties": {
+          "onRamps": {
+            "$ref": "#/components/schemas/SummaryStats"
+          },
+          "offRamps": {
+            "$ref": "#/components/schemas/SummaryStats"
+          },
+          "swaps": {
+            "$ref": "#/components/schemas/SummaryStats"
+          }
+        },
+        "required": [
+          "onRamps",
+          "offRamps",
+          "swaps"
+        ]
+      },
       "OfframpDestinationDto": {
         "type": "object",
         "properties": {
@@ -710,8 +1034,8 @@
           },
           "network": {
             "type": "string",
-            "example": "base",
-            "description": "Network (default: base)"
+            "example": "stellar",
+            "description": "Network (default: stellar)"
           }
         },
         "required": [
@@ -759,18 +1083,18 @@
           },
           "sourceAddress": {
             "type": "string",
-            "example": "0x1234567890abcdef1234567890abcdef12345678",
-            "description": "Source wallet address (user's wallet)"
+            "example": "GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37",
+            "description": "Source wallet address (user's Stellar public key)"
           },
           "destinationAddress": {
             "type": "string",
-            "example": "0x1234567890abcdef1234567890abcdef12345678",
+            "example": "GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37",
             "description": "Destination wallet address (user's wallet, same as source for simple swaps)"
           },
           "network": {
             "type": "string",
-            "example": "base",
-            "description": "Network (defaults to base)"
+            "example": "stellar",
+            "description": "Network (defaults to stellar)"
           },
           "slippage": {
             "type": "number",
@@ -786,50 +1110,6 @@
           "exchangeRate",
           "sourceAddress",
           "destinationAddress"
-        ]
-      },
-      "CreateSwapDto": {
-        "type": "object",
-        "properties": {
-          "amount": {
-            "type": "number",
-            "example": 100,
-            "description": "Amount to swap (in token decimals)"
-          },
-          "recipient": {
-            "type": "string",
-            "example": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-            "description": "Recipient wallet address"
-          },
-          "to_cngn": {
-            "type": "boolean",
-            "example": true,
-            "description": "Swap direction: true = USDC to CNGN, false = CNGN to USDC"
-          },
-          "slippage": {
-            "type": "number",
-            "example": 0.05,
-            "description": "Slippage tolerance (0-1, e.g., 0.05 = 5%)"
-          },
-          "offrampDestination": {
-            "description": "Offramp destination (bank details). If provided, offramp will be triggered after swap completes.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/OfframpDestinationDto"
-              }
-            ]
-          },
-          "network": {
-            "type": "string",
-            "example": "base",
-            "description": "Network (default: base)"
-          }
-        },
-        "required": [
-          "amount",
-          "recipient",
-          "to_cngn",
-          "slippage"
         ]
       },
       "OnRampDestinationDto": {
@@ -854,7 +1134,7 @@
           },
           "network": {
             "type": "string",
-            "example": "base"
+            "example": "stellar"
           },
           "amount": {
             "type": "number",
@@ -902,7 +1182,7 @@
           },
           "network": {
             "type": "string",
-            "example": "base"
+            "example": "stellar"
           },
           "amount": {
             "type": "number",

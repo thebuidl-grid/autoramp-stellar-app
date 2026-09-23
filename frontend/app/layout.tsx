@@ -4,7 +4,6 @@ import "./globals.css";
 import { QueryProvider } from "@/lib/query-provider";
 import { Toaster } from "@/components/ui/toast";
 import { AuthProvider } from "@/components/auth/auth-provider";
-import { WagmiProviderWrapper } from "@/components/providers/wagmi-provider";
 import { TopLoader } from "@/components/providers/top-loader";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -40,14 +39,12 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <TopLoader />
-        <WagmiProviderWrapper>
-          <QueryProvider>
-            <AuthProvider>
-              {children}
-              <Toaster />
-            </AuthProvider>
-          </QueryProvider>
-        </WagmiProviderWrapper>
+        <QueryProvider>
+          <AuthProvider>
+            {children}
+            <Toaster />
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

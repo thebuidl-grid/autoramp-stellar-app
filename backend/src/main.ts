@@ -7,7 +7,10 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody is needed to verify Paystack's webhook HMAC signature, which
+  // must be computed over the exact bytes they sent — not a re-serialized
+  // copy of the parsed JSON (key order/whitespace can differ and break it).
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const configService = app.get(ConfigService);
 
   app.useGlobalPipes(
@@ -99,8 +102,9 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  await app.listen(3000);
-  console.log('API server running on http://localhost:3000');
-  console.log('Swagger docs: http://localhost:3000/api');
+  const port = configService.get<number>('PORT') || 3000;
+  await app.listen(port);
+  console.log(`API server running on http://localhost:${port}`);
+  console.log(`Swagger docs: http://localhost:${port}/api`);
 }
 bootstrap();

@@ -37,11 +37,20 @@ export class InitializeSwapDto {
 
   @ApiProperty({
     example: 100,
-    description: 'USDC amount for swap (amount user wants to swap)',
+    description: 'Amount of fromTokenType the user wants to sell/swap',
   })
   @IsNumber()
-  @Min(0.0001, { message: 'USDC amount must be positive' })
-  usdcAmount: number;
+  @Min(0.0001, { message: 'fromAmount must be positive' })
+  fromAmount: number;
+
+  @ApiPropertyOptional({
+    example: 'USDC',
+    description:
+      "Token being sold/swapped away — 'USDC', 'XLM', 'BRIDGE_USDC', or a corridor stablecoin code (e.g. 'CGHS'). Defaults to 'USDC'. Must differ from the destination corridor's own stablecoin (that case doesn't need a swap — use the direct-offramp path instead).",
+  })
+  @IsOptional()
+  @IsString()
+  fromTokenType?: string;
 
   @ApiProperty({
     example: 0.05,
@@ -61,11 +70,18 @@ export class InitializeSwapDto {
   offrampDestination: OfframpDestinationDto;
 
   @ApiPropertyOptional({
-    example: 'base',
-    description: 'Network (default: base)',
+    example: 'stellar',
+    description: 'Network (default: stellar)',
   })
   @IsOptional()
   @IsString()
   network?: string;
-}
 
+  @ApiPropertyOptional({
+    example: 'NGN',
+    description: "Offramp fiat currency (ISO 4217), selects the corridor. Defaults to 'NGN'.",
+  })
+  @IsOptional()
+  @IsString()
+  currency?: string;
+}

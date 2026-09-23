@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from 'src/database/prisma.service';
+import { PrismaService } from '../../../database/prisma.service';
 import { TransactionSummaryDto } from './dto/transaction-summary.dto';
 import { GetAnalyticsDto, AnalyticsPeriod } from './dto/get-analytics.dto';
 import { AnalyticsDataPoint } from './dto/analytics-response.dto';

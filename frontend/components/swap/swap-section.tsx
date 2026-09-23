@@ -8,7 +8,7 @@ interface SwapSectionProps {
   label: string;
   amount: string;
   onAmountChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  currencyType: "NGN" | "CNGN" | "USDC";
+  currencyType: string;
   onCurrencyClick?: () => void;
   showBaseLogo?: boolean;
   disabled?: boolean;
@@ -70,24 +70,28 @@ export function SwapSection({
       </div>
 
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <AmountInput
-            value={amount}
-            onChange={onAmountChange}
-            disabled={disabled}
-            isLoading={isLoading}
-          />
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <AmountInput
+              value={amount}
+              onChange={onAmountChange}
+              disabled={disabled}
+              isLoading={isLoading}
+            />
+            {/* Wallet's balance of this token, left-aligned directly under
+                the amount — mirrors how a USD-value readout sits under the
+                amount in most swap UIs, but shows the token's own units. */}
+            {userBalance !== undefined && (
+              <div className="text-xs text-white/30 mt-1">
+                {userBalance.toLocaleString(undefined, {
+                  maximumFractionDigits: 6,
+                })}{" "}
+                {currencyType}
+              </div>
+            )}
+          </div>
           <CurrencySelector type={currencyType} onClick={onCurrencyClick} />
         </div>
-        {/* Optional: Show balance text below input for reference */}
-        {userBalance !== undefined && (
-          <div className="text-right text-[10px] text-white/30">
-            Balance:{" "}
-            {userBalance.toLocaleString(undefined, {
-              maximumFractionDigits: 6,
-            })}
-          </div>
-        )}
       </div>
     </div>
   );
