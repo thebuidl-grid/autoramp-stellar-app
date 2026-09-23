@@ -26,16 +26,94 @@ export const validationSchema = Joi.object({
   // JWT
   JWT_SECRET: Joi.string().required(),
   JWT_EXPIRES_IN: Joi.string().default('24h').optional().allow('', null),
-  
+
   // Database
   DATABASE_URL: Joi.string().required(),
 
-  // BLOCKCHAIN
-  RPC_URL: Joi.string().optional().allow('', null),
+  // STELLAR
+  STELLAR_NETWORK: Joi.string().valid('testnet', 'mainnet').default('testnet'),
+  STELLAR_HORIZON_URL: Joi.string().uri().optional().allow('', null),
+  STELLAR_NETWORK_PASSPHRASE: Joi.string().optional().allow('', null),
+  STELLAR_ISSUER_SECRET: Joi.string().optional().allow('', null),
+  STELLAR_DISTRIBUTION_SECRET: Joi.string().optional().allow('', null),
+  STELLAR_DISTRIBUTION_PUBLIC_KEY: Joi.string().optional().allow('', null),
+  CNGN_ISSUER_PUBLIC_KEY: Joi.string().optional().allow('', null),
+  USDC_ISSUER_PUBLIC_KEY: Joi.string().optional().allow('', null),
+  // Circle's real USDC issuer (classic Stellar asset) — deliberately separate
+  // from USDC_ISSUER_PUBLIC_KEY, which is AutoRamp's own self-issued stand-in
+  // for the NGN on/offramp corridor. This one powers the XLM<->USDC swap
+  // route specifically, so users can get real, bridge-compatible USDC. See
+  // modules/swap/config/constant.ts's getBridgeUsdcAsset().
+  BRIDGE_USDC_ISSUER_PUBLIC_KEY: Joi.string().optional().allow('', null),
 
-  // STABLESTACK
+  // CCTP BRIDGE INFRA (any registered chain <-> any registered chain, see modules/bridge)
+  STELLAR_SOROBAN_RPC_URL: Joi.string().uri().optional().allow('', null),
+  // Deliberately separate from STELLAR_DISTRIBUTION_SECRET — this is new,
+  // less-proven Soroban-invocation code, and a bug here shouldn't be able
+  // to touch the funds backing fiat corridor payouts.
+  STELLAR_BRIDGE_RELAYER_SECRET: Joi.string().optional().allow('', null),
+  CIRCLE_IRIS_API_URL: Joi.string().uri().optional().allow('', null),
+  // EVM-side relayer wallets — one pair per EVM chain in the registry.
+  // Separate keys per chain (not one shared key) so a compromised/misused
+  // key on one chain can't be replayed against another, and so gas
+  // balances can be funded/monitored independently. Each relayer wallet
+  // needs native gas on its chain to fund ephemeral collection addresses
+  // and to submit MessageTransmitterV2.receiveMessage mints.
+  BASE_RPC_URL: Joi.string().uri().optional().allow('', null),
+  BASE_RELAYER_PRIVATE_KEY: Joi.string().optional().allow('', null),
+  ETHEREUM_RPC_URL: Joi.string().uri().optional().allow('', null),
+  ETHEREUM_RELAYER_PRIVATE_KEY: Joi.string().optional().allow('', null),
+  ARBITRUM_RPC_URL: Joi.string().uri().optional().allow('', null),
+  ARBITRUM_RELAYER_PRIVATE_KEY: Joi.string().optional().allow('', null),
+  OPTIMISM_RPC_URL: Joi.string().uri().optional().allow('', null),
+  OPTIMISM_RELAYER_PRIVATE_KEY: Joi.string().optional().allow('', null),
+  POLYGON_RPC_URL: Joi.string().uri().optional().allow('', null),
+  POLYGON_RELAYER_PRIVATE_KEY: Joi.string().optional().allow('', null),
+  AVALANCHE_RPC_URL: Joi.string().uri().optional().allow('', null),
+  AVALANCHE_RELAYER_PRIVATE_KEY: Joi.string().optional().allow('', null),
+  // Multi-stablecoin bridge-in (Swap tab): prices/builds the source-chain
+  // swap-to-USDC step for a non-USDC sourceTokenCode (USDT, DAI, ...) via
+  // 0x's Swap API. See ZeroXSwapQuoteService. Optional — omitting it just
+  // means sourceTokenCode requests fail with a clear config error, same as
+  // MONIE_RATE_API_KEY's posture for the NGN-rate feature.
+  ZEROX_API_KEY: Joi.string().optional().allow('', null),
+  // Native gas (in the chain's native unit, e.g. ETH) sent to a freshly
+  // generated collection address so it can submit its own approve +
+  // depositForBurnWithHook once USDC lands on it.
+  EVM_COLLECTION_GAS_FUNDING_AMOUNT: Joi.string().default('0.001'),
+  // AES-256-GCM key (32 raw bytes, base64) used to encrypt ephemeral EVM
+  // collection private keys at rest — see BridgeService/EvmRelayerService.
+  // Never reused for anything else; a leak here only exposes in-flight
+  // collection addresses, not distribution/issuer funds.
+  EVM_COLLECTION_KEY_ENCRYPTION_SECRET: Joi.string().optional().allow('', null),
+
+  // STABLESTACK (Flint)
   STABLESTACK_API_URL: Joi.string().uri().optional().allow('', null),
   STABLESTACK_API_KEY: Joi.string().optional().allow('', null),
+
+  // Ramp processor selection — code fallback is 'flint' if unset, but
+  // 'safehaven' is the recommended value now that AutoRamp is a signed
+  // SafeHaven partner (see .env.example). 'paystack' remains available as
+  // the alternative.
+  RAMP_PROCESSOR_PROVIDER: Joi.string().valid('flint', 'paystack', 'safehaven').optional().allow('', null),
+
+  // PAYSTACK (alternative ramp processor — Stellar-agnostic by design;
+  // also the primary processor for the GH/GHS corridor)
+  PAYSTACK_SECRET_KEY: Joi.string().optional().allow('', null),
+  PAYSTACK_DVA_PREFERRED_BANK: Joi.string().optional().allow('', null), // legacy name, NGN only
+  PAYSTACK_DVA_PREFERRED_BANK_NGN: Joi.string().optional().allow('', null),
+  PAYSTACK_DVA_PREFERRED_BANK_GHS: Joi.string().optional().allow('', null),
+
+  // SAFEHAVEN MFB (primary ramp processor — signed partner, licensed institution)
+  SAFEHAVEN_BASE_URL: Joi.string().uri().optional().allow('', null),
+  SAFEHAVEN_CLIENT_ID: Joi.string().optional().allow('', null),
+  SAFEHAVEN_CLIENT_ASSERTION_PRIVATE_KEY: Joi.string().optional().allow('', null),
+  SAFEHAVEN_COMPANY_URL: Joi.string().optional().allow('', null),
+  SAFEHAVEN_DEBIT_ACCOUNT_NUMBER: Joi.string().optional().allow('', null),
+  SAFEHAVEN_SETTLEMENT_BANK_CODE: Joi.string().optional().allow('', null),
+  SAFEHAVEN_SETTLEMENT_ACCOUNT_NUMBER: Joi.string().optional().allow('', null),
+  SAFEHAVEN_VIRTUAL_ACCOUNT_VALID_FOR_SECONDS: Joi.number().optional().allow('', null),
+  SAFEHAVEN_WEBHOOK_SHARED_SECRET: Joi.string().optional().allow('', null),
 
   // RESEND
   RESEND_API_KEY: Joi.string().required(),
@@ -95,7 +173,7 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   JWT_EXPIRES_IN: string = '24h';
-  
+
   @IsString()
   DATABASE_URL: string;
 

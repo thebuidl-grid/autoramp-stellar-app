@@ -20,12 +20,15 @@ export function useTransactions(id?: string, reference?: string) {
 
 /**
  * Fetch Banks Hook
+ *
+ * currency (ISO 4217) selects the corridor's bank list — omit for the
+ * app-wide default (NGN).
  */
-export function useBanks() {
+export function useBanks(currency?: string) {
   return useQuery({
-    queryKey: ["banks"],
+    queryKey: ["banks", currency],
     queryFn: async () => {
-      const response = await stablestackApi.getBanks();
+      const response = await stablestackApi.getBanks(currency);
       return response.data.data || [];
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -91,8 +94,15 @@ export function useOffRamp() {
  */
 export function useResolveAccount() {
   return useMutation({
-    mutationFn: ({ bankCode, accountNumber }: { bankCode: string; accountNumber: string }) =>
-      stablestackApi.resolveAccount(bankCode, accountNumber),
+    mutationFn: ({
+      bankCode,
+      accountNumber,
+      currency,
+    }: {
+      bankCode: string;
+      accountNumber: string;
+      currency?: string;
+    }) => stablestackApi.resolveAccount(bankCode, accountNumber, currency),
   });
 }
 

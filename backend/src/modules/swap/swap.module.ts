@@ -2,11 +2,13 @@ import { Module, forwardRef } from '@nestjs/common';
 import { SwapService } from './swap.service';
 import { SwapController } from './swap.controller';
 import { SwapGateway } from './swap.gateway';
-import { ConfigModule } from '@nestjs/config'; 
+import { ConfigModule } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
 import { StablestackModule } from '../stablestack/stablestack.module';
 import { ApiKeysModule } from '../api-keys/api-keys.module';
 import { AuthModule } from '../auth/auth.module';
+import { StellarModule } from '../stellar/stellar.module';
+import { CorridorModule } from '../corridor/corridor.module';
 import { JwtModule } from '@nestjs/jwt';
 
 @Module({
@@ -16,6 +18,8 @@ import { JwtModule } from '@nestjs/jwt';
     forwardRef(() => StablestackModule), // Forward ref to avoid circular dependency
     ApiKeysModule,
     AuthModule,
+    StellarModule,
+    CorridorModule,
     JwtModule.register({}), // For WebSocket gateway JWT verification
   ],
   controllers: [SwapController],

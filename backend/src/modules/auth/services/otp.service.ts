@@ -1,17 +1,19 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../database/prisma.service';
 import { Resend } from 'resend';
 
 /**
  * OTP Service
- * 
+ *
  * Handles OTP generation, sending via email (Resend), and verification.
  */
 @Injectable()
 export class OtpService {
+  private readonly logger = new Logger(OtpService.name);
   private readonly resend: Resend;
   private readonly fromEmail: string;
+  private readonly isProduction: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -23,6 +25,7 @@ export class OtpService {
     }
     this.resend = new Resend(apiKey);
     this.fromEmail = this.configService.get<string>('RESEND_FROM_EMAIL') || 'onboarding@resend.dev';
+    this.isProduction = this.configService.get<string>('NODE_ENV') === 'production';
   }
 
   /**
@@ -34,12 +37,15 @@ export class OtpService {
 
   /**
    * Send OTP to email
-   * 
+   *
    * @param email - Email address to send OTP to
    * @param purpose - Purpose of OTP (default: SIGNUP)
    * @returns OTP code (for testing, in production this should not be returned)
    */
-  async sendOtp(email: string, purpose: string = 'SIGNUP'): Promise<{ success: boolean; message: string }> {
+  async sendOtp(
+    email: string,
+    purpose: string = 'SIGNUP',
+  ): Promise<{ success: boolean; message: string; devOtpCode?: string }> {
     // Check for existing unused OTP within last minute (rate limiting)
     const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
     const recentOtp = await this.prisma.otp.findFirst({
@@ -116,18 +122,43 @@ export class OtpService {
         </html>
       `;
 
-      await this.resend.emails.send({
+      const { error } = await this.resend.emails.send({
         from: this.fromEmail,
         to: email,
         subject,
         html: htmlContent,
       });
 
+      if (error) {
+        // Resend's SDK returns a { data, error } result object rather than
+        // throwing on API failures — this branch, not a catch block, is
+        // what actually observes delivery failures.
+        throw new Error(error.message || 'Resend API returned an error');
+      }
+
       return {
         success: true,
         message: 'OTP sent successfully to your email',
       };
     } catch (error: any) {
+      // Outside production, a real email provider often isn't configured
+      // yet (e.g. a placeholder RESEND_API_KEY during local/testnet work).
+      // Rather than delete the OTP and block the whole auth flow, keep it
+      // valid and hand the code back directly so the flow is still
+      // genuinely testable end-to-end. NEVER do this in production —
+      // gated strictly on NODE_ENV, not on whether the error looks like
+      // an auth failure, so a real misconfigured key can't leak codes.
+      if (!this.isProduction) {
+        this.logger.warn(
+          `Resend send failed (${error.message || 'unknown error'}) — returning OTP directly since NODE_ENV != production. code=${code} email=${email}`,
+        );
+        return {
+          success: true,
+          message: 'Email delivery is not configured — returning the code directly (non-production only).',
+          devOtpCode: code,
+        };
+      }
+
       // Delete the OTP if email sending fails
       await this.prisma.otp.deleteMany({
         where: { email, code, purpose },

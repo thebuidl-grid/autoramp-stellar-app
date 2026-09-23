@@ -1,10 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsObject, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsObject,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 /**
  * Webhook Data DTO
- * 
+ *
  * Represents the data object within the webhook payload
  */
 class WebhookDataDto {
@@ -45,7 +50,7 @@ class WebhookDataDto {
   processedAmount?: number;
 
   @ApiPropertyOptional({
-    example: '0xa8ba937726aef411d104158d374ad3bca4920f0e19edd05a4ed5fa00ed9010a9',
+    example: 'a8ba937726aef411d104158d374ad3bca4920f0e19edd05a4ed5fa00ed9010a9',
     description: 'Onramp transaction hash (for onramp transactions)',
   })
   @IsOptional()
@@ -53,7 +58,7 @@ class WebhookDataDto {
   onrampHash?: string;
 
   @ApiPropertyOptional({
-    example: 'base',
+    example: 'stellar',
     description: 'Network',
   })
   @IsOptional()
@@ -70,14 +75,15 @@ class WebhookDataDto {
 
 /**
  * Webhook DTO
- * 
+ *
  * Validates webhook payload from Flint API.
  * Actual structure: { event: string, data: WebhookDataDto }
  */
 export class WebhookDto {
   @ApiProperty({
     example: 'onramp.completed',
-    description: 'Event type from webhook (e.g., onramp.completed, offramp.completed)',
+    description:
+      'Event type from webhook (e.g., onramp.completed, offramp.completed)',
   })
   @IsString()
   event?: string;
@@ -91,4 +97,3 @@ export class WebhookDto {
   @IsObject()
   data?: WebhookDataDto;
 }
-

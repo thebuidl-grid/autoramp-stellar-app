@@ -1,9 +1,12 @@
-import { useEffect, useRef } from "react";
-import { useWriteContract, useWaitForTransactionReceipt, useReadContract, useAccount } from "wagmi";
-import { parseUnits } from "viem";
-import { SWAP_CONSTANTS, SWAP_ROUTER_ABI, ERC20_ABI } from "@/lib/constants/swap-constants";
+"use client";
+
+import { useCallback, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { swapApi, getErrorMessage } from "@/lib/api";
+import { useStellarWallet } from "./use-stellar-wallet";
 import { useUpdateSwapAfterExecution } from "./use-swap";
 import { useToast } from "@/components/ui/toast";
+import { buildPathPaymentXdr, submitSignedXdr, accountExists, fundTestnetAccount, IS_MAINNET } from "@/lib/stellar-tx";
 import type { TabType, StepType } from "./use-transaction-form";
 
 export interface UseSwapExecutionProps {
@@ -15,18 +18,36 @@ export interface UseSwapExecutionProps {
 }
 
 export interface UseSwapExecutionReturn {
-  allowance: bigint | undefined;
-  isApproving: boolean;
-  isApproved: boolean;
+  needsTrustline: boolean;
+  isCheckingTrustline: boolean;
+  isAddingTrustline: boolean;
+  // A Stellar account doesn't exist on-chain until it's first funded — a
+  // brand-new wallet hits this, not a trustline issue. Only meaningfully
+  // actionable on testnet (via Friendbot); on mainnet this just explains
+  // why signing would otherwise fail with a cryptic Horizon "Not Found".
+  needsFunding: boolean;
+  isCheckingAccountExists: boolean;
+  isFundingAccount: boolean;
+  canFundViaFriendbot: boolean;
+  // False until funding + trustline status are both conclusively known —
+  // use this to keep the swap button non-clickable during that window.
+  checksReady: boolean;
   isExecuting: boolean;
   isSwapSuccess: boolean;
-  swapHash: `0x${string}` | undefined;
-  needsApproval: boolean;
-  handleApprove: () => void;
+  swapHash: string | undefined;
+  handleAddTrustline: () => void;
+  handleFundAccount: () => void;
   handleExecuteSwap: () => void;
-  refetchAllowance: () => void;
 }
 
+/**
+ * Swap execution on Stellar: build a PathPaymentStrictSend, sign it with
+ * the connected wallet, submit to Horizon, report the hash back to the
+ * backend. Replaces wagmi's approve+exactInputSingle+waitForReceipt flow —
+ * there's no allowance/approval concept on Stellar (replaced by the
+ * trustline check below), and submitTransaction already waits for ledger
+ * inclusion, so no separate "waiting for receipt" step is needed.
+ */
 export function useSwapExecution({
   swapData,
   step,
@@ -34,135 +55,204 @@ export function useSwapExecution({
   setStep,
 }: UseSwapExecutionProps): UseSwapExecutionReturn {
   const { toast } = useToast();
-  const { address } = useAccount();
+  const { address, signTransaction } = useStellarWallet();
   const updateSwap = useUpdateSwapAfterExecution();
 
-  // Determine which token to check allowance for based on swap data
-  const tokenAddressForAllowance = swapData?.swapParams?.tokenIn 
-    ? (swapData.swapParams.tokenIn.toLowerCase() === SWAP_CONSTANTS.USDC.toLowerCase() ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN)
-    : SWAP_CONSTANTS.USDC; // Default to USDC
-  
-  const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    address: tokenAddressForAllowance as `0x${string}`,
-    abi: ERC20_ABI,
-    functionName: "allowance",
-    args: address && SWAP_CONSTANTS.SWAP_ROUTER ? ([address as `0x${string}`, SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`] as const) : undefined,
-    query: { enabled: !!address && !!SWAP_CONSTANTS.SWAP_ROUTER && step === "execute" && !!swapData },
+  // The app-level token type (e.g. "BRIDGE_USDC"), NOT the raw Stellar
+  // asset code from swapParams.destAsset.code ("USDC") — that code is
+  // ambiguous between AutoRamp's self-issued USDC and Circle's real
+  // bridge-compatible USDC (same code, different issuer). Using the raw
+  // code here silently checked/sponsored a trustline for the WRONG asset
+  // whenever the destination was BRIDGE_USDC — the swap itself then still
+  // targeted the real one (via the full {code,issuer} pair) and failed
+  // with a confusing op_no_trust, even after "successfully" adding a
+  // trustline for the ordinary USDC the user already had.
+  const destAssetCode: string | undefined = swapData?.swap?.toTokenType;
+
+  const {
+    data: accountExistsData,
+    isLoading: isCheckingAccountExists,
+    refetch: refetchAccountExists,
+  } = useQuery({
+    queryKey: ["accountExists", address],
+    queryFn: () => accountExists(address as string),
+    enabled: !!address && step === "execute",
   });
+  const needsFunding = accountExistsData === false;
 
-  const { writeContract: approveToken, data: approveHash, isPending: isApproving } = useWriteContract();
-  const { isLoading: isWaitingApproval, isSuccess: isApproved } = useWaitForTransactionReceipt({ hash: approveHash });
+  const {
+    data: trustlineData,
+    isLoading: isCheckingTrustline,
+    refetch: refetchTrustline,
+  } = useQuery({
+    queryKey: ["trustline", destAssetCode, address],
+    queryFn: () => swapApi.hasTrustline(destAssetCode as string, address as string),
+    // Checking a trustline loads the account too — for a brand-new,
+    // unfunded account this would fail the same way the swap itself
+    // would, so wait until we've confirmed the account exists first
+    // rather than surfacing a second confusing error.
+    enabled: !!address && !!destAssetCode && step === "execute" && accountExistsData === true,
+  });
+  const needsTrustline = trustlineData ? !trustlineData.data.hasTrustline : false;
+  // True only once we've conclusively resolved both checks — `isLoading`
+  // alone isn't enough, since a query that hasn't started yet (still
+  // `enabled: false` waiting on a prerequisite) reports isLoading: false
+  // too, which previously let the button look clickable before we
+  // actually knew whether funding/trustline were needed.
+  const checksReady = accountExistsData !== undefined && (accountExistsData === false || trustlineData !== undefined);
 
-  const { writeContract: executeSwap, data: swapHash, isPending: isExecuting } = useWriteContract();
-  const { isLoading: isWaitingSwap, isSuccess: isSwapSuccess } = useWaitForTransactionReceipt({ hash: swapHash });
-
+  const [isAddingTrustline, setIsAddingTrustline] = useState(false);
+  const [isFundingAccount, setIsFundingAccount] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [isSwapSuccess, setIsSwapSuccess] = useState(false);
+  const [swapHash, setSwapHash] = useState<string | undefined>(undefined);
   const hasUpdatedSwap = useRef(false);
 
-  useEffect(() => {
-    if (isApproved) refetchAllowance();
-  }, [isApproved, refetchAllowance]);
+  const handleAddTrustline = useCallback(async () => {
+    if (!address || !destAssetCode) return;
+    setIsAddingTrustline(true);
+    try {
+      // Backend builds + partially signs (as sponsor) — AutoRamp covers the
+      // reserve, the user just signs and pays the negligible base fee.
+      const { data } = await swapApi.getSponsoredTrustline(destAssetCode, address);
+      const signedXdr = await signTransaction(data.xdr);
+      await submitSignedXdr(signedXdr);
+      await refetchTrustline();
+      toast({
+        title: "Trustline added",
+        description: `You can now receive ${destAssetCode}.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Failed to add trustline",
+        description: getErrorMessage(error),
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingTrustline(false);
+    }
+  }, [address, destAssetCode, signTransaction, refetchTrustline, toast]);
 
-  useEffect(() => {
-    if (isSwapSuccess && swapHash && swapData && address && !hasUpdatedSwap.current && step === "execute") {
-      hasUpdatedSwap.current = true;
-      updateSwap.mutate(
-        { reference: swapData.swap.reference, data: { transactionHash: swapHash, sourceAddress: address } },
-        {
-          onSuccess: () => {
-            // For swap tab, mark as completed immediately (no WebSocket needed)
-            // For sell tab, go to pending state (uses WebSocket for offramp updates)
-            if (activeTab === "swap") {
-              setStep("completed");
-              toast({
-                title: "Swap Completed",
-                description: "Your swap transaction has been completed successfully!",
-                variant: "default",
-              });
-            } else {
-              setStep("pending");
-            }
-          },
-          onError: () => { hasUpdatedSwap.current = false; },
+  const handleFundAccount = useCallback(async () => {
+    if (!address) return;
+    setIsFundingAccount(true);
+    try {
+      await fundTestnetAccount(address);
+      await refetchAccountExists();
+      toast({
+        title: "Wallet funded",
+        description: "Friendbot sent 10,000 testnet XLM to your wallet.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Failed to fund wallet",
+        description: getErrorMessage(error),
+        variant: "destructive",
+      });
+    } finally {
+      setIsFundingAccount(false);
+    }
+  }, [address, refetchAccountExists, toast]);
+
+  const handleExecuteSwap = useCallback(async () => {
+    if (!address || !swapData?.swapParams) return;
+    setIsExecuting(true);
+    try {
+      const { sendAsset, sendAmount, destAsset, destMin, destination, memo } =
+        swapData.swapParams;
+
+      // Re-verify funding + trustline fresh, synchronously, right before
+      // building/submitting — rather than trusting the React Query state
+      // above, which can still be unsettled (not yet loaded, not just
+      // "loaded and false") if this fires before those checks finish.
+      // That race is exactly what let a swap through with no trustline
+      // and fail with a cryptic op_no_trust instead of a clear message.
+      const exists = await accountExists(address);
+      if (!exists) {
+        await refetchAccountExists();
+        throw new Error("This wallet doesn't exist on-chain yet — fund it with XLM first, then retry.");
+      }
+      if (destAsset.issuer) {
+        // Native XLM never needs a trustline; anything else might. Uses
+        // destAssetCode (the app-level token type, e.g. "BRIDGE_USDC"),
+        // NOT destAsset.code (the raw Stellar code "USDC", ambiguous
+        // between two different real assets) — see destAssetCode's own
+        // comment above for why that distinction matters here.
+        const { data: trustline } = await swapApi.hasTrustline(destAssetCode as string, address);
+        if (!trustline.hasTrustline) {
+          await refetchTrustline();
+          throw new Error(`This wallet doesn't have a trustline for ${destAssetCode} yet — add the trustline first, then retry.`);
         }
-      );
-    }
-  }, [isSwapSuccess, swapHash, swapData, address, step, updateSwap, activeTab, toast, setStep]);
+      }
 
-  useEffect(() => {
-    hasUpdatedSwap.current = false;
-  }, [swapHash]);
-
-  const handleApprove = async () => {
-    if (!swapData || !address) return;
-    try {
-      const parsedAmount = parseFloat(swapData.swapParams.amountIn);
-      // Determine token address and decimals based on input token
-      const isUSDC = swapData.swapParams.tokenIn.toLowerCase() === SWAP_CONSTANTS.USDC.toLowerCase();
-      const tokenAddress = isUSDC ? SWAP_CONSTANTS.USDC : SWAP_CONSTANTS.CNGN;
-      const decimals = isUSDC ? SWAP_CONSTANTS.USDC_DECIMALS : SWAP_CONSTANTS.CNGN_DECIMALS;
-      const tokenAmount = parseUnits(parsedAmount.toString(), decimals);
-      
-      approveToken({
-        address: tokenAddress as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: "approve",
-        args: [SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`, tokenAmount],
+      const xdr = await buildPathPaymentXdr({
+        sourcePublicKey: address,
+        sendAsset,
+        sendAmount,
+        destAsset,
+        destMin,
+        destination,
+        memo,
       });
+      const signedXdr = await signTransaction(xdr);
+      const hash = await submitSignedXdr(signedXdr);
+
+      setSwapHash(hash);
+      setIsSwapSuccess(true);
+
+      if (!hasUpdatedSwap.current) {
+        hasUpdatedSwap.current = true;
+        updateSwap.mutate(
+          {
+            reference: swapData.swap.reference,
+            data: { transactionHash: hash, sourceAddress: address },
+          },
+          {
+            onSuccess: () => {
+              // For swap tab, mark as completed immediately (no WebSocket needed)
+              // For sell tab, go to pending state (uses WebSocket for offramp updates)
+              if (activeTab === "swap") {
+                setStep("completed");
+                toast({
+                  title: "Swap Completed",
+                  description: "Your swap transaction has been completed successfully!",
+                  variant: "default",
+                });
+              } else {
+                setStep("pending");
+              }
+            },
+            onError: () => {
+              hasUpdatedSwap.current = false;
+            },
+          }
+        );
+      }
     } catch (error: any) {
-      toast({ title: "Approval Failed", description: error.message || "Failed to approve token", variant: "destructive" });
-    }
-  };
-
-  const handleExecuteSwap = async () => {
-    if (!address || !swapData || !SWAP_CONSTANTS.SWAP_ROUTER) return;
-    const amountIn = parseUnits(swapData.swapParams.amountIn, SWAP_CONSTANTS.USDC_DECIMALS);
-    const slippage = swapData.swapParams.slippage || 0.05;
-    const estimatedCngn = parseFloat(swapData.swapParams.amountIn);
-    const minAmount = estimatedCngn * (1 - slippage);
-    const amountOutMin = parseUnits(minAmount.toString(), SWAP_CONSTANTS.CNGN_DECIMALS);
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 120);
-
-    try {
-      executeSwap({
-        address: SWAP_CONSTANTS.SWAP_ROUTER as `0x${string}`,
-        abi: SWAP_ROUTER_ABI,
-        functionName: "exactInputSingle",
-        args: [{
-          tokenIn: swapData.swapParams.tokenIn as `0x${string}`,
-          tokenOut: swapData.swapParams.tokenOut as `0x${string}`,
-          tickSpacing: 10,
-          recipient: swapData.swapParams.recipient as `0x${string}`,
-          deadline,
-          amountIn,
-          amountOutMinimum: amountOutMin,
-          sqrtPriceLimitX96: BigInt(0),
-        }],
+      toast({
+        title: "Swap Failed",
+        description: getErrorMessage(error),
+        variant: "destructive",
       });
-    } catch (error: any) {
-      toast({ title: "Swap Failed", description: error.message || "Failed to execute swap", variant: "destructive" });
+    } finally {
+      setIsExecuting(false);
     }
-  };
-
-  // Determine if approval is needed based on the input token
-  const needsApproval = swapData && allowance !== undefined && (() => {
-    const parsedAmount = parseFloat(swapData.swapParams.amountIn);
-    const isUSDC = swapData.swapParams.tokenIn.toLowerCase() === SWAP_CONSTANTS.USDC.toLowerCase();
-    const decimals = isUSDC ? SWAP_CONSTANTS.USDC_DECIMALS : SWAP_CONSTANTS.CNGN_DECIMALS;
-    const amountIn = parseUnits(parsedAmount.toString(), decimals);
-    return amountIn > allowance;
-  })();
+  }, [address, swapData, destAssetCode, signTransaction, updateSwap, activeTab, toast, setStep, refetchAccountExists, refetchTrustline]);
 
   return {
-    allowance,
-    isApproving: isApproving || isWaitingApproval,
-    isApproved,
-    isExecuting: isExecuting || isWaitingSwap,
+    needsTrustline,
+    isCheckingTrustline,
+    isAddingTrustline,
+    needsFunding,
+    isCheckingAccountExists,
+    isFundingAccount,
+    canFundViaFriendbot: !IS_MAINNET,
+    checksReady,
+    isExecuting,
     isSwapSuccess,
     swapHash,
-    needsApproval: !!needsApproval,
-    handleApprove,
+    handleAddTrustline,
+    handleFundAccount,
     handleExecuteSwap,
-    refetchAllowance,
   };
 }
-

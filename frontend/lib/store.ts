@@ -104,8 +104,71 @@ export const useIsAdmin = () => {
 };
 
 /**
+ * Stellar Wallet State Management
+ *
+ * Global state for the connected Stellar wallet (address + which wallet
+ * module the user picked). No context provider needed — zustand stores
+ * are globally shared without one, unlike wagmi's WagmiProvider.
+ */
+
+interface StellarWalletState {
+  address: string | null;
+  walletId: string | null;
+  _hasHydrated: boolean;
+
+  setWallet: (address: string, walletId: string) => void;
+  clearWallet: () => void;
+  setHasHydrated: (state: boolean) => void;
+}
+
+export const useStellarWalletStore = create<StellarWalletState>()(
+  persist(
+    (set) => ({
+      address: null,
+      walletId: null,
+      _hasHydrated: false,
+
+      setWallet: (address, walletId) => set({ address, walletId }),
+      clearWallet: () => set({ address: null, walletId: null }),
+      setHasHydrated: (state) => set({ _hasHydrated: state }),
+    }),
+    {
+      name: "stellar-wallet-storage",
+      partialize: (state) => ({ address: state.address, walletId: state.walletId }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
+    }
+  )
+);
+
+/**
+ * EVM Wallet State Management (bridge tab only)
+ *
+ * Deliberately read-mostly: address + chainName for display/balance
+ * lookups, not a full wagmi-style connector — the bridge's EVM leg is
+ * custodial (see BridgeService), the connected wallet is only used to
+ * read the user's own address/chain/balance and, for Send, to trigger an
+ * eth_sendTransaction the wallet itself prompts the user to approve. We
+ * never hold or touch their private key.
+ */
+interface EvmWalletState {
+  address: string | null;
+  chainName: string | null;
+  setWallet: (address: string, chainName: string | null) => void;
+  clearWallet: () => void;
+}
+
+export const useEvmWalletStore = create<EvmWalletState>()((set) => ({
+  address: null,
+  chainName: null,
+  setWallet: (address, chainName) => set({ address, chainName }),
+  clearWallet: () => set({ address: null, chainName: null }),
+}));
+
+/**
  * UI State Management
- * 
+ *
  * Global state for UI elements like toasts, modals, etc.
  */
 
@@ -160,37 +223,73 @@ export const useUIStore = create<UIState>((set, get) => ({
  */
 
 export type TabType = "buy" | "sell" | "swap";
-export type CryptoType = "CNGN" | "USDC";
+// A corridor's stablecoin code (e.g. "CNGN", "CGHS") or "USDC" — driven by
+// the active corridor registry (see useCorridors), not a fixed set.
+export type CryptoType = string;
 export type StepType = "form" | "pending" | "completed" | "execute";
 
 interface TransactionFormState {
   // Tab and crypto selection
   activeTab: TabType;
   cryptoType: CryptoType;
+  // Which stablecoin the Buy tab delivers — a corridor code (Stellar) or a
+  // ChainToken code (buyPayoutChain is an EVM chain), scoped by
+  // buyPayoutChain below. Separate from `cryptoType` (Sell/Swap).
+  buyCryptoType: CryptoType;
+  // Which chain Buy delivers on — defaults to 'stellar' (today's only
+  // behavior). Any other registered chain routes through the
+  // custodial swap+bridge delivery path server-side.
+  buyPayoutChain: string;
+  // Fiat currency Buy pays with — independent of buyCryptoType/buyPayoutChain
+  // now that the target stablecoin isn't always the paying corridor's own
+  // (e.g. paying NGN to receive BRZ on Polygon has no shared corridor).
+  buyFiatCurrency: string;
+  // Which corridor's fiat the Sell tab pays out to — separate from
+  // `cryptoType` (what's being sold), since Sell can now sell any
+  // tradeable asset while still choosing its own local fiat destination.
+  sellPayoutCryptoType: CryptoType;
+  // Which chain Sell sells FROM — defaults to 'stellar' (today's only
+  // behavior, using the existing Stellar swap/offramp path). Any other
+  // registered chain routes through the self-custodial bridge + fiat-payout
+  // path (payoutFiat on BridgeTransfer).
+  sellSourceChain: string;
+  // Which chain the same-chain Swap tab trades on — defaults to 'stellar'
+  // (today's only behavior, PathPaymentStrictSend via the connected
+  // Stellar wallet). Any other registered EVM chain instead does a plain
+  // self-custodial 0x swap on that chain, no bridging involved at all.
+  swapChain: string;
   fromCryptoType: CryptoType;
   toCryptoType: CryptoType;
-  
+
   // Form fields
   sellAmount: string;
   buyAmount: string;
   bankCode: string;
   accountNumber: string;
   walletAddress: string;
-  
+
   // Transaction state
   step: StepType;
   transactionData: any;
   swapData: any;
-  
+
   // Modal states
   isCryptoModalOpen: boolean;
+  isSellPayoutCryptoModalOpen: boolean;
   isFromCryptoModalOpen: boolean;
   isToCryptoModalOpen: boolean;
+  isBuyFiatCurrencyModalOpen: boolean;
   isAuthModalOpen: boolean;
-  
+
   // Actions
   setActiveTab: (tab: TabType) => void;
   setCryptoType: (type: CryptoType) => void;
+  setBuyCryptoType: (type: CryptoType) => void;
+  setBuyPayoutChain: (chain: string) => void;
+  setBuyFiatCurrency: (currency: string) => void;
+  setSellPayoutCryptoType: (type: CryptoType) => void;
+  setSellSourceChain: (chain: string) => void;
+  setSwapChain: (chain: string) => void;
   setFromCryptoType: (type: CryptoType) => void;
   setToCryptoType: (type: CryptoType) => void;
   setSellAmount: (amount: string) => void;
@@ -202,8 +301,10 @@ interface TransactionFormState {
   setTransactionData: (data: any) => void;
   setSwapData: (data: any) => void;
   setIsCryptoModalOpen: (open: boolean) => void;
+  setIsSellPayoutCryptoModalOpen: (open: boolean) => void;
   setIsFromCryptoModalOpen: (open: boolean) => void;
   setIsToCryptoModalOpen: (open: boolean) => void;
+  setIsBuyFiatCurrencyModalOpen: (open: boolean) => void;
   setIsAuthModalOpen: (open: boolean) => void;
   resetForm: () => void;
 }
@@ -212,6 +313,12 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
   // Initial state
   activeTab: "buy",
   cryptoType: "CNGN",
+  buyCryptoType: "CNGN",
+  buyPayoutChain: "stellar",
+  buyFiatCurrency: "NGN",
+  sellPayoutCryptoType: "CNGN",
+  sellSourceChain: "stellar",
+  swapChain: "stellar",
   fromCryptoType: "USDC",
   toCryptoType: "CNGN",
   sellAmount: "",
@@ -223,13 +330,21 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
   transactionData: null,
   swapData: null,
   isCryptoModalOpen: false,
+  isSellPayoutCryptoModalOpen: false,
   isFromCryptoModalOpen: false,
   isToCryptoModalOpen: false,
+  isBuyFiatCurrencyModalOpen: false,
   isAuthModalOpen: false,
-  
+
   // Actions
   setActiveTab: (tab) => set({ activeTab: tab }),
   setCryptoType: (type) => set({ cryptoType: type }),
+  setBuyCryptoType: (type) => set({ buyCryptoType: type }),
+  setBuyPayoutChain: (chain) => set({ buyPayoutChain: chain }),
+  setBuyFiatCurrency: (currency) => set({ buyFiatCurrency: currency }),
+  setSellPayoutCryptoType: (type) => set({ sellPayoutCryptoType: type }),
+  setSellSourceChain: (chain) => set({ sellSourceChain: chain }),
+  setSwapChain: (chain) => set({ swapChain: chain }),
   setFromCryptoType: (type) => set({ fromCryptoType: type }),
   setToCryptoType: (type) => set({ toCryptoType: type }),
   setSellAmount: (amount) => set({ sellAmount: amount }),
@@ -241,8 +356,10 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
   setTransactionData: (data) => set({ transactionData: data }),
   setSwapData: (data) => set({ swapData: data }),
   setIsCryptoModalOpen: (open) => set({ isCryptoModalOpen: open }),
+  setIsSellPayoutCryptoModalOpen: (open) => set({ isSellPayoutCryptoModalOpen: open }),
   setIsFromCryptoModalOpen: (open) => set({ isFromCryptoModalOpen: open }),
   setIsToCryptoModalOpen: (open) => set({ isToCryptoModalOpen: open }),
+  setIsBuyFiatCurrencyModalOpen: (open) => set({ isBuyFiatCurrencyModalOpen: open }),
   setIsAuthModalOpen: (open) => set({ isAuthModalOpen: open }),
   resetForm: () => set({
     step: "form",
