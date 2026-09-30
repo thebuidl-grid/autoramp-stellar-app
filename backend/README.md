@@ -48,7 +48,202 @@ All three stablecoins trade against each other and against USDC and XLM on Stell
 | Bank rails | **SafeHaven** (recommended), **Paystack** and **Flint**, chosen per country corridor |
 | Other services | Circle Iris (bridge attestations), 0x (EVM swaps), Resend (email), MonieRate (FX rates) |
 
-For **architecture maps**, see [`../docs.md` §2](../docs.md#2-architecture-maps). It has diagrams of the system, the corridors and asset hub, the Buy and Sell flows, the CCTP bridge lifecycle, the cross-chain payout modes, and custody and signing keys. The same file also covers the data model and known gaps.
+For the architecture diagrams, see [Architecture](#architecture) below. The full internal reference, covering the custody model, data model and known gaps, is in [`../docs.md`](../docs.md).
+
+---
+
+## Architecture
+
+These diagrams are also in [`../docs.md` §2](../docs.md#2-architecture-maps), along with the reasoning behind each flow and the custody and signing-key table.
+
+### System map
+```mermaid
+flowchart TB
+  subgraph Clients
+    direction LR
+    U["Web user<br/>Next.js frontend"]
+    M["Merchant server<br/>API key"]
+    A["Admin portal"]
+  end
+
+  subgraph Backend["backend/ — NestJS (PostgreSQL via Prisma)"]
+    direction TB
+    AUTH["auth · api-keys<br/>JWT or sk_live_ key"]
+    subgraph Services[" "]
+      direction LR
+      SS["stablestack<br/>onramp · offramp · webhooks"]
+      SW["swap<br/>Stellar path payments"]
+      BR["bridge<br/>CCTP · chain registry · 0x"]
+    end
+    COR["corridor registry<br/>country → stablecoin → processor"]
+    ST["stellar service<br/>Horizon + Soroban"]
+    JOBS["15s jobs<br/>deposit watcher · bridge relayer"]
+    WS["SwapGateway<br/>Socket.IO /swap"]
+  end
+
+  subgraph External["External systems"]
+    direction LR
+    RAILS["Bank rails per corridor<br/>SafeHaven · Paystack (M-Pesa) · Flint"]
+    XLM["Stellar network<br/>CNGN · CGHS · CKES · USDC"]
+    EVM["EVM chains<br/>Base · Ethereum · Arbitrum<br/>Optimism · Polygon · Avalanche"]
+    IRIS["Circle Iris<br/>CCTP attestations"]
+    ZX["0x Swap API"]
+  end
+
+  U & M & A -->|HTTPS| AUTH
+  AUTH --> SS & SW & BR
+  SS -->|resolve corridor| COR
+  SS <-->|payouts / signed webhooks| RAILS
+  SS & SW & BR --> ST
+  ST --> XLM
+  BR --> EVM
+  BR --> IRIS
+  BR --> ZX
+  JOBS -.-> SS
+  JOBS -.-> BR
+  WS -.->|live status| U
+```
+
+### Corridors and the Stellar asset hub
+Every corridor stablecoin trades through the hub assets, so any pair can be swapped with a single Stellar path payment. `USDC` (AutoRamp-issued) and `BRIDGE_USDC` (Circle-issued) are **different assets**; only `BRIDGE_USDC` can be burned through CCTP.
+
+```mermaid
+flowchart TB
+  subgraph Corridors["Corridor registry (DB rows, seeded by prisma/seed.ts)"]
+    NG["🇳🇬 NG · NGN<br/>→ CNGN<br/>SafeHaven (bank transfer)"]
+    GH["🇬🇭 GH · GHS<br/>→ CGHS<br/>Paystack (bank transfer)"]
+    KE["🇰🇪 KE · KES<br/>→ CKES<br/>Paystack (M-Pesa)"]
+  end
+
+  subgraph Hub["Hub assets on Stellar (no $100 minimum)"]
+    USDC["USDC<br/>AutoRamp-issued"]
+    NATIVE["XLM<br/>native"]
+    BUSDC["BRIDGE_USDC<br/>Circle-issued · CCTP-burnable"]
+  end
+
+  NG --- USDC
+  GH --- USDC
+  KE --- USDC
+  USDC --- NATIVE
+  USDC --- BUSDC
+  BUSDC ==>|CCTP| EVMC["USDC on EVM chains"]
+```
+
+### Buy (onramp): fiat → stablecoin
+```mermaid
+sequenceDiagram
+  autonumber
+  actor User
+  participant FE as Frontend
+  participant API as StablestackService
+  participant RP as RampProcessor<br/>(corridor's provider)
+  participant WH as WebhookService
+  participant DIST as Stellar distribution account
+
+  User->>FE: amount, currency, destination (+ phone for KES)
+  FE->>API: POST /stablestack/onramp
+  API->>API: resolve corridor by currency
+  API->>RP: initiateOnramp()
+  RP-->>API: deposit account (NGN/GHS)<br/>or M-Pesa prompt sent (KES)
+  API-->>FE: PENDING + payment instructions
+  User->>RP: pays (bank transfer / approves M-Pesa)
+  RP->>WH: webhook (verified per provider — see below)
+  WH->>WH: mint amount = min(processed, ordered)
+  alt corridor stablecoin to a Stellar wallet (default)
+    WH->>DIST: sendFromDistribution(CNGN/CGHS/CKES)
+  else different token and/or EVM chain
+    WH->>DIST: OnrampDeliveryService: swap in distribution account
+    DIST-->>DIST: optional custodial CCTP burn → bridge relayer mints on EVM
+  end
+  WH-->>FE: COMPLETED (Socket.IO)
+```
+
+### Sell (offramp): stablecoin → fiat
+```mermaid
+sequenceDiagram
+  autonumber
+  actor User
+  participant FE as Frontend
+  participant API as StablestackService
+  participant W as OfframpDepositWatcher (15s)
+  participant HZ as Stellar Horizon
+  participant RP as RampProcessor
+
+  User->>FE: amount + bank account / M-Pesa number
+  FE->>API: POST /stablestack/offramp
+  API->>RP: resolveAccount() (fail fast on a bad account)
+  API-->>FE: deposit address + unique memo (no fiat moved yet)
+  User->>HZ: send stablecoin with memo
+  par client fast path
+    FE->>API: POST /offramp/:ref/confirm-deposit (tx hash)
+  and server guarantee
+    W->>API: findAndConfirmPendingDeposits()
+  end
+  API->>HZ: find payment by memo
+  API->>API: atomic claim PENDING → PROCESSING
+  API->>RP: executeOfframpPayout(min(deposited, declared))
+  RP-->>API: webhook → COMPLETED / FAILED
+```
+
+### Cross-chain bridge (Circle CCTP)
+```mermaid
+sequenceDiagram
+  autonumber
+  actor W as User wallet (source chain)
+  participant API as BridgeService
+  participant SRC as Source chain<br/>TokenMessenger
+  participant IRIS as Circle Iris
+  participant R as BridgeRelayer (15s)
+  participant DST as Destination chain
+
+  W->>API: POST /bridge/transfers (chains, amount, payout mode)
+  API-->>W: unsigned approve + burn (EVM)<br/>or approve XDR, then burn XDR (Stellar)
+  opt non-USDC source token (EVM)
+    W->>SRC: 0x swap token → USDC first
+  end
+  W->>SRC: approve + depositForBurnWithHook
+  W->>API: POST /transfers/:ref/register-burn (owner only)
+  loop every 15s
+    R->>IRIS: GET /v2/messages/{domain}?transactionHash
+  end
+  IRIS-->>R: message + attestation
+  R->>DST: mint — Stellar: CctpForwarder.mint_and_forward<br/>EVM: MessageTransmitter.receiveMessage
+  R->>R: payout modes: decode + verify attested burn (§2.6)
+```
+
+Bridge transfer states:
+
+```mermaid
+stateDiagram-v2
+  [*] --> PENDING_BURN: intent created
+  PENDING_BURN --> BURNED: register-burn (owner)
+  BURNED --> ATTESTED: Iris attestation fetched
+  ATTESTED --> ATTESTED: mint failed, retried next tick
+  ATTESTED --> COMPLETED: destination mint succeeded
+  COMPLETED --> PAYOUT_HELD: payout mode, burn unverified or quote below floor
+  COMPLETED --> [*]
+  PAYOUT_HELD --> [*]: manual review
+```
+
+### Cross-chain payout modes
+Payout modes spend AutoRamp's own funds, so the attested burn is decoded and checked before any payout. A mismatch holds the transfer for manual review.
+
+```mermaid
+flowchart TD
+  START["POST /bridge/transfers"] --> MODE{payout mode?}
+  MODE -->|none| PLAIN["Plain USDC bridge<br/>mint → user's own wallet<br/>(self-custodial)"]
+  MODE -->|"payoutTokenCode (EVM destination)"| TOK["Mint USDC → user's wallet<br/>then build-destination-swap:<br/>live 0x quote, user signs<br/>(self-custodial)"]
+  MODE -->|"payoutStablecoinCode (Stellar destination)"| REDIR1["Mint redirected to<br/>AutoRamp distribution account"]
+  MODE -->|"payoutFiat (Stellar destination)"| REDIR2["Mint redirected to<br/>AutoRamp distribution account"]
+  REDIR1 --> VERIFY{"verifyPayoutBurn<br/>decode attested CCTP v2 message;<br/>check route, USDC token,<br/>mint into distribution,<br/>sender = transfer.sourceAddress"}
+  REDIR2 --> VERIFY
+  VERIFY -->|"all checks pass"| AMT["amount = min(minted − fee, expectedAmount)"]
+  VERIFY -->|any mismatch| HELD["PAYOUT_HELD"]
+  AMT --> FLOOR{"live quote ≥ slippage floor?"}
+  FLOOR -->|no| HELD
+  FLOOR -->|"yes: payoutStablecoinCode"| PAYSC["sendFromDistribution<br/>corridor stablecoin → user"]
+  FLOOR -->|"yes: payoutFiat"| PAYFIAT["OfframpDeliveryService<br/>→ bank / M-Pesa payout"]
+```
 
 ---
 
