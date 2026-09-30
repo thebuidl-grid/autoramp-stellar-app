@@ -1,0 +1,41 @@
+'use client';
+
+// IMPORTANT: This must be imported before any @circle-fin or @stellar packages
+// to disable BigNumber.DEBUG which throws on >15 significant digit numbers.
+import "@/lib/bignumber-fix";
+
+import { ReactNode, useEffect, useState } from 'react';
+import { AuthProvider } from "@/components/auth/auth-provider";
+import { Toaster } from "@/components/ui/toast";
+import { WagmiProviderWrapper } from "@/components/providers/wagmi-provider";
+import { SolanaProvider } from "@/components/providers/solana-provider";
+
+interface RootProviderProps {
+    children: ReactNode;
+}
+
+export function RootProvider({ children }: RootProviderProps) {
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    // During SSR and until hydration, we render only basic structure
+    // to avoid mismatch and SES/chunk load errors during boot
+    if (!mounted) {
+        return <div className="min-h-screen bg-black" />;
+    }
+
+    return (
+        <WagmiProviderWrapper>
+            <SolanaProvider>
+                <AuthProvider>
+                    {children}
+                    <Toaster />
+                </AuthProvider>
+            </SolanaProvider>
+        </WagmiProviderWrapper>
+    );
+}
+
