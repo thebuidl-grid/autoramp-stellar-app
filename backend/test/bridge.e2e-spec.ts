@@ -5,6 +5,37 @@ import { decodeFunctionData } from 'viem';
 import { createTestApp, TestApp } from './utils/test-app';
 import { createTestUser, signJwtFor } from './utils/auth-helpers';
 import { BridgeService } from '../src/modules/bridge/bridge.service';
+import { ConfigService } from '@nestjs/config';
+import {
+  buildCctpForwarderHookData,
+  hexToBuffer,
+  stellarContractToBytes32,
+} from '../src/modules/bridge/cctp-encoding.util';
+
+const toBytes32 = (hex: string) => hexToBuffer(hex.replace(/^0x/, '').padStart(64, '0'));
+
+/** Builds a CCTP v2 burn message with the byte layout Circle attests to (see decodeCctpV2BurnMessage). */
+function encodeBurnMessage(opts: {
+  sourceDomain: number;
+  destinationDomain: number;
+  burnToken: string;
+  mintRecipient: string;
+  amount: bigint;
+  messageSender: string;
+  hookData: string;
+}): string {
+  const header = Buffer.alloc(148);
+  header.writeUInt32BE(1, 0);
+  header.writeUInt32BE(opts.sourceDomain, 4);
+  header.writeUInt32BE(opts.destinationDomain, 8);
+  const body = Buffer.alloc(228);
+  body.writeUInt32BE(1, 0);
+  toBytes32(opts.burnToken).copy(body, 4);
+  toBytes32(opts.mintRecipient).copy(body, 36);
+  toBytes32(opts.amount.toString(16)).copy(body, 68);
+  toBytes32(opts.messageSender).copy(body, 100);
+  return `0x${Buffer.concat([header, body, hexToBuffer(opts.hookData)]).toString('hex')}`;
+}
 
 // Mirrors the private ABI in EvmRelayerService — only what's needed to
 // decode calldata for assertions.
@@ -357,6 +388,7 @@ describe('USDC bridge infra — Phase 1: inbound CCTP to Stellar (e2e)', () => {
         data: {
           reference,
           sourceChain: 'base',
+          sourceAddress: evmSourceAddress,
           destinationChain: 'stellar',
           destinationAddress: destination,
           expectedAmount: 100,
@@ -369,8 +401,23 @@ describe('USDC bridge infra — Phase 1: inbound CCTP to Stellar (e2e)', () => {
         },
       });
 
+      // A genuine-shaped attested burn: 100 USDC from evmSourceAddress on
+      // Base, minting via the forwarder into AutoRamp's distribution
+      // account — payout verification rejects anything less specific.
+      const stellarChain = await (ctx.prisma as any).chain.findUnique({ where: { name: 'stellar' } });
+      const distributionAccount = ctx.app.get(ConfigService).get<string>('STELLAR_DISTRIBUTION_PUBLIC_KEY') as string;
+      const message = encodeBurnMessage({
+        sourceDomain: 6,
+        destinationDomain: stellarChain.cctpDomain,
+        burnToken: evmUsdcAddress,
+        mintRecipient: stellarContractToBytes32(stellarChain.cctpForwarderAddress),
+        amount: 100_000_000n,
+        messageSender: evmSourceAddress,
+        hookData: buildCctpForwarderHookData(distributionAccount),
+      });
+
       ctx.httpService.get.mockReturnValue(
-        of({ data: { messages: [{ status: 'complete', message: '0xdeadbeef', attestation: '0xcafebabe' }] } }),
+        of({ data: { messages: [{ status: 'complete', message, attestation: '0xcafebabe' }] } }),
       );
       ctx.stellarService.mintCctpTransfer.mockResolvedValue(`stellarMintHash_${reference}`);
 
