@@ -1,6 +1,8 @@
 # AutoRamp
 
-**AutoRamp is a cross-border payments app for Africa.** People can move money between their local currency and stablecoins (digital dollars and digital local currencies), and between stablecoins on different blockchains. They never need to understand the crypto underneath: they pay by bank transfer or M-Pesa and get a stablecoin, or send a stablecoin and get money in their bank or M-Pesa account.
+**AutoRamp is a cross-border payments app.** People can move money between their local currency and stablecoins (digital dollars and digital local currencies), and between stablecoins on different blockchains. They never need to understand the crypto underneath: they pay with a local method such as bank transfer or mobile money and get a stablecoin, or send a stablecoin and get money in their bank or mobile-money account.
+
+Each country is added as a **corridor** (see [Supported countries](#supported-countries-corridors)). Nigeria, Ghana and Kenya are live in the code today, and new countries are added as configuration, not code.
 
 **Stellar is the home chain.** AutoRamp issues a stablecoin for each local currency on Stellar, and connects to other blockchains through Circle's CCTP.
 
