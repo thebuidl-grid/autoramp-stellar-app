@@ -1,12 +1,12 @@
 # AutoRamp
 
-AutoRamp is a cross-border payments app that moves money between **local bank currency** and **stablecoins**, and between **stablecoins on different blockchains**, without the user needing to understand the crypto plumbing underneath.
+AutoRamp is a cross-border payments app that moves money between **local bank currency** and **stablecoins**, and between **stablecoins on different blockchains**, without the user needing to understand the crypto plumbing underneath. It currently supports **Nigeria (NGN), Ghana (GHS) and Kenya (KES)**; see [Supported corridors](#supported-corridors).
 
 ## What AutoRamp can do
 
 ### For everyday users
 - **Buy (onramp):** pay in local currency by bank transfer (or M-Pesa mobile money in Kenya) and receive a stablecoin in your wallet. For example, pay ₦10,000 and receive 10,000 CNGN. Delivery can go to a Stellar wallet or, via a bridge, to a wallet on an EVM chain such as Base.
-- **Sell (offramp):** send a stablecoin and receive local currency in your bank account. The stablecoin can come from Stellar or from any supported chain.
+- **Sell (offramp):** send a stablecoin and receive local currency in your bank account, or in your M-Pesa wallet in Kenya. The stablecoin can come from Stellar or from any supported chain.
 - **Swap:** trade one stablecoin for another on the same chain. On Stellar this uses path payments; on EVM chains it uses the 0x Swap API. Your own wallet signs every swap.
 - **Bridge:** move USDC between blockchains using Circle's CCTP, for example Base → Stellar, and optionally convert it into a different stablecoin on arrival.
 - **Track transactions:** see onramp, offramp and swap history with live status updates.
@@ -23,10 +23,27 @@ AutoRamp is a cross-border payments app that moves money between **local bank cu
 - **Transactions:** oversee transactions platform-wide, with analytics for volume, success rate and trends over time.
 - **Corridors:** add or change a country, its currency, its stablecoin and its banking partner. No code change is needed.
 
+### Supported corridors
+Each country is a **corridor**: a local currency, the Stellar stablecoin that represents it, and the banking partner that moves the real money. Corridors are rows in the database (`npm run seed` creates the three below), so adding a country doesn't need a code change.
+
+| Country | Currency | Stablecoin | Buy (pay in) | Sell (paid out to) | Partner | Licensing |
+|---|---|---|---|---|---|---|
+| 🇳🇬 Nigeria | NGN (naira) | **CNGN** | Bank transfer to a virtual account | Bank account | SafeHaven (default) | Partnered |
+| 🇬🇭 Ghana | GHS (cedi) | **CGHS** | Bank transfer to a virtual account | Bank account (GhIPSS) | Paystack | Unlicensed |
+| 🇰🇪 Kenya | KES (shilling) | **CKES** | **M-Pesa**: a payment prompt pops up on the user's phone | **M-Pesa** mobile wallet | Paystack | Unlicensed |
+
+All three stablecoins trade against each other and against USDC and XLM on Stellar. That means a user can, for example, buy CKES with shillings and swap it to USDC or CNGN.
+
+**Kenya (KES) notes:**
+- **Buying** uses Paystack's Charge API to send an M-Pesa prompt to the user's phone, because Paystack's virtual bank accounts only support NGN and GHS. The user must enter a phone number in +254 format.
+- **Selling** pays out to an M-Pesa number via Paystack Transfers. Payouts to Kenyan bank accounts are not supported yet.
+- **Not yet tested live:** the KES flow is built from Paystack's documentation but hasn't been run against Paystack's live sandbox. Confirm the M-Pesa charge response and KES amount units with a real test key before launch.
+- **No license yet:** AutoRamp has no license or licensed partner in Kenya, so treat the corridor as ready to demo, not ready for production.
+
 ### Supported rails
 | Layer | What's used |
 |---|---|
-| Home chain | **Stellar**, where AutoRamp issues local-currency stablecoins (CNGN for NGN, CGHS for GHS, and so on) |
+| Home chain | **Stellar**, where AutoRamp issues local-currency stablecoins (CNGN, CGHS, CKES) |
 | Other chains | Base, Ethereum, Arbitrum, Optimism, Polygon and Avalanche, via Circle CCTP |
 | Bank rails | **SafeHaven** (recommended), **Paystack** and **Flint**, chosen per country corridor |
 | Other services | Circle Iris (bridge attestations), 0x (EVM swaps), Resend (email), MonieRate (FX rates) |
@@ -64,7 +81,7 @@ npm run start:dev    # watch mode
 npm run start:prod   # production (after npm run build)
 ```
 
-The frontend expects the API at `http://localhost:3001` by default (`NEXT_PUBLIC_API_URL`), so set `PORT=3001` when running both locally. Swagger docs are served at `/api`.
+When running the frontend locally, set `PORT` to match its `NEXT_PUBLIC_API_URL` (the frontend's `.env.example` uses 3003; with no value set it falls back to 3001). Swagger docs are served at `/api`.
 
 ### Stellar testnet helpers
 ```bash
