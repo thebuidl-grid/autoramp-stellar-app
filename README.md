@@ -21,13 +21,13 @@
 
 A **corridor** is one country's local currency, the Stellar stablecoin that represents it, and the banking partner that moves the real money. Corridors are database rows, so adding a country doesn't need a code change.
 
-| Country | Currency | Stablecoin | Buy (pay in) | Sell (paid out to) | Banking partner |
-|---|---|---|---|---|---|
-| 🇳🇬 Nigeria | NGN (naira) | **CNGN** | Bank transfer | Bank account | SafeHaven |
-| 🇬🇭 Ghana | GHS (cedi) | **CGHS** | Bank transfer | Bank account | Paystack |
-| 🇰🇪 Kenya | KES (shilling) | **CKES** | **M-Pesa** prompt on your phone | **M-Pesa** wallet | Paystack |
+| Country | Currency | Stablecoin | Buy (pay in) | Sell (paid out to) |
+|---|---|---|---|---|
+| 🇳🇬 Nigeria | NGN (naira) | **CNGN** | Bank transfer | Bank account |
+| 🇬🇭 Ghana | GHS (cedi) | **CGHS** | Bank transfer | Bank account |
+| 🇰🇪 Kenya | KES (shilling) | **CKES** | **M-Pesa** prompt on your phone | **M-Pesa** wallet |
 
-Nigeria operates through a licensed partner. Ghana and Kenya aren't licensed yet, and Kenya hasn't been tested against Paystack's live sandbox. See [`backend/README.md`](backend/README.md#supported-corridors) for details.
+AutoRamp partners with a different local payment rail in each country: bank-transfer rails in Nigeria and Ghana, and a mobile-money rail (M-Pesa) in Kenya. All of them plug into one common interface, so adding a new rail doesn't change the rest of the app. Nigeria operates through a licensed partner. Ghana and Kenya aren't licensed yet, and Kenya's mobile-money flow hasn't been tested live yet. See [`backend/README.md`](backend/README.md#supported-corridors) for details.
 
 ---
 
@@ -59,7 +59,7 @@ flowchart TB
 
   subgraph External["External systems"]
     direction LR
-    RAILS["Bank rails per corridor<br/>SafeHaven · Paystack (M-Pesa) · Flint"]
+    RAILS["Payment rails per corridor<br/>local bank + mobile-money partners"]
     XLM["Stellar network<br/>CNGN · CGHS · CKES · USDC"]
     EVM["EVM chains<br/>Base · Ethereum · Arbitrum<br/>Optimism · Polygon · Avalanche"]
     IRIS["Circle Iris<br/>CCTP attestations"]
@@ -87,9 +87,9 @@ Every local stablecoin trades through a small set of **hub assets** (USDC and XL
 ```mermaid
 flowchart TB
   subgraph Corridors["Corridor registry (DB rows, seeded by prisma/seed.ts)"]
-    NG["🇳🇬 NG · NGN<br/>→ CNGN<br/>SafeHaven (bank transfer)"]
-    GH["🇬🇭 GH · GHS<br/>→ CGHS<br/>Paystack (bank transfer)"]
-    KE["🇰🇪 KE · KES<br/>→ CKES<br/>Paystack (M-Pesa)"]
+    NG["🇳🇬 NG · NGN<br/>→ CNGN<br/>bank transfer rail"]
+    GH["🇬🇭 GH · GHS<br/>→ CGHS<br/>bank transfer rail"]
+    KE["🇰🇪 KE · KES<br/>→ CKES<br/>mobile money rail (M-Pesa)"]
   end
 
   subgraph Hub["Hub assets on Stellar (no $100 minimum)"]
@@ -140,7 +140,7 @@ autoramp-stellar-app/
 | Backend | NestJS, Prisma, PostgreSQL, Socket.IO, `@stellar/stellar-sdk`, viem |
 | Frontend | Next.js 16, React 19, Tailwind CSS 4, Zustand, TanStack Query, Stellar Wallets Kit |
 | Blockchains | Stellar (Horizon + Soroban), plus EVM chains via Circle CCTP |
-| Payment partners | SafeHaven, Paystack (including M-Pesa), Flint |
+| Payment rails | Local bank-transfer and mobile-money partners per country, behind one pluggable interface |
 | Other services | Circle Iris (bridge attestations), 0x (EVM swaps), Resend (email), MonieRate (FX rates) |
 
 ---
@@ -169,7 +169,7 @@ npm run dev                   # http://localhost:3000
 
 For a working Stellar testnet environment, run `npm run setup:testnet` in `backend/` once. It creates and funds the accounts and writes the keys to `.env`.
 
-**Before going live**, set `NODE_ENV=production`, `FLINT_WEBHOOK_SECRET` and `SAFEHAVEN_WEBHOOK_SHARED_SECRET`, and make sure `OTP_DEV_RETURN_CODE` is **not** set. [`backend/README.md`](backend/README.md#security-relevant-settings) explains each one.
+**Before going live**, set `NODE_ENV=production` and the webhook secret for each payment rail you use (listed in `backend/.env.example`), and make sure `OTP_DEV_RETURN_CODE` is **not** set. [`backend/README.md`](backend/README.md#security-relevant-settings) explains each one.
 
 ## Tests
 
