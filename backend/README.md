@@ -48,7 +48,7 @@ All three stablecoins trade against each other and against USDC and XLM on Stell
 | Bank rails | **SafeHaven** (recommended), **Paystack** and **Flint**, chosen per country corridor |
 | Other services | Circle Iris (bridge attestations), 0x (EVM swaps), Resend (email), MonieRate (FX rates) |
 
-For a full architectural reference (money flows, custody model, data model and known gaps), see [`../docs.md`](../docs.md).
+For **architecture maps**, see [`../docs.md` §2](../docs.md#2-architecture-maps). It has diagrams of the system, the corridors and asset hub, the Buy and Sell flows, the CCTP bridge lifecycle, the cross-chain payout modes, and custody and signing keys. The same file also covers the data model and known gaps.
 
 ---
 
