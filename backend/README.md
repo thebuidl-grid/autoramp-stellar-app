@@ -24,20 +24,20 @@ AutoRamp is a cross-border payments app that moves money between **local bank cu
 - **Corridors:** add or change a country, its currency, its stablecoin and its banking partner. No code change is needed.
 
 ### Supported corridors
-Each country is a **corridor**: a local currency, the Stellar stablecoin that represents it, and the banking partner that moves the real money. Corridors are rows in the database (`npm run seed` creates the three below), so adding a country doesn't need a code change.
+Each country is a **corridor**: a local currency, the Stellar stablecoin that represents it, and the local payment rail that moves the real money. Corridors are rows in the database (`npm run seed` creates the three below), so adding a country doesn't need a code change.
 
-| Country | Currency | Stablecoin | Buy (pay in) | Sell (paid out to) | Partner | Licensing |
-|---|---|---|---|---|---|---|
-| 🇳🇬 Nigeria | NGN (naira) | **CNGN** | Bank transfer to a virtual account | Bank account | SafeHaven (default) | Partnered |
-| 🇬🇭 Ghana | GHS (cedi) | **CGHS** | Bank transfer to a virtual account | Bank account (GhIPSS) | Paystack | Unlicensed |
-| 🇰🇪 Kenya | KES (shilling) | **CKES** | **M-Pesa**: a payment prompt pops up on the user's phone | **M-Pesa** mobile wallet | Paystack | Unlicensed |
+| Country | Currency | Stablecoin | Buy (pay in) | Sell (paid out to) | Licensing |
+|---|---|---|---|---|---|
+| 🇳🇬 Nigeria | NGN (naira) | **CNGN** | Bank transfer to a virtual account | Bank account | Partnered |
+| 🇬🇭 Ghana | GHS (cedi) | **CGHS** | Bank transfer to a virtual account | Bank account (GhIPSS) | Unlicensed |
+| 🇰🇪 Kenya | KES (shilling) | **CKES** | **M-Pesa**: a payment prompt pops up on the user's phone | **M-Pesa** mobile wallet | Unlicensed |
 
 All three stablecoins trade against each other and against USDC and XLM on Stellar. That means a user can, for example, buy CKES with shillings and swap it to USDC or CNGN.
 
 **Kenya (KES) notes:**
-- **Buying** uses Paystack's Charge API to send an M-Pesa prompt to the user's phone, because Paystack's virtual bank accounts only support NGN and GHS. The user must enter a phone number in +254 format.
-- **Selling** pays out to an M-Pesa number via Paystack Transfers. Payouts to Kenyan bank accounts are not supported yet.
-- **Not yet tested live:** the KES flow is built from Paystack's documentation but hasn't been run against Paystack's live sandbox. Confirm the M-Pesa charge response and KES amount units with a real test key before launch.
+- **Buying** sends an M-Pesa payment prompt straight to the user's phone through the mobile-money rail, instead of a virtual bank account. The user must enter a phone number in +254 format.
+- **Selling** pays out to an M-Pesa number. Payouts to Kenyan bank accounts are not supported yet.
+- **Not yet tested live:** the KES flow is built from the rail's documentation but hasn't been run against its live sandbox. Confirm the M-Pesa charge response and KES amount units with a real test key before launch.
 - **No license yet:** AutoRamp has no license or licensed partner in Kenya, so treat the corridor as ready to demo, not ready for production.
 
 ### Supported rails
@@ -45,7 +45,7 @@ All three stablecoins trade against each other and against USDC and XLM on Stell
 |---|---|
 | Home chain | **Stellar**, where AutoRamp issues local-currency stablecoins (CNGN, CGHS, CKES) |
 | Other chains | Base, Ethereum, Arbitrum, Optimism, Polygon and Avalanche, via Circle CCTP |
-| Bank rails | **SafeHaven** (recommended), **Paystack** and **Flint**, chosen per country corridor |
+| Payment rails | Local bank-transfer and mobile-money partners, chosen per country corridor. Each plugs into one common interface, so adding a rail doesn't change the rest of the app. |
 | Other services | Circle Iris (bridge attestations), 0x (EVM swaps), Resend (email), MonieRate (FX rates) |
 
 For the architecture diagrams, see [Architecture](#architecture) below. The full internal reference, covering the custody model, data model and known gaps, is in [`../docs.md`](../docs.md).
@@ -83,7 +83,7 @@ flowchart TB
 
   subgraph External["External systems"]
     direction LR
-    RAILS["Bank rails per corridor<br/>SafeHaven · Paystack (M-Pesa) · Flint"]
+    RAILS["Payment rails per corridor<br/>local bank + mobile-money partners"]
     XLM["Stellar network<br/>CNGN · CGHS · CKES · USDC"]
     EVM["EVM chains<br/>Base · Ethereum · Arbitrum<br/>Optimism · Polygon · Avalanche"]
     IRIS["Circle Iris<br/>CCTP attestations"]
@@ -110,9 +110,9 @@ Every corridor stablecoin trades through the hub assets, so any pair can be swap
 ```mermaid
 flowchart TB
   subgraph Corridors["Corridor registry (DB rows, seeded by prisma/seed.ts)"]
-    NG["🇳🇬 NG · NGN<br/>→ CNGN<br/>SafeHaven (bank transfer)"]
-    GH["🇬🇭 GH · GHS<br/>→ CGHS<br/>Paystack (bank transfer)"]
-    KE["🇰🇪 KE · KES<br/>→ CKES<br/>Paystack (M-Pesa)"]
+    NG["🇳🇬 NG · NGN<br/>→ CNGN<br/>bank transfer rail"]
+    GH["🇬🇭 GH · GHS<br/>→ CGHS<br/>bank transfer rail"]
+    KE["🇰🇪 KE · KES<br/>→ CKES<br/>mobile money rail (M-Pesa)"]
   end
 
   subgraph Hub["Hub assets on Stellar (no $100 minimum)"]
@@ -264,8 +264,7 @@ npm run seed                # seed the corridor registry (needs CNGN_ISSUER_PUBL
 `.env.example` documents every variable. `src/config/env.validation.ts` is the authoritative list, and the app refuses to start if a required one is missing.
 
 ### Security-relevant settings
-- **`FLINT_WEBHOOK_SECRET`:** without it, Flint webhooks are rejected. Register the callback URL as `.../stablestack/webhook?key=<secret>`.
-- **`SAFEHAVEN_WEBHOOK_SHARED_SECRET`:** append it as `?key=` to the SafeHaven webhook URL.
+- **Payment rail webhook secrets** (the `*_WEBHOOK_*` variables in `.env.example`): set the secret for each rail you use that has one, and add it as `?key=<secret>` to the webhook URL registered with that rail. Some rails' webhooks are rejected outright without it.
 - **`OTP_DEV_RETURN_CODE=true`:** for local development only. When email delivery fails, the sign-in code is returned in the API response. It's ignored when `NODE_ENV=production`, so leave it unset anywhere real users can sign in.
 - **`NODE_ENV=production`:** set it explicitly in production. It defaults to `development`.
 
