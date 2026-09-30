@@ -1,0 +1,16 @@
+{
+  "name": "@autoramp/stellar-cctp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Circle CCTP USDC integration for Stellar (Soroban)",
+  "main": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^13.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

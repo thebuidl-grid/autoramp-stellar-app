@@ -119,19 +119,28 @@ flowchart TB
 
 ```
 autoramp-stellar-app/
-├── backend/    NestJS API: onramp/offramp, corridors, swaps, CCTP bridge + relayer,
-│               merchant API, admin, auth. PostgreSQL via Prisma.
-├── frontend/   Next.js web app: Buy / Sell / Swap / Cross-chain, history,
-│               merchant dashboard, admin portal.
-├── docs/       Public merchant API reference (Mintlify site + OpenAPI spec).
-└── docs.md     Internal architecture reference: flows, custody, data model, known gaps.
+├── backend/            NestJS API: onramp/offramp, corridors, swaps, CCTP bridge + relayer,
+│                       merchant API, admin, auth. PostgreSQL via Prisma.
+├── frontend/           Next.js web app for the Stellar corridors: Buy / Sell / Swap /
+│                       Cross-chain (incl. M-Pesa), history, merchant dashboard, admin portal.
+├── autoramp-frontend/  Next.js web app maintained on main: EVM swaps (0x), bridging,
+│                       OTC desk, merchant and admin dashboards.
+├── stellar-cctp/       Standalone TypeScript package for Circle CCTP on Stellar (Soroban):
+│                       burn, attestation polling, forwarder hook data, receive.
+├── docs/               Public merchant API reference (Mintlify site + OpenAPI spec).
+├── docs.md             Internal architecture reference: flows, custody, data model, known gaps.
+└── CONTRIBUTING.md     Development workflow, branching, commit and PR conventions.
 ```
 
 | Folder | Start here |
 |---|---|
 | [`backend/`](backend) | [`backend/README.md`](backend/README.md): features, corridors, architecture diagrams, setup, env settings, tests |
 | [`frontend/`](frontend) | [`frontend/README.md`](frontend/README.md): pages, wallets, env variables, running locally |
+| [`autoramp-frontend/`](autoramp-frontend) | [`autoramp-frontend/README.md`](autoramp-frontend/README.md) |
+| [`stellar-cctp/`](stellar-cctp) | [`CONTRIBUTING.md` → Working with the stellar-cctp package](CONTRIBUTING.md#working-with-the-stellar-cctp-package); exports in [`stellar-cctp/src/index.ts`](stellar-cctp/src/index.ts) |
 | [`docs/`](docs) | [`docs/introduction.mdx`](docs/introduction.mdx), [`docs/quickstart.mdx`](docs/quickstart.mdx) and [`docs/openapi.json`](docs/openapi.json) for merchants integrating the API |
+
+> **Two frontends, for now.** `frontend/` is the UI built for this backend's Stellar corridors. `autoramp-frontend/` is the team's app from `main`. Both are kept intact after merging `main` into this branch, so nothing is lost. Merging them into one app is a separate follow-up.
 
 ## Tech stack
 
