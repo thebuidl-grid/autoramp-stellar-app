@@ -1,0 +1,149 @@
+"use client";
+
+import { useState } from "react";
+import {
+    Users,
+    Search,
+    UserPlus,
+    Mail,
+    Phone,
+    Wallet,
+    MoreHorizontal
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useQuery } from "@tanstack/react-query";
+import { adminApi } from "@/lib/api";
+import { format } from "date-fns";
+
+export default function AdminUsersPage() {
+    const [page, setPage] = useState(1);
+    const limit = 10;
+
+    const { data: usersResponse, isLoading } = useQuery({
+        queryKey: ["admin-users", page],
+        queryFn: async () => {
+            const { data } = await adminApi.getUsers(page, limit);
+            return data;
+        },
+    });
+
+    return (
+        <div className="space-y-8">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+                    <p className="text-muted-foreground">
+                        Manage all registered users and their permissions.
+                    </p>
+                </div>
+                <Button className="gap-2">
+                    <UserPlus className="h-4 w-4" />
+                    Add User
+                </Button>
+            </div>
+
+            <Card>
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                        <CardTitle>All Users</CardTitle>
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                type="search"
+                                placeholder="Search users..."
+                                className="w-[200px] lg:w-[300px] pl-8 h-9"
+                            />
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    <div className="rounded-md border">
+                        <table className="w-full text-sm">
+                            <thead className="bg-muted/50 border-b">
+                                <tr>
+                                    <th className="p-4 text-left font-medium">User</th>
+                                    <th className="p-4 text-left font-medium">Contact</th>
+                                    <th className="p-4 text-left font-medium">Role</th>
+                                    <th className="p-4 text-left font-medium">Joined</th>
+                                    <th className="p-4 text-right font-medium">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {isLoading ? (
+                                    <tr>
+                                        <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                                            Loading users...
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    usersResponse?.users.map((user) => (
+                                        <tr key={user.id} className="border-b transition-colors hover:bg-muted/50">
+                                            <td className="p-4 align-middle font-medium">
+                                                {user.email}
+                                            </td>
+                                            <td className="p-4 align-middle">
+                                                <div className="flex flex-col text-xs gap-1">
+                                                    <span className="flex items-center gap-1">
+                                                        <Mail className="h-3 w-3" /> {user.email}
+                                                    </span>
+                                                    {user.phoneNumber && (
+                                                        <span className="flex items-center gap-1">
+                                                            <Phone className="h-3 w-3" /> {user.phoneNumber}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="p-4 align-middle capitalize">
+                                                <Badge variant={user.role === "admin" ? "default" : "secondary"}>
+                                                    {user.role}
+                                                </Badge>
+                                            </td>
+                                            <td className="p-4 align-middle text-muted-foreground">
+                                                {format(new Date(user.createdAt), "MMM d, yyyy")}
+                                            </td>
+                                            <td className="p-4 align-middle text-right">
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" className="h-8 w-8 p-0">
+                                                            <MoreHorizontal className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                        <DropdownMenuItem>View Details</DropdownMenuItem>
+                                                        <DropdownMenuItem>Edit Permissions</DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem className="text-red-500">Suspend User</DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
+function Badge({ children, variant }: { children: React.ReactNode, variant?: "default" | "secondary" }) {
+    return (
+        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${variant === "default" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
+            }`}>
+            {children}
+        </span>
+    );
+}
