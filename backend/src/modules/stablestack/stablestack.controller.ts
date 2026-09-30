@@ -34,6 +34,13 @@ import { UseInterceptors } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiLoggingInterceptor } from '../api-keys/interceptors/api-logging.interceptor';
 
+/** Constant-time string comparison, so a webhook secret can't be recovered by timing. */
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+
 @ApiTags('Stablestack')
 @Controller('stablestack')
 export class StablestackController {
@@ -244,8 +251,22 @@ export class WebhookController {
   @ApiOperation({ summary: 'Receive webhook from Flint API' })
   @ApiBody({ type: Object })
   @ApiResponse({ status: 200, description: 'Webhook processed successfully' })
+  @ApiResponse({ status: 401, description: 'Invalid or missing shared-secret key' })
   @ApiResponse({ status: 404, description: 'Transaction not found' })
-  async handleWebhook(@Body() webhookData: any) {
+  async handleWebhook(@Body() webhookData: any, @Req() req: Request) {
+    // Flint's webhook has no documented signature scheme, and a completed
+    // onramp mints stablecoin from AutoRamp's distribution account — so
+    // this fails closed: FLINT_WEBHOOK_SECRET must be configured, and the
+    // caller must present it as `?key=` on the registered callback URL or
+    // in an `x-webhook-secret` header.
+    const expectedKey = this.configService.get<string>('FLINT_WEBHOOK_SECRET');
+    const providedKey =
+      (req.headers['x-webhook-secret'] as string | undefined) ||
+      (req.query?.key as string | undefined);
+    if (!expectedKey || !providedKey || !safeEqual(providedKey, expectedKey)) {
+      throw new UnauthorizedException('Missing or invalid Flint webhook key');
+    }
+
     return this.webhookService.processWebhook(webhookData);
   }
 

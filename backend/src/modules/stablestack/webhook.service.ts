@@ -6,6 +6,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { WebhookDto } from './dto/webhook.dto';
 import { SwapGateway } from '../swap/swap.gateway';
@@ -140,6 +141,19 @@ export class WebhookService {
         throw new NotFoundException(
           `Transaction not found: ${transactionId || reference}`,
         );
+      }
+
+      // This endpoint only speaks for Flint. A transaction on a corridor
+      // routed through another processor (SafeHaven, Paystack) gets its
+      // status from that processor's own verified webhook — accepting a
+      // Flint-shaped completion for it here would let anyone who can reach
+      // this URL mark an unpaid onramp as paid.
+      const corridor = await this.corridorService.findByStablecoinCode(transaction.tokenType || 'CNGN');
+      if (corridor.rampProcessorProvider !== 'flint') {
+        this.logger.warn(
+          `Ignoring Flint webhook for ${transaction.reference}: its corridor uses '${corridor.rampProcessorProvider}', not flint`,
+        );
+        return { ignored: true, reason: 'transaction is not on a Flint corridor' };
       }
 
       const mappedStatus = this.mapStatus(status || 'pending');
@@ -545,7 +559,14 @@ export class WebhookService {
       !(transaction.metadata as any)?.mintTransactionHash &&
       !(transaction.metadata as any)?.bridgeReference
     ) {
-      const mintAmount = extra.processedAmount?.toString() || transaction.amount.toString();
+      // Never deliver more than the onramp was created for — a processor-
+      // reported amount can only lower it (a short payment), not raise it.
+      const orderedAmount = new Prisma.Decimal(transaction.amount.toString());
+      const mintAmount = (
+        extra.processedAmount
+          ? Prisma.Decimal.min(new Prisma.Decimal(extra.processedAmount.toString()), orderedAmount)
+          : orderedAmount
+      ).toString();
       const corridor = await this.corridorService.findByStablecoinCode(transaction.tokenType || 'CNGN');
 
       const payoutChain = transaction.payoutChain || 'stellar';

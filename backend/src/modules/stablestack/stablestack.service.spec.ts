@@ -420,6 +420,44 @@ describe('StablestackService', () => {
       expect(result.status).toBe('PROCESSING');
     });
 
+    it('pays out only what was deposited when it is less than the declared amount (dust deposit)', async () => {
+      stellarService.findIncomingPaymentByMemo.mockResolvedValue({
+        amount: '0.0000001',
+        transactionHash: 'dustHash',
+      });
+      prisma.offrampTransaction.update.mockResolvedValue({ status: 'PROCESSING' });
+
+      await service.completeDepositIfMemoMatched(offrampFixture({ amount: '1000000' }));
+
+      expect(rampProcessor.executeOfframpPayout).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 0.0000001 }),
+      );
+    });
+
+    it('caps the payout at the declared amount when more was deposited', async () => {
+      stellarService.findIncomingPaymentByMemo.mockResolvedValue({
+        amount: '25000.0000000',
+        transactionHash: 'overpaidHash',
+      });
+      prisma.offrampTransaction.update.mockResolvedValue({ status: 'PROCESSING' });
+
+      await service.completeDepositIfMemoMatched(offrampFixture({ amount: '10000' }));
+
+      expect(rampProcessor.executeOfframpPayout).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 10000 }),
+      );
+    });
+
+    it('does not claim or pay out a zero-amount deposit', async () => {
+      stellarService.findIncomingPaymentByMemo.mockResolvedValue({ amount: '0.0000000', transactionHash: 'zeroHash' });
+
+      const result = await service.completeDepositIfMemoMatched(offrampFixture());
+
+      expect(result).toBeNull();
+      expect(prisma.offrampTransaction.updateMany).not.toHaveBeenCalled();
+      expect(rampProcessor.executeOfframpPayout).not.toHaveBeenCalled();
+    });
+
     it('does not double-trigger the payout when another caller already claimed the transaction', async () => {
       stellarService.findIncomingPaymentByMemo.mockResolvedValue({ amount: '5000', transactionHash: 'h' });
       prisma.offrampTransaction.updateMany.mockResolvedValue({ count: 0 }); // already claimed elsewhere

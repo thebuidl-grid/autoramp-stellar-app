@@ -112,8 +112,9 @@ export const authApi = {
     api.post<AuthResponse>("/auth/admin/login", data),
 
   sendOtp: (data: SendOtpDto) =>
-    // devOtpCode is only ever present outside production, when email
-    // delivery isn't configured (see backend OtpService.sendOtp) — lets
+    // devOtpCode is only present when the backend opts in via
+    // OTP_DEV_RETURN_CODE=true (never in production) and email delivery
+    // fails (see backend OtpService.sendOtp) — lets
     // the sign-up flow still be tested end-to-end locally.
     api.post<{ success: boolean; message: string; devOtpCode?: string }>(
       "/auth/otp/send",

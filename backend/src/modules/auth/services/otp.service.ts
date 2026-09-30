@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../database/prisma.service';
 import { Resend } from 'resend';
+import * as crypto from 'crypto';
 
 /**
  * OTP Service
@@ -13,7 +14,7 @@ export class OtpService {
   private readonly logger = new Logger(OtpService.name);
   private readonly resend: Resend;
   private readonly fromEmail: string;
-  private readonly isProduction: boolean;
+  private readonly returnCodeOnSendFailure: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -25,14 +26,21 @@ export class OtpService {
     }
     this.resend = new Resend(apiKey);
     this.fromEmail = this.configService.get<string>('RESEND_FROM_EMAIL') || 'onboarding@resend.dev';
-    this.isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+    // Handing the code back in the HTTP response lets anyone who can make
+    // email delivery fail sign in as any address, so it must be an explicit
+    // opt-in — NODE_ENV alone isn't enough, since it defaults to
+    // 'development' and a deploy that forgets to set it would silently leak
+    // codes. Never honored in production, even if the flag is set.
+    this.returnCodeOnSendFailure =
+      this.configService.get<string>('OTP_DEV_RETURN_CODE') === 'true' &&
+      this.configService.get<string>('NODE_ENV') !== 'production';
   }
 
   /**
-   * Generate a 6-digit OTP code
+   * Generate a 6-digit OTP code from a CSPRNG (Math.random is predictable).
    */
   private generateOtpCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return crypto.randomInt(100000, 1000000).toString();
   }
 
   /**
@@ -141,16 +149,14 @@ export class OtpService {
         message: 'OTP sent successfully to your email',
       };
     } catch (error: any) {
-      // Outside production, a real email provider often isn't configured
-      // yet (e.g. a placeholder RESEND_API_KEY during local/testnet work).
-      // Rather than delete the OTP and block the whole auth flow, keep it
-      // valid and hand the code back directly so the flow is still
-      // genuinely testable end-to-end. NEVER do this in production —
-      // gated strictly on NODE_ENV, not on whether the error looks like
-      // an auth failure, so a real misconfigured key can't leak codes.
-      if (!this.isProduction) {
+      // Local/testnet work often has no real email provider configured
+      // (e.g. a placeholder RESEND_API_KEY). When a developer has
+      // explicitly opted in via OTP_DEV_RETURN_CODE=true (see the
+      // constructor), keep the OTP valid and hand the code back directly so
+      // the flow is still testable end-to-end.
+      if (this.returnCodeOnSendFailure) {
         this.logger.warn(
-          `Resend send failed (${error.message || 'unknown error'}) — returning OTP directly since NODE_ENV != production. code=${code} email=${email}`,
+          `Resend send failed (${error.message || 'unknown error'}) — returning OTP directly since OTP_DEV_RETURN_CODE=true. email=${email}`,
         );
         return {
           success: true,

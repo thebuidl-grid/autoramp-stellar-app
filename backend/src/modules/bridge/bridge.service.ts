@@ -1,5 +1,5 @@
 import { Injectable, Logger, BadRequestException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
-import { Chain as PrismaChain } from '@prisma/client';
+import { Chain as PrismaChain, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { StellarService } from '../stellar/stellar.service';
 import { SwapService } from '../swap/swap.service';
@@ -10,7 +10,7 @@ import { ChainTokenRegistryService } from './chain-token-registry.service';
 import { CctpAttestationClient } from './providers/cctp-attestation-client.service';
 import { EvmRelayerService } from './providers/evm-relayer.service';
 import { ZeroXSwapQuoteService } from './providers/zerox-swap-quote.service';
-import { buildCctpForwarderHookData, hexToBuffer, stellarContractToBytes32 } from './cctp-encoding.util';
+import { buildCctpForwarderHookData, decodeCctpV2BurnMessage, hexToBuffer, stellarContractToBytes32 } from './cctp-encoding.util';
 import { CreateBridgeTransferDto } from './dto/create-bridge-transfer.dto';
 import { generateTrxReference } from '../../utils/reference.util';
 import { ConfigService } from '@nestjs/config';
@@ -266,6 +266,7 @@ export class BridgeService {
           sourceChain: sourceChain.name,
           destinationChain: destinationChain.name,
           destinationAddress,
+          sourceAddress: dto.sourceAddress,
           expectedAmount: effectiveUsdcAmount,
           payoutStablecoinCode: dto.payoutStablecoinCode?.toUpperCase(),
           payoutTokenCode,
@@ -316,6 +317,7 @@ export class BridgeService {
         sourceChain: sourceChain.name,
         destinationChain: destinationChain.name,
         destinationAddress,
+        sourceAddress: dto.sourceAddress,
         expectedAmount: effectiveUsdcAmount,
         payoutStablecoinCode: dto.payoutStablecoinCode?.toUpperCase(),
         payoutTokenCode,
@@ -624,9 +626,11 @@ export class BridgeService {
    * trusting client input" discipline as
    * StablestackService.confirmOfframpDeposit.
    */
-  async registerBurn(reference: string, burnTxHash: string): Promise<any> {
+  async registerBurn(reference: string, burnTxHash: string, userId?: string | null): Promise<any> {
     const transfer = await this.prisma.bridgeTransfer.findUnique({ where: { reference } });
-    if (!transfer) {
+    // Another user's transfer is reported as not found, rather than letting
+    // them attach a burn hash to it (or learn that the reference exists).
+    if (!transfer || (transfer.userId && transfer.userId !== userId)) {
       throw new NotFoundException(`Bridge transfer ${reference} not found`);
     }
     if (transfer.status !== 'PENDING_BURN') {
@@ -705,6 +709,7 @@ export class BridgeService {
     sourceChain: string;
     destinationChain: string;
     destinationAddress: string;
+    sourceAddress?: string | null;
     payoutStablecoinCode: string | null;
     payoutFiat: boolean;
     payoutBankCode: string | null;
@@ -775,10 +780,33 @@ export class BridgeService {
 
       this.logger.log(`Bridge transfer ${transfer.reference} completed: ${mintTxHash}`);
 
-      if (transfer.payoutStablecoinCode) {
-        await this.payoutCorridorStablecoin(transfer);
-      } else if (transfer.payoutFiat) {
-        await this.deliverOfframp(transfer);
+      if (transfer.payoutStablecoinCode || transfer.payoutFiat) {
+        // Custodial payouts spend AutoRamp's own funds, so they're sized
+        // from the attested burn itself — never from expectedAmount alone,
+        // which is just what the caller declared at intent time.
+        let usdcAmount: number;
+        try {
+          const sourceChain = await this.chainRegistry.findByName(transfer.sourceChain);
+          const mintedUsdc = this.verifyPayoutBurn(transfer, message, sourceChain, destinationChain);
+          const expected = new Prisma.Decimal(String(transfer.expectedAmount ?? 0));
+          usdcAmount = Prisma.Decimal.min(mintedUsdc, expected).toNumber();
+        } catch (error: any) {
+          await this.prisma.bridgeTransfer.update({
+            where: { id: transfer.id },
+            data: {
+              status: 'PAYOUT_HELD',
+              errorMessage: `Attested burn failed payout verification — held for manual review: ${error.message}`,
+            },
+          });
+          this.logger.warn(`Bridge transfer ${transfer.reference}: payout held — ${error.message}`);
+          return true;
+        }
+
+        if (transfer.payoutStablecoinCode) {
+          await this.payoutCorridorStablecoin(transfer, usdcAmount);
+        } else {
+          await this.deliverOfframp(transfer, usdcAmount);
+        }
       }
 
       return true;
@@ -800,6 +828,56 @@ export class BridgeService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Checks that an attested CCTP message is really the burn this payout
+   * transfer asked for, and returns the USDC it actually minted. Without
+   * this, anyone could create a large payout intent, then register a tiny
+   * burn of their own — or front-run someone else's visible burn hash —
+   * and be paid out of AutoRamp's funds for the declared amount.
+   *
+   * Payout modes always bridge from an EVM chain into Stellar (they require
+   * a Stellar destination, and source !== destination), so the amount is
+   * in EVM USDC's 6-decimal base units.
+   */
+  private verifyPayoutBurn(
+    transfer: { destinationAddress: string; sourceAddress?: string | null },
+    message: string,
+    sourceChain: PrismaChain,
+    destinationChain: PrismaChain,
+  ): Prisma.Decimal {
+    if (sourceChain.chainType !== 'EVM') {
+      throw new Error(`payout transfers must burn on an EVM chain, not ${sourceChain.name}`);
+    }
+    if (!transfer.sourceAddress) {
+      throw new Error('transfer has no recorded sourceAddress to match the burn sender against');
+    }
+
+    const burn = decodeCctpV2BurnMessage(message);
+    const expected = this.buildDestinationEncoding(destinationChain, transfer.destinationAddress, true);
+    const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+    if (burn.sourceDomain !== sourceChain.cctpDomain || burn.destinationDomain !== destinationChain.cctpDomain) {
+      throw new Error(
+        `burn route ${burn.sourceDomain}->${burn.destinationDomain} does not match ${sourceChain.cctpDomain}->${destinationChain.cctpDomain}`,
+      );
+    }
+    if (!same(burn.burnToken, EvmRelayerService.addressToBytes32(sourceChain.usdcAddress as Address))) {
+      throw new Error(`burned token ${burn.burnToken} is not ${sourceChain.name} USDC`);
+    }
+    if (!same(burn.mintRecipient, expected.mintRecipient) || !same(burn.hookData, expected.hookData ?? '0x')) {
+      throw new Error("burn does not mint to AutoRamp's distribution account");
+    }
+    if (!same(burn.messageSender, EvmRelayerService.addressToBytes32(transfer.sourceAddress as Address))) {
+      throw new Error(`burn was sent by ${burn.messageSender}, not this transfer's source wallet ${transfer.sourceAddress}`);
+    }
+
+    const minted = burn.amount - burn.feeExecuted;
+    if (minted <= 0n) {
+      throw new Error('burn minted nothing after fees');
+    }
+    return new Prisma.Decimal(formatUnits(minted, 6));
   }
 
   private requireForwarder(chain: PrismaChain): string {
@@ -824,22 +902,20 @@ export class BridgeService {
    * distribution account, so holding for manual review is zero-custodial-
    * risk, unlike guessing at a "close enough" amount.
    */
-  private async payoutCorridorStablecoin(transfer: {
-    id: string;
-    reference: string;
-    destinationAddress: string;
-    payoutStablecoinCode: string | null;
-    expectedAmount: any;
-    minPayoutAmount: any;
-  }): Promise<void> {
-    if (!transfer.payoutStablecoinCode || !transfer.expectedAmount) return;
+  private async payoutCorridorStablecoin(
+    transfer: {
+      id: string;
+      reference: string;
+      destinationAddress: string;
+      payoutStablecoinCode: string | null;
+      minPayoutAmount: any;
+    },
+    usdcAmount: number,
+  ): Promise<void> {
+    if (!transfer.payoutStablecoinCode || !usdcAmount) return;
 
     const corridor = await this.corridorService.findByStablecoinCode(transfer.payoutStablecoinCode);
-    const quote = await this.swapService.getSwapQuote(
-      'USDC',
-      corridor.stablecoinCode,
-      parseFloat(String(transfer.expectedAmount)),
-    );
+    const quote = await this.swapService.getSwapQuote('USDC', corridor.stablecoinCode, usdcAmount);
 
     const minPayoutAmount = transfer.minPayoutAmount !== null && transfer.minPayoutAmount !== undefined
       ? parseFloat(String(transfer.minPayoutAmount))
@@ -885,17 +961,19 @@ export class BridgeService {
    * minutes earlier, and the USDC is already safely held, so holding for
    * manual review beats guessing at a "close enough" fiat amount.
    */
-  private async deliverOfframp(transfer: {
-    id: string;
-    reference: string;
-    userId: string | null;
-    payoutBankCode: string | null;
-    payoutAccountNumber: string | null;
-    payoutFiatCurrency: string | null;
-    expectedAmount: any;
-    minPayoutAmount: any;
-  }): Promise<void> {
-    if (!transfer.payoutBankCode || !transfer.payoutAccountNumber || !transfer.payoutFiatCurrency || !transfer.expectedAmount) return;
+  private async deliverOfframp(
+    transfer: {
+      id: string;
+      reference: string;
+      userId: string | null;
+      payoutBankCode: string | null;
+      payoutAccountNumber: string | null;
+      payoutFiatCurrency: string | null;
+      minPayoutAmount: any;
+    },
+    usdcAmount: number,
+  ): Promise<void> {
+    if (!transfer.payoutBankCode || !transfer.payoutAccountNumber || !transfer.payoutFiatCurrency || !usdcAmount) return;
     if (!transfer.userId) {
       // Shouldn't happen in practice — Sell requires an AutoRamp login — but
       // OfframpTransaction.userId is a required column, so this can't
@@ -909,7 +987,7 @@ export class BridgeService {
     }
 
     const corridor = await this.corridorService.findByCurrency(transfer.payoutFiatCurrency);
-    const quote = await this.swapService.getSwapQuote('USDC', corridor.stablecoinCode, parseFloat(String(transfer.expectedAmount)));
+    const quote = await this.swapService.getSwapQuote('USDC', corridor.stablecoinCode, usdcAmount);
 
     const minPayoutAmount = transfer.minPayoutAmount !== null && transfer.minPayoutAmount !== undefined
       ? parseFloat(String(transfer.minPayoutAmount))

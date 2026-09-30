@@ -27,6 +27,10 @@ export const validationSchema = Joi.object({
   JWT_SECRET: Joi.string().required(),
   JWT_EXPIRES_IN: Joi.string().default('24h').optional().allow('', null),
 
+  // Dev-only: return the OTP in the /auth/otp/send response when email
+  // delivery fails. Ignored when NODE_ENV=production — see OtpService.
+  OTP_DEV_RETURN_CODE: Joi.string().valid('true', 'false').optional().allow('', null),
+
   // Database
   DATABASE_URL: Joi.string().required(),
 
@@ -90,6 +94,9 @@ export const validationSchema = Joi.object({
   // STABLESTACK (Flint)
   STABLESTACK_API_URL: Joi.string().uri().optional().allow('', null),
   STABLESTACK_API_KEY: Joi.string().optional().allow('', null),
+  // Shared secret Flint must present on POST /stablestack/webhook. Unset =
+  // every Flint webhook is rejected (fail closed).
+  FLINT_WEBHOOK_SECRET: Joi.string().optional().allow('', null),
 
   // Ramp processor selection — code fallback is 'flint' if unset, but
   // 'safehaven' is the recommended value now that AutoRamp is a signed

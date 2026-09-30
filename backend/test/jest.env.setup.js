@@ -8,6 +8,9 @@ process.env.RESEND_API_KEY = process.env.RESEND_API_KEY || 'test-resend-key';
 process.env.MONIE_RATE_API_KEY = process.env.MONIE_RATE_API_KEY || 'test-monierate-key';
 process.env.STABLESTACK_API_URL = process.env.STABLESTACK_API_URL || 'https://flint.example.com';
 process.env.STABLESTACK_API_KEY = process.env.STABLESTACK_API_KEY || 'test-flint-key';
+// Set unconditionally (not `||`) so e2e assertions about the Flint webhook's
+// shared-secret check don't depend on whatever a developer's .env contains.
+process.env.FLINT_WEBHOOK_SECRET = 'test-flint-webhook-secret';
 // Most e2e suites assume Flint is the active ramp processor (it's the
 // easiest to mock via a plain HttpService stub — see test-app.ts's corridor
 // seed comment) and don't set this themselves. Without a default here, the

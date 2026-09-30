@@ -13,6 +13,35 @@ import { ZeroXSwapQuoteService } from './providers/zerox-swap-quote.service';
 import { SwapService } from '../swap/swap.service';
 import { CorridorService } from '../corridor/corridor.service';
 import { OfframpDeliveryService } from '../stablestack/offramp-delivery.service';
+import { buildCctpForwarderHookData, hexToBuffer, stellarContractToBytes32 } from './cctp-encoding.util';
+
+const u256 = (n: bigint) => Buffer.from(n.toString(16).padStart(64, '0'), 'hex');
+const toBytes32 = (address: string) => hexToBuffer(address.replace(/^0x/, '').padStart(64, '0'));
+
+/** Builds a CCTP v2 burn message with the same byte layout Circle attests to. */
+function encodeBurnMessage(opts: {
+  sourceDomain: number;
+  destinationDomain: number;
+  burnToken: string;
+  mintRecipient: string;
+  amount: bigint;
+  messageSender: string;
+  feeExecuted?: bigint;
+  hookData: string;
+}): string {
+  const header = Buffer.alloc(148);
+  header.writeUInt32BE(1, 0);
+  header.writeUInt32BE(opts.sourceDomain, 4);
+  header.writeUInt32BE(opts.destinationDomain, 8);
+  const body = Buffer.alloc(228);
+  body.writeUInt32BE(1, 0);
+  toBytes32(opts.burnToken).copy(body, 4);
+  toBytes32(opts.mintRecipient).copy(body, 36);
+  u256(opts.amount).copy(body, 68);
+  toBytes32(opts.messageSender).copy(body, 100);
+  u256(opts.feeExecuted ?? 0n).copy(body, 164);
+  return `0x${Buffer.concat([header, body, hexToBuffer(opts.hookData)]).toString('hex')}`;
+}
 
 describe('BridgeService', () => {
   let service: BridgeService;
@@ -54,7 +83,9 @@ describe('BridgeService', () => {
     name: 'base',
     chainType: 'EVM',
     cctpDomain: 6,
-    usdcAddress: '0xusdc',
+    // A well-formed address: payout verification compares it, as bytes32,
+    // against the burnToken in the attested CCTP message.
+    usdcAddress: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
     tokenMessengerAddress: '0xTokenMessenger',
     messageTransmitterAddress: '0xMessageTransmitter',
   };
@@ -741,6 +772,22 @@ describe('BridgeService', () => {
       prisma.bridgeTransfer.findUnique.mockResolvedValue(null);
       await expect(service.registerBurn('missing', '0xhash')).rejects.toThrow(NotFoundException);
     });
+
+    it("refuses to attach a burn to another user's transfer", async () => {
+      prisma.bridgeTransfer.findUnique.mockResolvedValue({ id: 't1', status: 'PENDING_BURN', userId: 'owner' });
+
+      await expect(service.registerBurn('txn_ref_x', '0xburnhash', 'someone-else')).rejects.toThrow(NotFoundException);
+      expect(prisma.bridgeTransfer.update).not.toHaveBeenCalled();
+    });
+
+    it("lets the transfer's owner register its burn", async () => {
+      prisma.bridgeTransfer.findUnique.mockResolvedValue({ id: 't1', status: 'PENDING_BURN', userId: 'owner' });
+      prisma.bridgeTransfer.update.mockResolvedValue({ id: 't1', status: 'BURNED' });
+
+      await expect(service.registerBurn('txn_ref_x', '0xburnhash', 'owner')).resolves.toEqual(
+        expect.objectContaining({ status: 'BURNED' }),
+      );
+    });
   });
 
   describe('findAndCompletePendingTransfers', () => {
@@ -819,6 +866,38 @@ describe('BridgeService', () => {
       expect(stellarService.mintCctpTransfer).not.toHaveBeenCalled();
     });
 
+    /** A genuine 100 USDC burn from evmSourceAddress on Base, minting into AutoRamp's distribution account. */
+    const payoutBurn = (overrides: Partial<Parameters<typeof encodeBurnMessage>[0]> = {}) =>
+      encodeBurnMessage({
+        sourceDomain: baseChain.cctpDomain,
+        destinationDomain: stellarChain.cctpDomain,
+        burnToken: baseChain.usdcAddress,
+        mintRecipient: stellarContractToBytes32(stellarChain.cctpForwarderAddress),
+        amount: 100_000_000n,
+        messageSender: evmSourceAddress,
+        hookData: buildCctpForwarderHookData(distributionAccount),
+        ...overrides,
+      });
+
+    const fiatPayoutTransfer = (overrides: Record<string, any> = {}) => ({
+      id: 't1',
+      reference: 'txn_ref_a',
+      status: 'BURNED',
+      burnTxHash: '0xhash1',
+      userId: 'user-1',
+      sourceChain: 'base',
+      sourceAddress: evmSourceAddress,
+      destinationChain: 'stellar',
+      destinationAddress: distributionAccount,
+      payoutStablecoinCode: null,
+      payoutFiat: true,
+      payoutBankCode: '058',
+      payoutAccountNumber: '0123456789',
+      payoutFiatCurrency: 'NGN',
+      expectedAmount: 100,
+      ...overrides,
+    });
+
     it('pays out the corridor stablecoin after a Stellar mint when payoutStablecoinCode is set', async () => {
       prisma.bridgeTransfer.findMany.mockResolvedValue([
         {
@@ -828,6 +907,7 @@ describe('BridgeService', () => {
           burnTxHash: '0xhash1',
           userId: 'user-1',
           sourceChain: 'base',
+          sourceAddress: evmSourceAddress,
           destinationChain: 'stellar',
           destinationAddress: destination,
           payoutStablecoinCode: 'CNGN',
@@ -835,7 +915,7 @@ describe('BridgeService', () => {
         },
       ]);
       attestationClient.getAttestation.mockResolvedValue({
-        message: '0xdead',
+        message: payoutBurn(),
         attestation: '0xbeef',
         status: 'complete',
       });
@@ -858,26 +938,9 @@ describe('BridgeService', () => {
     });
 
     it('pays out fiat via OfframpDeliveryService after a Stellar mint when payoutFiat is set', async () => {
-      prisma.bridgeTransfer.findMany.mockResolvedValue([
-        {
-          id: 't1',
-          reference: 'txn_ref_a',
-          status: 'BURNED',
-          burnTxHash: '0xhash1',
-          userId: 'user-1',
-          sourceChain: 'base',
-          destinationChain: 'stellar',
-          destinationAddress: distributionAccount,
-          payoutStablecoinCode: null,
-          payoutFiat: true,
-          payoutBankCode: '058',
-          payoutAccountNumber: '0123456789',
-          payoutFiatCurrency: 'NGN',
-          expectedAmount: 100,
-        },
-      ]);
+      prisma.bridgeTransfer.findMany.mockResolvedValue([fiatPayoutTransfer()]);
       attestationClient.getAttestation.mockResolvedValue({
-        message: '0xdead',
+        message: payoutBurn(),
         attestation: '0xbeef',
         status: 'complete',
       });
@@ -902,27 +965,9 @@ describe('BridgeService', () => {
     });
 
     it('holds the transfer for manual review when the live fiat quote falls below the floor set at intent creation', async () => {
-      prisma.bridgeTransfer.findMany.mockResolvedValue([
-        {
-          id: 't1',
-          reference: 'txn_ref_a',
-          status: 'BURNED',
-          burnTxHash: '0xhash1',
-          userId: 'user-1',
-          sourceChain: 'base',
-          destinationChain: 'stellar',
-          destinationAddress: distributionAccount,
-          payoutStablecoinCode: null,
-          payoutFiat: true,
-          payoutBankCode: '058',
-          payoutAccountNumber: '0123456789',
-          payoutFiatCurrency: 'NGN',
-          expectedAmount: 100,
-          minPayoutAmount: 155000,
-        },
-      ]);
+      prisma.bridgeTransfer.findMany.mockResolvedValue([fiatPayoutTransfer({ minPayoutAmount: 155000 })]);
       attestationClient.getAttestation.mockResolvedValue({
-        message: '0xdead',
+        message: payoutBurn(),
         attestation: '0xbeef',
         status: 'complete',
       });
@@ -942,6 +987,116 @@ describe('BridgeService', () => {
       expect(prisma.bridgeTransfer.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 't1' }, data: expect.objectContaining({ status: 'PAYOUT_HELD' }) }),
       );
+    });
+
+    describe('payout verification against the attested burn', () => {
+      beforeEach(() => {
+        stellarService.mintCctpTransfer.mockResolvedValue('mintHash1');
+        corridorService.findByCurrency.mockResolvedValue({ countryCode: 'NG', fiatCurrency: 'NGN', stablecoinCode: 'CNGN' });
+        swapService.getSwapQuote.mockResolvedValue({ destinationAmount: '1600', exchangeRate: 1600 });
+        offrampDeliveryService.executePayout.mockResolvedValue({ offrampReference: 'offramp_ref_1' });
+        prisma.bridgeTransfer.update.mockResolvedValue({});
+      });
+
+      const expectHeld = (reason: string) => {
+        expect(offrampDeliveryService.executePayout).not.toHaveBeenCalled();
+        expect(stellarService.sendFromDistribution).not.toHaveBeenCalled();
+        expect(prisma.bridgeTransfer.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 't1' },
+            data: expect.objectContaining({ status: 'PAYOUT_HELD', errorMessage: expect.stringContaining(reason) }),
+          }),
+        );
+      };
+
+      it('sizes the payout from what was actually burned, not the declared expectedAmount', async () => {
+        // Declares 1,000,000 USDC but only burns 1 USDC.
+        prisma.bridgeTransfer.findMany.mockResolvedValue([fiatPayoutTransfer({ expectedAmount: 1_000_000 })]);
+        attestationClient.getAttestation.mockResolvedValue({
+          message: payoutBurn({ amount: 1_000_000n }),
+          attestation: '0xbeef',
+          status: 'complete',
+        });
+
+        await service.findAndCompletePendingTransfers();
+
+        expect(swapService.getSwapQuote).toHaveBeenCalledWith('USDC', 'CNGN', 1);
+        expect(offrampDeliveryService.executePayout).toHaveBeenCalledWith(expect.objectContaining({ fiatAmount: '1600' }));
+      });
+
+      it('deducts the CCTP fee Circle took before minting', async () => {
+        prisma.bridgeTransfer.findMany.mockResolvedValue([fiatPayoutTransfer()]);
+        attestationClient.getAttestation.mockResolvedValue({
+          message: payoutBurn({ amount: 100_000_000n, feeExecuted: 10_000n }),
+          attestation: '0xbeef',
+          status: 'complete',
+        });
+
+        await service.findAndCompletePendingTransfers();
+
+        expect(swapService.getSwapQuote).toHaveBeenCalledWith('USDC', 'CNGN', 99.99);
+      });
+
+      it('holds when the burn was sent by a different wallet (e.g. a front-run of someone else\'s burn hash)', async () => {
+        prisma.bridgeTransfer.findMany.mockResolvedValue([fiatPayoutTransfer()]);
+        attestationClient.getAttestation.mockResolvedValue({
+          message: payoutBurn({ messageSender: '0x00000000000000000000000000000000000000cc' }),
+          attestation: '0xbeef',
+          status: 'complete',
+        });
+
+        await service.findAndCompletePendingTransfers();
+
+        expectHeld('not this transfer\'s source wallet');
+      });
+
+      it('holds when the burn mints somewhere other than the distribution account', async () => {
+        prisma.bridgeTransfer.findMany.mockResolvedValue([fiatPayoutTransfer()]);
+        attestationClient.getAttestation.mockResolvedValue({
+          message: payoutBurn({ hookData: buildCctpForwarderHookData(destination) }),
+          attestation: '0xbeef',
+          status: 'complete',
+        });
+
+        await service.findAndCompletePendingTransfers();
+
+        expectHeld("does not mint to AutoRamp's distribution account");
+      });
+
+      it('holds when the burned token is not the source chain\'s USDC', async () => {
+        prisma.bridgeTransfer.findMany.mockResolvedValue([fiatPayoutTransfer()]);
+        attestationClient.getAttestation.mockResolvedValue({
+          message: payoutBurn({ burnToken: '0x00000000000000000000000000000000000000dd' }),
+          attestation: '0xbeef',
+          status: 'complete',
+        });
+
+        await service.findAndCompletePendingTransfers();
+
+        expectHeld('is not base USDC');
+      });
+
+      it('holds a transfer with no recorded sourceAddress (created before this check existed)', async () => {
+        prisma.bridgeTransfer.findMany.mockResolvedValue([fiatPayoutTransfer({ sourceAddress: null })]);
+        attestationClient.getAttestation.mockResolvedValue({
+          message: payoutBurn(),
+          attestation: '0xbeef',
+          status: 'complete',
+        });
+
+        await service.findAndCompletePendingTransfers();
+
+        expectHeld('no recorded sourceAddress');
+      });
+
+      it('holds when the attested message is not a decodable burn message', async () => {
+        prisma.bridgeTransfer.findMany.mockResolvedValue([fiatPayoutTransfer()]);
+        attestationClient.getAttestation.mockResolvedValue({ message: '0xdead', attestation: '0xbeef', status: 'complete' });
+
+        await service.findAndCompletePendingTransfers();
+
+        expectHeld('too short');
+      });
     });
 
     it('leaves a transfer alone when no attestation is ready yet', async () => {
