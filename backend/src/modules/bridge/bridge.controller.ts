@@ -117,8 +117,8 @@ export class BridgeController {
   @ApiParam({ name: 'reference', description: 'Bridge transfer reference' })
   @ApiBody({ type: RegisterBurnDto })
   @ApiResponse({ status: 201, description: 'Burn registered; relayer will complete the mint once attested' })
-  async registerBurn(@Param('reference') reference: string, @Body() dto: RegisterBurnDto) {
-    return this.bridgeService.registerBurn(reference, dto.burnTxHash);
+  async registerBurn(@CurrentUser() user: any, @Param('reference') reference: string, @Body() dto: RegisterBurnDto) {
+    return this.bridgeService.registerBurn(reference, dto.burnTxHash, user?.id);
   }
 
   @Post('transfers/:reference/build-destination-swap')

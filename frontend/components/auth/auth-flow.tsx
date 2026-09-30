@@ -53,8 +53,8 @@ export function AuthFlow({ onSuccess, disabled }: AuthFlowProps) {
     try {
       const res = await authApi.sendOtp({ email, purpose: "SIGNUP" });
       setStep("otp");
-      // devOtpCode is only ever present outside production (see
-      // OtpService.sendOtp) — when email delivery isn't configured, this
+      // devOtpCode is only present when the backend opts in via
+      // OTP_DEV_RETURN_CODE (see OtpService.sendOtp) — when email delivery isn't configured, this
       // lets the flow still be tested end-to-end.
       const devCode = res.data?.devOtpCode;
       if (devCode) {
