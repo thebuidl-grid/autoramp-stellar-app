@@ -1,5 +1,6 @@
 import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { StellarService } from '../stellar/stellar.service';
 import { getAssetForCorridor } from '../swap/config/constant';
@@ -407,6 +408,18 @@ export class StablestackService {
       return null;
     }
 
+    // Pay out what was actually deposited, capped at what the offramp was
+    // created for — `transaction.amount` is only the user's declared
+    // intent, so paying it unconditionally would let a dust deposit with
+    // the right memo cash out any amount. Any excess over the declared
+    // amount stays in the distribution account for manual refund.
+    const declaredAmount = new Prisma.Decimal(transaction.amount.toString());
+    const depositedAmount = new Prisma.Decimal(found.amount);
+    const payoutAmount = Prisma.Decimal.min(declaredAmount, depositedAmount);
+    if (payoutAmount.lte(0)) {
+      return null;
+    }
+
     const claim = await this.prisma.offrampTransaction.updateMany({
       where: { id: transaction.id, status: 'PENDING' },
       data: { status: 'PROCESSING' },
@@ -426,9 +439,20 @@ export class StablestackService {
         action: 'status_changed',
         oldStatus: 'PENDING',
         newStatus: 'PROCESSING',
-        description: `Deposit confirmed on-chain (${found.transactionHash}). Triggering fiat payout.`,
+        description: `Deposit confirmed on-chain (${found.transactionHash}). Triggering fiat payout of ${payoutAmount.toString()}.`,
+        metadata: {
+          depositTxHash: found.transactionHash,
+          declaredAmount: declaredAmount.toString(),
+          depositedAmount: depositedAmount.toString(),
+          payoutAmount: payoutAmount.toString(),
+        },
       },
     });
+    if (!depositedAmount.eq(declaredAmount)) {
+      this.logger.warn(
+        `Offramp ${transaction.reference}: deposited ${depositedAmount.toString()} but declared ${declaredAmount.toString()} — paying out ${payoutAmount.toString()}`,
+      );
+    }
 
     const rampProcessor = this.rampProcessorRegistry.get(corridor.rampProcessorProvider);
     const webhookUrl = this.configService.get<string>('WEBHOOK_URL');
@@ -436,7 +460,7 @@ export class StablestackService {
     try {
       const payout = await rampProcessor.executeOfframpPayout({
         reference: transaction.reference,
-        amount: Number(transaction.amount),
+        amount: payoutAmount.toNumber(),
         bankCode: transaction.bankCode,
         accountNumber: transaction.accountNumber,
         notifyUrl: webhookUrl,

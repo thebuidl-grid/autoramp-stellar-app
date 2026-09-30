@@ -35,6 +35,64 @@ export function buildCctpForwarderHookData(stellarAddress: string): string {
   return `0x${buffer.toString('hex')}`;
 }
 
+/** The fields of an attested CCTP v2 burn message that decide who gets paid and how much. */
+export interface CctpBurnMessage {
+  sourceDomain: number;
+  destinationDomain: number;
+  /** bytes32, lowercase "0x"-prefixed hex */
+  burnToken: string;
+  /** bytes32, lowercase "0x"-prefixed hex */
+  mintRecipient: string;
+  /** Burned amount, in the source token's base units */
+  amount: bigint;
+  /** bytes32, lowercase "0x"-prefixed hex — the account that called depositForBurn */
+  messageSender: string;
+  /** Fee Circle deducted from `amount` before minting, in base units */
+  feeExecuted: bigint;
+  /** lowercase "0x"-prefixed hex, "0x" when empty */
+  hookData: string;
+}
+
+// CCTP v2 layouts (circlefin/evm-cctp-contracts MessageV2.sol / BurnMessageV2.sol).
+// Message header: version(4) sourceDomain(4) destinationDomain(4) nonce(32)
+// sender(32) recipient(32) destinationCaller(32) minFinalityThreshold(4)
+// finalityThresholdExecuted(4), then the message body.
+const MESSAGE_BODY_OFFSET = 148;
+// Burn message body: version(4) burnToken(32) mintRecipient(32) amount(32)
+// messageSender(32) maxFee(32) feeExecuted(32) expirationBlock(32), then hookData.
+const BURN_TOKEN = 4;
+const MINT_RECIPIENT = 36;
+const AMOUNT = 68;
+const MESSAGE_SENDER = 100;
+const FEE_EXECUTED = 164;
+const HOOK_DATA = 228;
+
+/**
+ * Decodes the parts of an attested CCTP v2 burn message that matter for
+ * paying out against it. Circle's attestation signs these exact bytes, so
+ * unlike anything a client reports, they're proof of what was actually
+ * burned, by whom, and where the mint lands.
+ */
+export function decodeCctpV2BurnMessage(messageHex: string): CctpBurnMessage {
+  const message = hexToBuffer(messageHex);
+  if (message.length < MESSAGE_BODY_OFFSET + HOOK_DATA) {
+    throw new Error(`CCTP message too short to be a v2 burn message (${message.length} bytes)`);
+  }
+  const body = message.subarray(MESSAGE_BODY_OFFSET);
+  const bytes32 = (buf: Buffer, offset: number) => `0x${buf.subarray(offset, offset + 32).toString('hex')}`;
+
+  return {
+    sourceDomain: message.readUInt32BE(4),
+    destinationDomain: message.readUInt32BE(8),
+    burnToken: bytes32(body, BURN_TOKEN),
+    mintRecipient: bytes32(body, MINT_RECIPIENT),
+    amount: BigInt(bytes32(body, AMOUNT)),
+    messageSender: bytes32(body, MESSAGE_SENDER),
+    feeExecuted: BigInt(bytes32(body, FEE_EXECUTED)),
+    hookData: `0x${body.subarray(HOOK_DATA).toString('hex')}`,
+  };
+}
+
 /** Strips an optional "0x" prefix and returns a Buffer — used for the raw CCTP message/attestation bytes. */
 export function hexToBuffer(hex: string): Buffer {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex;

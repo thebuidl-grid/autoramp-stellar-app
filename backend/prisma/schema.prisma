@@ -491,6 +491,11 @@ model BridgeTransfer {
   destinationChain   String   @default("stellar") @map("destination_chain") // Chain.name
   destinationAddress String   @map("destination_address") // Stellar strkey or EVM 0x address, per destinationChain
   expectedAmount     Decimal? @map("expected_amount") @db.Decimal(20, 7)
+  // The wallet expected to sign the source-chain burn. For custodial payout
+  // modes (payoutStablecoinCode/payoutFiat) the attested CCTP message's
+  // messageSender must match this, so a burn can only be claimed by the
+  // transfer it was built for — see BridgeService.verifyPayoutBurn.
+  sourceAddress      String?  @map("source_address")
 
   // EVM-source custodial collection leg — historical only. The EVM-source
   // burn is now self-custodial too (the user's own connected wallet signs

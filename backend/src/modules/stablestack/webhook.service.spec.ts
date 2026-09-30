@@ -161,6 +161,78 @@ describe('WebhookService', () => {
       expect(stellarService.sendFromDistribution).not.toHaveBeenCalled();
     });
 
+    it('caps the mint at the onramp amount when processedAmount claims more', async () => {
+      prisma.onrampTransaction.findFirst.mockResolvedValue(null);
+      prisma.onrampTransaction.findUnique.mockResolvedValue({
+        id: 'onramp-1',
+        reference: 'txn_ref_onramp',
+        status: 'PENDING',
+        amount: 10000,
+        destinationAddress: destination,
+        userId: 'user-1',
+        metadata: null,
+      });
+      stellarService.sendFromDistribution.mockResolvedValue('mintTxHash');
+      prisma.onrampTransaction.update.mockResolvedValue({ id: 'onramp-1', reference: 'txn_ref_onramp' });
+
+      await service.processWebhook({
+        event: 'onramp.completed',
+        data: { reference: 'txn_ref_onramp', status: 'completed', processedAmount: 1000000 },
+      } as any);
+
+      expect(stellarService.sendFromDistribution).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: '10000', destination }),
+      );
+    });
+
+    it('mints only the processed amount on a short payment', async () => {
+      prisma.onrampTransaction.findFirst.mockResolvedValue(null);
+      prisma.onrampTransaction.findUnique.mockResolvedValue({
+        id: 'onramp-1',
+        reference: 'txn_ref_onramp',
+        status: 'PENDING',
+        amount: 10000,
+        destinationAddress: destination,
+        userId: 'user-1',
+        metadata: null,
+      });
+      stellarService.sendFromDistribution.mockResolvedValue('mintTxHash');
+      prisma.onrampTransaction.update.mockResolvedValue({ id: 'onramp-1', reference: 'txn_ref_onramp' });
+
+      await service.processWebhook({
+        event: 'onramp.completed',
+        data: { reference: 'txn_ref_onramp', status: 'completed', processedAmount: 2500 },
+      } as any);
+
+      expect(stellarService.sendFromDistribution).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: '2500', destination }),
+      );
+    });
+
+    it('ignores a Flint webhook for a transaction whose corridor uses a different processor', async () => {
+      corridorService.findByStablecoinCode.mockResolvedValue({ ...ngnCorridor, rampProcessorProvider: 'safehaven' });
+      prisma.onrampTransaction.findFirst.mockResolvedValue(null);
+      prisma.onrampTransaction.findUnique.mockResolvedValue({
+        id: 'onramp-1',
+        reference: 'txn_ref_onramp',
+        status: 'PENDING',
+        amount: 10000,
+        tokenType: 'CNGN',
+        destinationAddress: destination,
+        userId: 'user-1',
+        metadata: null,
+      });
+
+      const result = await service.processWebhook({
+        event: 'onramp.completed',
+        data: { reference: 'txn_ref_onramp', status: 'completed' },
+      } as any);
+
+      expect(result).toEqual(expect.objectContaining({ ignored: true }));
+      expect(stellarService.sendFromDistribution).not.toHaveBeenCalled();
+      expect(prisma.onrampTransaction.update).not.toHaveBeenCalled();
+    });
+
     it('delegates to OnrampDeliveryService instead of minting directly when payoutChain is not stellar', async () => {
       prisma.onrampTransaction.findFirst.mockResolvedValue(null);
       prisma.onrampTransaction.findUnique.mockResolvedValue({

@@ -154,21 +154,27 @@ describe('Stablestack endpoints (e2e)', () => {
   });
 
   describe('POST /stablestack/webhook', () => {
-    it('is public (no auth) and mints CNGN when an onramp completes', async () => {
+    const flintKey = process.env.FLINT_WEBHOOK_SECRET as string;
+
+    async function createPendingOnramp(destination: string) {
       ctx.httpService.post.mockReturnValue(
         of({ data: { data: { transactionId: 'flint-webhook-1', depositAccount: {} } } }),
       );
-      const destination = Keypair.random().publicKey();
       const onrampRes = await request(ctx.app.getHttpServer())
         .post('/stablestack/onramp')
         .set('Authorization', `Bearer ${token}`)
         .send({ network: 'stellar', amount: 10000, destination: { address: destination } });
-      const reference = onrampRes.body.databaseRecord.reference;
+      return onrampRes.body.databaseRecord.reference as string;
+    }
+
+    it('needs no user auth, only the shared key, and mints CNGN when an onramp completes', async () => {
+      const destination = Keypair.random().publicKey();
+      const reference = await createPendingOnramp(destination);
 
       ctx.stellarService.sendFromDistribution.mockResolvedValue('mintHash1');
 
       const res = await request(ctx.app.getHttpServer())
-        .post('/stablestack/webhook')
+        .post(`/stablestack/webhook?key=${flintKey}`)
         .send({ event: 'onramp.completed', data: { reference, status: 'completed' } });
 
       expect(res.status).toBe(201);
@@ -181,9 +187,45 @@ describe('Stablestack endpoints (e2e)', () => {
       expect((row.metadata as any).mintTransactionHash).toBe('mintHash1');
     });
 
-    it('returns 404 for an unknown reference', async () => {
+    it('rejects a forged completion with no key, or the wrong key, without minting anything', async () => {
+      const destination = Keypair.random().publicKey();
+      const reference = await createPendingOnramp(destination);
+      ctx.stellarService.sendFromDistribution.mockClear();
+
+      const forged = { event: 'onramp.completed', data: { reference, status: 'completed', processedAmount: 1000000 } };
+      const noKey = await request(ctx.app.getHttpServer()).post('/stablestack/webhook').send(forged);
+      const wrongKey = await request(ctx.app.getHttpServer())
+        .post('/stablestack/webhook')
+        .set('x-webhook-secret', 'guessed-secret')
+        .send(forged);
+
+      expect(noKey.status).toBe(401);
+      expect(wrongKey.status).toBe(401);
+      expect(ctx.stellarService.sendFromDistribution).not.toHaveBeenCalled();
+      const row = await (ctx.prisma as any).onrampTransaction.findUnique({ where: { reference } });
+      expect(row.status).toBe('PENDING');
+    });
+
+    it('never mints more than the onramp amount, whatever processedAmount says', async () => {
+      const destination = Keypair.random().publicKey();
+      const reference = await createPendingOnramp(destination);
+      ctx.stellarService.sendFromDistribution.mockClear();
+      ctx.stellarService.sendFromDistribution.mockResolvedValue('mintHash2');
+
       const res = await request(ctx.app.getHttpServer())
         .post('/stablestack/webhook')
+        .set('x-webhook-secret', flintKey)
+        .send({ event: 'onramp.completed', data: { reference, status: 'completed', processedAmount: 1000000 } });
+
+      expect(res.status).toBe(201);
+      expect(ctx.stellarService.sendFromDistribution).toHaveBeenCalledWith(
+        expect.objectContaining({ destination, amount: '10000' }),
+      );
+    });
+
+    it('returns 404 for an unknown reference', async () => {
+      const res = await request(ctx.app.getHttpServer())
+        .post(`/stablestack/webhook?key=${flintKey}`)
         .send({ event: 'onramp.completed', data: { reference: 'txn_ref_doesnotexist', status: 'completed' } });
       expect(res.status).toBe(404);
     });
