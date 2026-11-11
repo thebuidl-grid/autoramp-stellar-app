@@ -3,27 +3,28 @@ import { SwapService } from './swap.service';
 import { SwapController } from './swap.controller';
 import { SwapGateway } from './swap.gateway';
 import { ConfigModule } from '@nestjs/config';
-import { HttpModule } from '@nestjs/axios';
-import { StablestackModule } from '../stablestack/stablestack.module';
-import { ApiKeysModule } from '../api-keys/api-keys.module';
+import { RampModule } from '../ramp/ramp.module';
+// import { ApiKeysModule } from '../api-keys/api-keys.module';
 import { AuthModule } from '../auth/auth.module';
-import { StellarModule } from '../stellar/stellar.module';
-import { CorridorModule } from '../corridor/corridor.module';
 import { JwtModule } from '@nestjs/jwt';
+import { NotificationsModule } from '../merchants/notifications/notifications.module';
+import { ZeroExService } from './integrations/zeroex.service';
+import { HttpModule } from '@nestjs/axios';
+import { DatabaseModule } from '../../database/database.module';
 
 @Module({
   imports: [
     ConfigModule,
-    HttpModule,
-    forwardRef(() => StablestackModule), // Forward ref to avoid circular dependency
-    ApiKeysModule,
+    DatabaseModule,
+    forwardRef(() => RampModule), // Forward ref to avoid circular dependency
+    // ApiKeysModule,
     AuthModule,
-    StellarModule,
-    CorridorModule,
     JwtModule.register({}), // For WebSocket gateway JWT verification
+    NotificationsModule,
+    HttpModule,
   ],
   controllers: [SwapController],
-  providers: [SwapService, SwapGateway],
-  exports: [SwapService, SwapGateway],
+  providers: [SwapService, SwapGateway, ZeroExService],
+  exports: [SwapService, SwapGateway, ZeroExService],
 })
 export class SwapModule {}

@@ -2,10 +2,10 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 
 /**
  * Current User Decorator
- * 
+ *
  * Extracts the current authenticated user from the request object.
  * Use this decorator in route handlers to get the authenticated user.
- * 
+ *
  * @example
  * @Get('profile')
  * async getProfile(@CurrentUser() user: User) {
@@ -18,4 +18,3 @@ export const CurrentUser = createParamDecorator(
     return request.user;
   },
 );
-

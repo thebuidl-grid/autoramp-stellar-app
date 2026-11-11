@@ -29,14 +29,14 @@ export class SignUpDto {
   otpCode: string;
 
   @ApiProperty({
-    example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37',
+    example: '0x1234567890abcdef1234567890abcdef12345678',
     description: 'User wallet address (optional)',
     required: false,
   })
   @IsOptional()
   @IsString()
-  @Matches(/^G[A-Z2-7]{55}$/, {
-    message: 'Wallet address must be a valid Stellar public key',
+  @Matches(/^0x[a-fA-F0-9]{40}$/, {
+    message: 'Wallet address must be a valid Ethereum address',
   })
   walletAddress?: string;
 }

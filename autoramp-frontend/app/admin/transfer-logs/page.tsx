@@ -25,10 +25,11 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import Link from "next/link";
 
 export default function AdminTransferLogsPage() {
-  const [page, setPage] = useState(1);
+  const cursor = useCursorPagination();
   const [transactionId, setTransactionId] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [startDate, setStartDate] = useState("");
@@ -38,15 +39,15 @@ export default function AdminTransferLogsPage() {
   const debouncedTransactionId = useDebounce(transactionId, 400);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-transfer-logs", page, statusFilter, debouncedTransactionId, startDate, endDate],
+    queryKey: ["admin-transfer-logs", cursor.cursor, statusFilter, debouncedTransactionId, startDate, endDate],
     queryFn: async () => {
       const { data } = await adminApi.getTransferLogs(
-        page,
         limit,
         debouncedTransactionId || undefined,
         statusFilter === "all" ? undefined : statusFilter,
         startDate || undefined,
         endDate || undefined,
+        cursor.cursor,
       );
       return data;
     },
@@ -117,10 +118,10 @@ export default function AdminTransferLogsPage() {
                   placeholder="Search transaction ID..."
                   className="w-[200px] lg:w-[250px] pl-8 h-9"
                   value={transactionId}
-                  onChange={(e) => { setTransactionId(e.target.value); setPage(1); }}
+                  onChange={(e) => { setTransactionId(e.target.value); cursor.reset(); }}
                 />
               </div>
-              <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val); setPage(1); }}>
+              <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val); cursor.reset(); }}>
                 <SelectTrigger className="w-[150px] h-9">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
@@ -135,14 +136,14 @@ export default function AdminTransferLogsPage() {
                 type="date"
                 className="w-[150px] h-9"
                 value={startDate}
-                onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+                onChange={(e) => { setStartDate(e.target.value); cursor.reset(); }}
                 placeholder="Start date"
               />
               <Input
                 type="date"
                 className="w-[150px] h-9"
                 value={endDate}
-                onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+                onChange={(e) => { setEndDate(e.target.value); cursor.reset(); }}
                 placeholder="End date"
               />
             </div>
@@ -197,13 +198,20 @@ export default function AdminTransferLogsPage() {
             </table>
           </div>
 
-          {data && data.pagination.totalPages > 1 && (
+          {(cursor.canGoPrevious || data?.hasMore) && (
             <div className="flex items-center justify-end space-x-2 py-4">
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+              <Button variant="outline" size="sm" onClick={cursor.goPrevious} disabled={!cursor.canGoPrevious}>
                 Previous
               </Button>
-              <div className="text-sm font-medium">Page {page} of {data.pagination.totalPages}</div>
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(data.pagination.totalPages, p + 1))} disabled={page === data.pagination.totalPages}>
+              <div className="text-sm font-medium">
+                Page {cursor.pageNumber}{data?.total ? ` of ~${Math.ceil(data.total / limit)}` : ""}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => data?.nextCursor && cursor.goNext(data.nextCursor)}
+                disabled={!data?.hasMore}
+              >
                 Next
               </Button>
             </div>

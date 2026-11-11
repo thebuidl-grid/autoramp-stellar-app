@@ -26,4 +26,3 @@ export class VerifyOtpDto {
   @IsOptional()
   purpose?: string = 'SIGNUP';
 }
-

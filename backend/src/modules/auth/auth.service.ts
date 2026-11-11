@@ -15,7 +15,7 @@ import { OtpService } from './services/otp.service';
 
 /**
  * Auth Service
- * 
+ *
  * Handles user and admin authentication including:
  * - User sign up and sign in
  * - Admin login
@@ -29,16 +29,16 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly otpService: OtpService,
-  ) { }
+  ) {}
 
   /**
    * Sign up or Login (Email-only authentication)
-   * 
+   *
    * Simplified authentication flow:
    * - Verifies OTP code
    * - If user exists: logs them in
    * - If user doesn't exist: creates new account automatically
-   * 
+   *
    * @param signUpDto - User email and OTP code
    * @returns User object and access token
    */
@@ -59,8 +59,13 @@ export class AuthService {
         role: true,
         createdAt: true,
         isApiAccessApproved: true,
+        suspended: true,
       },
     });
+
+    if (user && user.suspended) {
+      throw new UnauthorizedException('Your account has been suspended');
+    }
 
     if (user) {
       // Existing user: just log them in
@@ -77,6 +82,7 @@ export class AuthService {
             role: true,
             createdAt: true,
             isApiAccessApproved: true,
+            suspended: true,
           },
         });
       }
@@ -96,12 +102,13 @@ export class AuthService {
           role: true,
           createdAt: true,
           isApiAccessApproved: true,
+          suspended: true,
         },
       });
     }
 
     // Generate JWT token
-    const token = this.generateToken(user.id, user.email, user.role);
+    const token = this.generateToken(user?.id, user?.email, user?.role);
 
     return {
       user,
@@ -111,9 +118,9 @@ export class AuthService {
 
   /**
    * Sign in an existing user
-   * 
+   *
    * Validates user credentials and returns JWT token.
-   * 
+   *
    * @param signInDto - User login credentials
    * @returns User object (without password) and access token
    */
@@ -129,9 +136,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    if (user.suspended) {
+      throw new UnauthorizedException('Your account has been suspended');
+    }
+
     // Verify password (only if password exists)
     if (!user.password) {
-      throw new UnauthorizedException('Please use email verification to sign in');
+      throw new UnauthorizedException(
+        'Please use email verification to sign in',
+      );
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
@@ -154,9 +167,9 @@ export class AuthService {
 
   /**
    * Admin login
-   * 
+   *
    * Validates admin credentials and returns JWT token.
-   * 
+   *
    * @param adminLoginDto - Admin login credentials
    * @returns Admin object (without password) and access token
    */
@@ -204,9 +217,9 @@ export class AuthService {
 
   /**
    * Generate JWT token
-   * 
+   *
    * Creates a JWT token with user/admin information.
-   * 
+   *
    * @param userId - User or admin ID
    * @param email - User or admin email
    * @param role - User role (USER or ADMIN)
@@ -214,9 +227,6 @@ export class AuthService {
    */
   private generateToken(userId: string, email: string, role: string): string {
     const payload = { userId, email, role };
-    const expiresIn = this.configService.get<string>('JWT_EXPIRES_IN') || '24h';
-
-    return this.jwtService.sign(payload, { expiresIn: expiresIn as any });
+    return this.jwtService.sign(payload);
   }
 }
-

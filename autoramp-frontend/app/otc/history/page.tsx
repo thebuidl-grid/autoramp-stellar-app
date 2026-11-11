@@ -15,7 +15,9 @@ import {
     Filter,
     ArrowRightCircle,
     Copy,
-    ExternalLink
+    ExternalLink,
+    ArrowDownToLine,
+    ArrowUpFromLine
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -158,9 +160,21 @@ export default function OtcHistoryPage() {
                                                     <Copy className="w-3 h-3" />
                                                 </button>
                                             </div>
-                                            <p className="text-lg font-bold">
-                                                {tx.quantity} <span className="text-sm font-normal text-muted-foreground uppercase">{tx.token}</span>
-                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-lg font-bold">
+                                                    {tx.quantity} <span className="text-sm font-normal text-muted-foreground uppercase">{tx.token}</span>
+                                                </p>
+                                                {tx.meta?.type && (
+                                                    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                                        tx.meta.type === "offramp"
+                                                            ? "bg-orange-100 text-orange-700"
+                                                            : "bg-blue-100 text-blue-700"
+                                                    }`}>
+                                                        {tx.meta.type === "offramp" ? <ArrowUpFromLine className="w-2.5 h-2.5" /> : <ArrowDownToLine className="w-2.5 h-2.5" />}
+                                                        {tx.meta.type === "offramp" ? "Offramp" : "Onramp"}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
 
