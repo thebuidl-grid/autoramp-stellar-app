@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate package.json files
+        run: |
+          for f in backend frontend stellar-cctp; do
+            node -e "JSON.parse(require('fs').readFileSync('$f/package.json','utf8'))"
+          done
