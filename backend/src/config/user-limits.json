@@ -1,0 +1,10 @@
+{
+  "defaultMaxAmount": 500000,
+  "minAmount": 2000,
+  "users": {
+    "sagesdn@gmail.com": {
+      "maxAmount": null,
+      "note": "Unlimited - no transaction cap"
+    }
+  }
+}

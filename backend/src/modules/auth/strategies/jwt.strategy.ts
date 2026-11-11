@@ -6,7 +6,7 @@ import { PrismaService } from '../../../database/prisma.service';
 
 /**
  * JWT Strategy
- * 
+ *
  * Validates JWT tokens and extracts user information from the token payload.
  * Used to protect routes that require authentication.
  */
@@ -30,7 +30,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   /**
    * Validate JWT payload and return user information
    * This method is called after the JWT is verified
-   * 
+   *
    * @param payload - Decoded JWT payload containing userId and email
    * @returns User or Admin object to be attached to request
    */
@@ -62,18 +62,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         id: true,
         email: true,
         role: true,
+        suspended: true,
+        isOTCEnabled: true,
       },
     });
 
     if (user) {
+      if (user.suspended) {
+        throw new UnauthorizedException('Your account has been suspended');
+      }
+
       return {
         id: user.id,
         email: user.email,
         role: user.role || 'USER',
+        isOTCEnabled: user.isOTCEnabled,
       };
     }
 
     throw new UnauthorizedException('User not found');
   }
 }
-

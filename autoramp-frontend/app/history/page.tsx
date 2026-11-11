@@ -11,8 +11,19 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { useAuthStore, useIsAuthenticated } from "@/lib/store";
-import { stablestackApi, Transaction, SwapTransaction } from "@/lib/api";
+import {
+  stablestackApi,
+  bridgeApi,
+  Transaction,
+  SwapTransaction,
+  BridgeHistoryItem,
+} from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
+import { formatUnits } from "viem";
+import { explorerTxUrl } from "@/lib/explorers";
+import Link from "next/link";
+import { OfframpDetailLoader } from "@/components/offramp/offramp-detail-loader";
+import { statusMeta } from "@/lib/offramp-status";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowUpRight,
@@ -25,6 +36,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowLeftRight,
+  AlertTriangle,
+  RotateCcw,
+  FileText,
+  Route,
 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 
@@ -36,15 +51,123 @@ interface SwapTransactionWithType extends SwapTransaction {
   type?: "swap";
 }
 
-type AllTransaction = TransactionWithType | SwapTransactionWithType;
+/** Cross-chain USDC transfer (CCTP), from GET /bridge/history. */
+interface BridgeTransactionWithType extends BridgeHistoryItem {
+  id: string;
+  type: "bridge";
+  /** Not returned by /bridge/history; present so the shared footer type-checks. */
+  completedAt?: string | null;
+}
+
+type AllTransaction =
+  | TransactionWithType
+  | SwapTransactionWithType
+  | BridgeTransactionWithType;
+
+/** "Base_Sepolia" -> "Base Sepolia" */
+const chainLabel = (chain: string) => chain.replace(/_/g, " ");
+
+/** The app records bridge amounts in USDC base units (6 dp); tolerate already-decimal values. */
+function formatBridgeAmount(amount: string): string {
+  if (/^\d+$/.test(amount) && Number(amount) >= 100000) {
+    return formatUnits(BigInt(amount), 6);
+  }
+  return amount;
+}
+
+function TxHashLink({ chain, hash }: { chain: string; hash: string }) {
+  const url = explorerTxUrl(chain, hash);
+  return url ? (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-400 font-mono text-xs break-all underline hover:text-blue-300"
+    >
+      {hash}
+    </a>
+  ) : (
+    <span className="text-white font-mono text-xs break-all">{hash}</span>
+  );
+}
+
+/** Expanded bridge row: route, amount and both explorer links (loaded on expand). */
+function BridgeDetails({ tx }: { tx: BridgeTransactionWithType }) {
+  const { data } = useQuery({
+    queryKey: ["bridge-status", tx.reference],
+    queryFn: async () => (await bridgeApi.getStatus(tx.reference)).data,
+    retry: false,
+  });
+  const sourceHash = data?.metadata?.SOURCE_TX;
+  const destinationHash = data?.metadata?.DESTINATION_TX;
+  return (
+    <>
+      <div>
+        <span className="text-white/60">From:</span>
+        <div className="text-white mt-1">{chainLabel(tx.fromChain)}</div>
+      </div>
+      <div>
+        <span className="text-white/60">To:</span>
+        <div className="text-white mt-1">{chainLabel(tx.toChain)}</div>
+      </div>
+      <div>
+        <span className="text-white/60">Amount:</span>
+        <div className="text-white mt-1">
+          {formatBridgeAmount(tx.amount)} USDC
+        </div>
+      </div>
+      <div>
+        <span className="text-white/60">Protocol:</span>
+        <div className="text-white mt-1">Circle CCTP v2</div>
+      </div>
+      {sourceHash && (
+        <div className="md:col-span-2">
+          <span className="text-white/60">
+            Source Tx Hash ({chainLabel(tx.fromChain)}):
+          </span>
+          <div className="mt-1">
+            <TxHashLink chain={tx.fromChain} hash={sourceHash} />
+          </div>
+        </div>
+      )}
+      {destinationHash && (
+        <div className="md:col-span-2">
+          <span className="text-white/60">
+            Destination Tx Hash ({chainLabel(tx.toChain)}):
+          </span>
+          <div className="mt-1">
+            <TxHashLink chain={tx.toChain} hash={destinationHash} />
+          </div>
+        </div>
+      )}
+      {!sourceHash && !destinationHash && tx.transactionHash && (
+        <div className="md:col-span-2">
+          <span className="text-white/60">Transaction Hash:</span>
+          <div className="mt-1">
+            <TxHashLink chain={tx.toChain} hash={tx.transactionHash} />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 function getStatusIcon(status: string) {
   switch (status.toUpperCase()) {
     case "COMPLETED":
+    case "SUCCESS":
       return <CheckCircle className="text-green-400" size={16} />;
     case "FAILED":
     case "REJECTED":
+    case "REVERSED":
+    case "EXPIRED":
       return <XCircle className="text-red-400" size={16} />;
+    case "PARTIAL":
+    case "PARTIALLY_SETTLED":
+    case "INSUFFICIENT_LIQUIDITY":
+      return <AlertTriangle className="text-amber-400" size={16} />;
+    case "REFUNDED":
+      return <RotateCcw className="text-amber-400" size={16} />;
     default:
       return <Clock className="text-amber-400" size={16} />;
   }
@@ -53,9 +176,12 @@ function getStatusIcon(status: string) {
 function getStatusColor(status: string) {
   switch (status.toUpperCase()) {
     case "COMPLETED":
+    case "SUCCESS":
       return "text-green-400";
     case "FAILED":
     case "REJECTED":
+    case "REVERSED":
+    case "EXPIRED":
       return "text-red-400";
     default:
       return "text-amber-400";
@@ -105,8 +231,26 @@ export default function HistoryPage() {
     enabled: isAuthenticated,
   });
 
-  // Combine onramp, offramp, and swap transactions and add type
+  // Bridge transfers live in their own endpoint (GET /bridge/history); the
+  // list isn't paginated server-side, so show them on the first page only.
+  const { data: bridgeData, refetch: refetchBridge } = useQuery({
+    queryKey: ["bridge-history"],
+    queryFn: async () => (await bridgeApi.getHistory()).data,
+    enabled: isAuthenticated,
+    retry: false,
+  });
+  const bridgeTransactions: BridgeTransactionWithType[] =
+    page === 1
+      ? (bridgeData?.transactions ?? []).map((b) => ({
+          ...b,
+          id: b.reference,
+          type: "bridge" as const,
+        }))
+      : [];
+
+  // Combine onramp, offramp, swap and bridge transactions and add type
   const allTransactions: AllTransaction[] = [
+    ...bridgeTransactions,
     ...(transactionsData?.onramp?.map((tx) => ({
       ...tx,
       type: "onramp" as const,
@@ -142,7 +286,7 @@ export default function HistoryPage() {
   const transactions = uniqueTransactions;
 
   const totalPages = transactionsData?.totalPages || 1;
-  const total = transactionsData?.total || 0;
+  const total = (transactionsData?.total || 0) + (bridgeData?.total || 0);
 
   if (!_hasHydrated || !isAuthenticated) {
     return null;
@@ -166,7 +310,10 @@ export default function HistoryPage() {
             </div>
             <Button
               variant="outline"
-              onClick={() => refetch()}
+              onClick={() => {
+                refetch();
+                refetchBridge();
+              }}
               disabled={isLoading}
               className="border-white/10 text-white hover:bg-white/10"
             >
@@ -205,9 +352,14 @@ export default function HistoryPage() {
                   const isOnramp = tx.type === "onramp";
                   const isSwap = tx.type === "swap";
                   const isOfframp = tx.type === "offramp";
+                  const isBridge = tx.type === "bridge";
 
                   let displayAmount: string;
-                  if (isSwap) {
+                  if (isBridge) {
+                    displayAmount = `${formatBridgeAmount(
+                      (tx as BridgeTransactionWithType).amount,
+                    )} USDC`;
+                  } else if (isSwap) {
                     const swapTx = tx as SwapTransactionWithType;
                     displayAmount = `${swapTx.fromAmount} ${swapTx.fromTokenType} → ${swapTx.toAmount} ${swapTx.toTokenType}`;
                   } else if (isOnramp) {
@@ -234,7 +386,9 @@ export default function HistoryPage() {
                       <AccordionTrigger className="hover:no-underline py-3 md:py-4">
                         <div className="flex items-start gap-3 md:gap-4 flex-1 text-left w-full">
                           <div className="mt-0.5 shrink-0">
-                            {isOnramp ? (
+                            {isBridge ? (
+                              <Route className="text-cyan-400" size={20} />
+                            ) : isOnramp ? (
                               <ArrowDownLeft
                                 className="text-green-400"
                                 size={20}
@@ -254,15 +408,28 @@ export default function HistoryPage() {
                           <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                             <div className="min-w-0">
                               <div className="text-white font-semibold text-sm md:text-base">
-                                {isOnramp
-                                  ? "Onramp"
-                                  : isSwap
-                                    ? "Swap"
-                                    : "Offramp"}
+                                {isBridge
+                                  ? "Bridge"
+                                  : isOnramp
+                                    ? "Onramp"
+                                    : isSwap
+                                      ? "Swap"
+                                      : "Offramp"}
                               </div>
                               <div className="text-white/60 text-xs md:text-sm mt-0.5">
                                 {formatDate(tx.createdAt)}
                               </div>
+                              {isBridge && (
+                                <div className="text-cyan-300/80 text-xs mt-0.5">
+                                  {chainLabel(
+                                    (tx as BridgeTransactionWithType).fromChain,
+                                  )}{" "}
+                                  →{" "}
+                                  {chainLabel(
+                                    (tx as BridgeTransactionWithType).toChain,
+                                  )}
+                                </div>
+                              )}
                             </div>
                             <div className="min-w-0">
                               <div className="text-white/60 text-xs md:text-sm">
@@ -280,7 +447,7 @@ export default function HistoryPage() {
                                     tx.status,
                                   )}`}
                                 >
-                                  {tx.status}
+                                  {isOfframp ? statusMeta(tx.status).label : tx.status}
                                 </span>
                               </div>
                             </div>
@@ -317,7 +484,11 @@ export default function HistoryPage() {
                                 {tx.reference}
                               </div>
                             </div>
-                            {isSwap ? (
+                            {isBridge ? (
+                              <BridgeDetails
+                                tx={tx as BridgeTransactionWithType}
+                              />
+                            ) : isSwap ? (
                               <>
                                 <div>
                                   <span className="text-white/60">From:</span>
@@ -484,6 +655,20 @@ export default function HistoryPage() {
                                       </div>
                                     </div>
                                   )}
+                                {isOfframp && (
+                                  <div className="md:col-span-2 mt-2 pt-3 border-t border-white/10">
+                                    <OfframpDetailLoader
+                                      reference={tx.reference}
+                                      compact
+                                    />
+                                    <Link
+                                      href={`/history/${encodeURIComponent(tx.reference)}`}
+                                      className="inline-block mt-3 text-xs text-blue-400 hover:text-blue-300 underline"
+                                    >
+                                      View full details &amp; reconciliation record →
+                                    </Link>
+                                  </div>
+                                )}
                               </>
                             )}
                             {tx.completedAt && (

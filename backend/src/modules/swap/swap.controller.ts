@@ -20,149 +20,55 @@ import {
   ApiSecurity,
 } from '@nestjs/swagger';
 import { SwapService } from './swap.service';
+import { PrismaService } from '../../database/prisma.service';
+import { CreateSwapDto } from './dto/create-swap.dto';
 import { InitializeSwapDto } from './dto/initialize-swap.dto';
 import { CreateSimpleSwapDto } from './dto/create-simple-swap.dto';
-import { AuthOrApiKeyGuard } from '../api-keys/guards/auth-or-api-key.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AuthOrApiKeyGuard } from '../../common/guards/auth-or-api-key.guard';
 
 @ApiTags('Swap')
 @Controller('swap')
 export class SwapController {
-  constructor(private readonly swapService: SwapService) {}
-
-  @Get('corridors')
-  @ApiOperation({
-    summary: 'List active corridors (fiat/stablecoin pairs) the frontend can offer',
-    description: "Public discovery endpoint — drives currency selectors instead of hardcoding NGN/CNGN. 'USDC' is always tradable alongside these and isn't included here.",
-  })
-  @ApiResponse({ status: 200, description: 'Active corridors' })
-  async getCorridors() {
-    return this.swapService.getActiveCorridors();
-  }
-
-  @Get('quote')
-  @ApiOperation({ summary: 'Get a live swap quote between two tradable assets (USDC, XLM, BRIDGE_USDC, or a corridor stablecoin e.g. CNGN, CGHS)' })
-  @ApiQuery({ name: 'fromToken', type: String, required: true, description: "'USDC', 'XLM', 'BRIDGE_USDC' (Circle's real USDC), or a corridor's stablecoin code" })
-  @ApiQuery({ name: 'toToken', type: String, required: true, description: "'USDC', 'XLM', 'BRIDGE_USDC' (Circle's real USDC), or a corridor's stablecoin code" })
-  @ApiQuery({ name: 'amount', type: Number, required: true, description: 'Amount of fromToken to swap' })
-  @ApiResponse({ status: 200, description: 'Quote with source/destination amounts and exchange rate' })
-  async getQuote(
-    @Query('fromToken') fromToken: string,
-    @Query('toToken') toToken: string,
-    @Query('amount') amount: string,
-  ) {
-    const from = fromToken?.toUpperCase();
-    const to = toToken?.toUpperCase();
-    if (!from || !to) {
-      throw new BadRequestException('fromToken and toToken are required');
-    }
-    if (from === to) {
-      throw new BadRequestException('fromToken and toToken must be different');
-    }
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      throw new BadRequestException('Valid amount is required');
-    }
-    return this.swapService.getSwapQuote(from, to, parsedAmount);
-  }
+  constructor(
+    private readonly swapService: SwapService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Get('balance/:token/:address')
   @ApiOperation({ summary: 'Get token balance for an address' })
-  @ApiParam({ name: 'token', description: "Token symbol: 'USDC' or a corridor's stablecoin code (e.g. CNGN, CGHS)" })
-  @ApiParam({ name: 'address', description: 'Stellar public key (G...)' })
+  @ApiParam({ name: 'token', description: 'Token symbol (e.g., USDC, CNGN)' })
+  @ApiParam({ name: 'address', description: 'Wallet address' })
   @ApiResponse({ status: 200, description: 'Token balance as string' })
   async getTokenBalance(
     @Param('token') token: string,
     @Param('address') address: string,
   ): Promise<string | null> {
-    if (!address || !/^G[A-Z2-7]{55}$/.test(address)) {
-      throw new BadRequestException('Valid Stellar address is required');
+    if (!['USDC', 'CNGN'].includes(token.toUpperCase())) {
+      throw new BadRequestException('Token must be USDC or CNGN');
+    }
+    if (!address || !address.startsWith('0x')) {
+      throw new BadRequestException('Valid address is required');
     }
     return this.swapService.getTokenBalance(token.toUpperCase(), address);
-  }
-
-  @Get('trustline/:token/:address')
-  @ApiOperation({ summary: 'Check whether an address has a trustline for a token' })
-  @ApiParam({ name: 'token', description: "Token symbol: 'USDC' or a corridor's stablecoin code (e.g. CNGN, CGHS)" })
-  @ApiParam({ name: 'address', description: 'Stellar public key (G...)' })
-  @ApiResponse({ status: 200, description: 'Whether the trustline exists' })
-  async hasTrustline(
-    @Param('token') token: string,
-    @Param('address') address: string,
-  ): Promise<{ hasTrustline: boolean }> {
-    if (!address || !/^G[A-Z2-7]{55}$/.test(address)) {
-      throw new BadRequestException('Valid Stellar address is required');
-    }
-    return this.swapService.hasTrustline(token.toUpperCase(), address);
-  }
-
-  @Post('trustline/:token/:address/sponsor')
-  @UseGuards(AuthOrApiKeyGuard)
-  @ApiBearerAuth('JWT-auth')
-  @ApiSecurity('API-Key')
-  @ApiOperation({
-    summary: 'Get a sponsored trustline transaction to sign',
-    description:
-      "Builds a transaction (partially signed by AutoRamp's distribution account) that creates a trustline for the given token, with AutoRamp sponsoring the reserve. The user's wallet must sign and submit it. Requires authentication.",
-  })
-  @ApiParam({ name: 'token', description: "Token symbol: 'USDC' or a corridor's stablecoin code (e.g. CNGN, CGHS)" })
-  @ApiParam({ name: 'address', description: "Stellar public key (G...) that will hold the trustline; must already exist on-chain" })
-  @ApiResponse({ status: 201, description: 'Unsigned (by the user) transaction XDR + network passphrase' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getSponsoredTrustline(
-    @Param('token') token: string,
-    @Param('address') address: string,
-  ): Promise<{ xdr: string; networkPassphrase: string }> {
-    if (!address || !/^G[A-Z2-7]{55}$/.test(address)) {
-      throw new BadRequestException('Valid Stellar address is required');
-    }
-    return this.swapService.getSponsoredTrustlineTransaction(token.toUpperCase(), address);
   }
 
   @Get('balances')
   @ApiOperation({ summary: 'Get balances for USDC and CNGN for an address' })
   @ApiQuery({
     name: 'address',
-    description: 'Stellar public key (G...)',
-    required: true,
+    description: 'Wallet address (optional; uses signer if omitted)',
+    required: false,
     type: String,
   })
   @ApiResponse({ status: 200, description: 'Record of balances' })
   async getTokenBalances(
-    @Query('address') address: string,
-  ): Promise<Record<string, string | null>> {
-    if (!address || !/^G[A-Z2-7]{55}$/.test(address)) {
-      throw new BadRequestException('Valid Stellar address is required');
+    @Query('address') address?: string,
+  ): Promise<Record<string, string>> {
+    if (address && !address.startsWith('0x')) {
+      throw new BadRequestException('Valid address is required');
     }
     return this.swapService.getTokenBalances(address);
-  }
-
-  @Get('usd-ngn-rate')
-  @ApiOperation({ summary: 'Get USD/NGN rate from MonieRate API' })
-  @ApiResponse({ status: 200, description: 'USD/NGN rate' })
-  async getUsdNgnRate(): Promise<{ rate: number }> {
-    const rate = await this.swapService.getUsdNgnRate();
-    return { rate };
-  }
-
-  @Get('estimate-ngn')
-  @ApiOperation({ summary: 'Calculate estimated NGN value from CNGN amount' })
-  @ApiQuery({
-    name: 'cngnAmount',
-    description: 'Amount in CNGN',
-    required: true,
-    type: Number,
-  })
-  @ApiResponse({ status: 200, description: 'Estimated NGN value with rates' })
-  async estimateNgn(
-    @Query('cngnAmount') cngnAmount: string,
-  ): Promise<{ estimatedNgn: number; usdNgnRate: number; usdValue: number }> {
-    const amount = parseFloat(cngnAmount);
-    if (isNaN(amount) || amount <= 0) {
-      throw new BadRequestException('Valid CNGN amount is required');
-    }
-
-    return await this.swapService.calculateEstimatedNgn(amount);
   }
 
   @Post('/initialize')
@@ -198,7 +104,7 @@ export class SwapController {
       throw new BadRequestException('Minimum amount is 100 NGN');
     }
     if (dto.slippage < 0 || dto.slippage > 1) {
-      throw new BadRequestException('Slippage must be between 0 and 1');
+      throw new BadRequestException('Invalid slippage specified');
     }
 
     // Extract IP address and user agent
@@ -206,7 +112,50 @@ export class SwapController {
       req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
     const userAgent = req.headers['user-agent'];
 
-    return this.swapService.initializeSwap(user.id, dto, ipAddress, userAgent);
+    // support merchant API key
+    const rawApiKey =
+      (req.headers['x-api-key'] as string) ||
+      (req.headers['authorization'] as string)?.replace('Bearer ', '') ||
+      (req.headers['authorization'] as string)?.replace('ApiKey ', '');
+
+    if (rawApiKey) {
+      const crypto = await import('crypto');
+      const hashed = crypto
+        .createHash('sha256')
+        .update(rawApiKey)
+        .digest('hex');
+      const merchantKey = await this.prisma.merchantApiKey.findFirst({
+        where: { key: hashed },
+        include: { merchant: true },
+      });
+      if (
+        merchantKey &&
+        merchantKey.isActive &&
+        merchantKey.merchant?.status === 'VERIFIED'
+      ) {
+        await this.prisma.merchantApiKey.update({
+          where: { id: merchantKey.id },
+          data: { lastUsedAt: new Date() },
+        });
+        return this.swapService.initializeSwap(
+          user.id,
+          user.isOTCEnabled || false,
+          dto,
+          ipAddress,
+          userAgent,
+          merchantKey.merchantId,
+          merchantKey.id,
+        );
+      }
+    }
+
+    return this.swapService.initializeSwap(
+      user.id,
+      user.isOTCEnabled || false,
+      dto,
+      ipAddress,
+      userAgent,
+    );
   }
 
   @Post('/:reference/complete')
@@ -236,17 +185,50 @@ export class SwapController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async updateSwapAfterExecution(
     @CurrentUser() user: any,
+    @Req() req: any,
     @Param('reference') reference: string,
     @Body('transactionHash') transactionHash: string,
     @Body('sourceAddress') sourceAddress: string,
   ): Promise<any> {
-    if (!transactionHash || !/^[a-fA-F0-9]{64}$/.test(transactionHash)) {
-      throw new BadRequestException(
-        'Valid Stellar transaction hash is required',
-      );
+    if (!transactionHash || !transactionHash.startsWith('0x')) {
+      throw new BadRequestException('Valid transaction hash is required');
     }
-    if (!sourceAddress || !/^G[A-Z2-7]{55}$/.test(sourceAddress)) {
-      throw new BadRequestException('Valid Stellar source address is required');
+    if (!sourceAddress || !sourceAddress.startsWith('0x')) {
+      throw new BadRequestException('Valid source address is required');
+    }
+
+    const rawApiKey =
+      (req.headers['x-api-key'] as string) ||
+      (req.headers['authorization'] as string)?.replace('Bearer ', '') ||
+      (req.headers['authorization'] as string)?.replace('ApiKey ', '');
+
+    if (rawApiKey) {
+      const crypto = await import('crypto');
+      const hashed = crypto
+        .createHash('sha256')
+        .update(rawApiKey)
+        .digest('hex');
+      const merchantKey = await this.prisma.merchantApiKey.findFirst({
+        where: { key: hashed },
+        include: { merchant: true },
+      });
+      if (
+        merchantKey &&
+        merchantKey.isActive &&
+        merchantKey.merchant?.status === 'VERIFIED'
+      ) {
+        await this.prisma.merchantApiKey.update({
+          where: { id: merchantKey.id },
+          data: { lastUsedAt: new Date() },
+        });
+        return this.swapService.updateSwapAfterExecution(
+          reference,
+          transactionHash,
+          sourceAddress,
+          merchantKey.merchantId,
+          merchantKey.id,
+        );
+      }
     }
 
     return this.swapService.updateSwapAfterExecution(
@@ -281,9 +263,56 @@ export class SwapController {
       req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
     const userAgent = req.headers['user-agent'];
 
+    // Check for merchant API key in headers
+    const rawApiKey =
+      (req.headers['x-api-key'] as string) ||
+      (req.headers['authorization'] as string)?.replace('Bearer ', '') ||
+      (req.headers['authorization'] as string)?.replace('ApiKey ', '');
+
+    if (rawApiKey) {
+      const crypto = await import('crypto');
+      const hashed = crypto
+        .createHash('sha256')
+        .update(rawApiKey)
+        .digest('hex');
+
+      const merchantKey = await this.prisma.merchantApiKey.findFirst({
+        where: { key: hashed },
+        include: { merchant: true },
+      });
+
+      if (
+        merchantKey &&
+        merchantKey.isActive &&
+        merchantKey.merchant?.status === 'VERIFIED'
+      ) {
+        // update last used
+        await this.prisma.merchantApiKey.update({
+          where: { id: merchantKey.id },
+          data: { lastUsedAt: new Date() },
+        });
+
+        return this.swapService.createSimpleSwap(
+          dto,
+          merchantKey.merchantId,
+          merchantKey.id,
+          undefined,
+          ipAddress,
+          userAgent,
+        );
+      }
+    }
+
+    // Fallback to authenticated user
+    if (!user || !user.id) {
+      throw new BadRequestException('Authentication required');
+    }
+
     return this.swapService.createSimpleSwap(
-      user.id,
       dto,
+      undefined,
+      undefined,
+      user.id,
       ipAddress,
       userAgent,
     );

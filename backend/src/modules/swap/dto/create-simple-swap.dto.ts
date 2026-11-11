@@ -11,7 +11,8 @@ import {
 export class CreateSimpleSwapDto {
   @ApiProperty({
     example: 'USDC',
-    description: "Token type to swap from: 'USDC', 'XLM', 'BRIDGE_USDC' (Circle's real USDC), or a corridor stablecoin (e.g. CNGN)",
+    description: 'Token type to swap from (USDC, CNGN, USDT)',
+    enum: ['USDC', 'CNGN', 'USDT'],
   })
   @IsString()
   @IsNotEmpty()
@@ -19,7 +20,8 @@ export class CreateSimpleSwapDto {
 
   @ApiProperty({
     example: 'CNGN',
-    description: "Token type to swap to: 'USDC', 'XLM', 'BRIDGE_USDC' (Circle's real USDC), or a corridor stablecoin (e.g. CNGN)",
+    description: 'Token type to swap to (USDC, CNGN, USDT)',
+    enum: ['USDC', 'CNGN', 'USDT'],
   })
   @IsString()
   @IsNotEmpty()
@@ -44,31 +46,31 @@ export class CreateSimpleSwapDto {
   exchangeRate: number;
 
   @ApiProperty({
-    example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37',
-    description: "Source wallet address (user's Stellar public key)",
+    example: '0x1234567890abcdef1234567890abcdef12345678',
+    description: "Source wallet address (user's wallet)",
   })
   @IsString()
   @IsNotEmpty()
-  @Matches(/^G[A-Z2-7]{55}$/, {
-    message: 'Source address must be a valid Stellar public key',
+  @Matches(/^0x[a-fA-F0-9]{40}$/, {
+    message: 'Source address must be a valid Ethereum address',
   })
   sourceAddress: string;
 
   @ApiProperty({
-    example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37',
+    example: '0x1234567890abcdef1234567890abcdef12345678',
     description:
       "Destination wallet address (user's wallet, same as source for simple swaps)",
   })
   @IsString()
   @IsNotEmpty()
-  @Matches(/^G[A-Z2-7]{55}$/, {
-    message: 'Destination address must be a valid Stellar public key',
+  @Matches(/^0x[a-fA-F0-9]{40}$/, {
+    message: 'Destination address must be a valid Ethereum address',
   })
   destinationAddress: string;
 
   @ApiProperty({
-    example: 'stellar',
-    description: 'Network (defaults to stellar)',
+    example: 'base',
+    description: 'Network (defaults to base)',
     required: false,
   })
   @IsString()

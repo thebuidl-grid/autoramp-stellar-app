@@ -14,7 +14,7 @@ import { ConfigService } from '@nestjs/config';
 
 /**
  * WebSocket Gateway for real-time swap transaction notifications
- * 
+ *
  * Clients can subscribe to transaction updates by reference
  * Authentication via JWT token in handshake auth
  */
@@ -43,8 +43,10 @@ export class SwapGateway implements OnGatewayConnection, OnGatewayDisconnect {
    */
   async handleConnection(client: Socket) {
     try {
-      const token = client.handshake.auth?.token || client.handshake.headers?.authorization?.replace('Bearer ', '');
-      
+      const token =
+        client.handshake.auth?.token ||
+        client.handshake.headers?.authorization?.replace('Bearer ', '');
+
       if (!token) {
         this.logger.warn(`Client ${client.id} disconnected: No token provided`);
         client.disconnect();
@@ -63,10 +65,12 @@ export class SwapGateway implements OnGatewayConnection, OnGatewayDisconnect {
       (client as any).userId = userId;
 
       this.logger.log(`Client ${client.id} connected (userId: ${userId})`);
-      
+
       client.emit('connected', { message: 'Connected to swap notifications' });
     } catch (error) {
-      this.logger.warn(`Client ${client.id} authentication failed: ${error.message}`);
+      this.logger.warn(
+        `Client ${client.id} authentication failed: ${error.message}`,
+      );
       client.disconnect();
     }
   }
@@ -106,8 +110,10 @@ export class SwapGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     // Join room for this transaction reference
     client.join(`transaction:${data.reference}`);
-    this.logger.log(`Client ${client.id} subscribed to transaction ${data.reference}`);
-    
+    this.logger.log(
+      `Client ${client.id} subscribed to transaction ${data.reference}`,
+    );
+
     client.emit('subscribed', { reference: data.reference });
   }
 
@@ -121,7 +127,9 @@ export class SwapGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     if (data.reference) {
       client.leave(`transaction:${data.reference}`);
-      this.logger.log(`Client ${client.id} unsubscribed from transaction ${data.reference}`);
+      this.logger.log(
+        `Client ${client.id} unsubscribed from transaction ${data.reference}`,
+      );
     }
   }
 
@@ -149,4 +157,3 @@ export class SwapGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 }
-

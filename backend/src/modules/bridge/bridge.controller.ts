@@ -1,143 +1,184 @@
-import { Controller, Get, Post, Body, Param, UseGuards, UseInterceptors } from '@nestjs/common';
 import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
-  ApiBody,
-  ApiBearerAuth,
-  ApiSecurity,
 } from '@nestjs/swagger';
-import { BridgeService } from './bridge.service';
-import { ChainRegistryService } from './chain-registry.service';
-import { ChainTokenRegistryService } from './chain-token-registry.service';
-import { CreateBridgeTransferDto } from './dto/create-bridge-transfer.dto';
-import { RegisterBurnDto } from './dto/register-burn.dto';
-import { BuildBurnTransactionDto } from './dto/build-burn-transaction.dto';
-import { BuildEvmSwapDto } from './dto/build-evm-swap.dto';
-import { AuthOrApiKeyGuard } from '../api-keys/guards/auth-or-api-key.guard';
-import { ApiLoggingInterceptor } from '../api-keys/interceptors/api-logging.interceptor';
-import { Public } from '../auth/decorators/public.decorator';
+import { BridgeService, BridgeDeliveryInput } from './bridge.service';
+import { BridgeTransferDto } from './dto/bridge-transfer.dto';
+import { BridgeEstimateDto } from './dto/bridge-estimate.dto';
+import { UpdateBridgeHashDto } from './dto/update-bridge-hash.dto';
+import { BridgeDeliveryDto } from './dto/bridge-delivery.dto';
+import {
+  BridgeHistoryResponseDto,
+  BridgeInitiateResponseDto,
+  BridgeStatusResponseDto,
+  SupportedChainsResponseDto,
+} from './dto/bridge-response.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 
-/**
- * USDC bridge infra (Phase 1: inbound CCTP transfers into Stellar).
- * Auth via JWT or API key — this is explicitly infra other integrators
- * call, same guard as the stablestack/swap controllers.
- */
 @ApiTags('Bridge')
 @Controller('bridge')
-@UseGuards(AuthOrApiKeyGuard)
-@UseInterceptors(ApiLoggingInterceptor)
-@ApiBearerAuth('JWT-auth')
-@ApiSecurity('API-Key')
+@UseGuards(JwtAuthGuard)
 export class BridgeController {
-  constructor(
-    private readonly bridgeService: BridgeService,
-    private readonly chainRegistry: ChainRegistryService,
-    private readonly chainTokenRegistry: ChainTokenRegistryService,
-  ) {}
+  constructor(private readonly bridgeService: BridgeService) {}
 
-  @Get('chains')
+  /**
+   * Initiate a cross-chain USDC transfer (Returns a reference)
+   * POST /bridge/initiate
+   */
+  @Post('initiate')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Initiate a cross-chain USDC transfer',
+    description: 'Returns a reference for the transfer process.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Transfer initiated successfully.',
+    type: BridgeInitiateResponseDto,
+  })
+  async initiateBridge(
+    @Body() dto: BridgeTransferDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.bridgeService.initiateBridge(
+      dto,
+      user?.id,
+      user?.merchantId,
+      user?.apiKeyId,
+    );
+  }
+
+  /**
+   * Update bridge transaction hash for a specific step
+   * POST /bridge/update-hash
+   */
+  @Post('update-hash')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Update bridge transaction hash',
+    description:
+      'Update the hash for a specific step (SOURCE_TX, ATTESTATION, DESTINATION_TX).',
+  })
+  @ApiResponse({ status: 200, description: 'Status updated successfully.' })
+  async updateHash(@Body() dto: UpdateBridgeHashDto) {
+    return this.bridgeService.updateBridgeStatus(
+      dto.reference,
+      dto.hash,
+      dto.step,
+      dto.status || 'PROCESSING',
+      dto.metadata || {},
+    );
+  }
+
+  /**
+   * Confirm a cross-chain bridge delivery that funds an of-ramp payout.
+   * POST /bridge/delivery
+   */
+  @Post('delivery')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Confirm cross-chain bridge delivery funding an of-ramp payout',
+    description:
+      'Records a successful bridge delivery (DESTINATION_TX) and mirrors the funding state onto the of-ramp provider order.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Delivery confirmed successfully.',
+  })
+  async confirmDelivery(@Body() dto: BridgeDeliveryDto) {
+    const payload: BridgeDeliveryInput = {
+      reference: dto.reference,
+      oframpFundingReference: dto.oframpFundingReference,
+      destinationTxHash: dto.destinationTxHash,
+      status: dto.status,
+      amount: dto.amount,
+    };
+    return this.bridgeService.confirmDelivery(payload);
+  }
+
+  /**
+   * Get list of supported chains
+   * GET /bridge/supported-chains
+   */
   @Public()
+  @Get('supported-chains')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'List chains the bridge can receive USDC from',
-    description: 'Public discovery endpoint — use the returned `name` values as sourceChain in POST /bridge/transfers.',
-  })
-  @ApiResponse({ status: 200, description: 'Active chains in the registry' })
-  async listChains() {
-    return this.chainRegistry.findAll({ activeOnly: true });
-  }
-
-  @Get('chain-tokens/:chain')
-  @Public()
-  @ApiOperation({
-    summary: 'List bridgeable-in stablecoins for a chain, beyond its own USDC',
+    summary: 'Get list of supported chains',
     description:
-      "Public discovery endpoint for the Swap tab's source-token selector — use the returned `tokenCode` values as sourceTokenCode in POST /bridge/transfers. Empty for a chain with no non-USDC tokens registered (plain-USDC bridging always works regardless).",
+      'Returns an array of chains supported by the bridge. This endpoint is public.',
   })
-  @ApiParam({ name: 'chain', description: "Chain name, e.g. 'base', 'ethereum'" })
-  @ApiResponse({ status: 200, description: 'Active tokens registered for this chain' })
-  async listChainTokens(@Param('chain') chain: string) {
-    return this.chainTokenRegistry.findAll(chain, { activeOnly: true });
+  @ApiResponse({
+    status: 200,
+    description: 'List of supported chains returned successfully.',
+    type: SupportedChainsResponseDto,
+  })
+  async getSupportedChains() {
+    return this.bridgeService.getSupportedChains();
   }
 
-  @Get('balance/:chain/:address')
-  @Public()
+  /**
+   * Check transfer status
+   * GET /bridge/status/:reference
+   */
+  @Get('status/:reference')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Read-only USDC balance for an address on a registered chain',
-    description: 'Convenience lookup for the Send/Swap UI — never used for anything money-moving.',
-  })
-  @ApiParam({ name: 'chain', description: "Chain name, e.g. 'base', 'ethereum', 'stellar'" })
-  @ApiParam({ name: 'address', description: 'Address to check — 0x for EVM chains, G... for Stellar' })
-  @ApiResponse({ status: 200, description: 'USDC balance' })
-  async getBalance(@Param('chain') chain: string, @Param('address') address: string) {
-    return this.bridgeService.getUsdcBalanceForAddress(chain, address);
-  }
-
-  @Post('transfers')
-  @ApiOperation({
-    summary: 'Register intent to bridge USDC in from another chain',
+    summary: 'Check transfer status',
     description:
-      'Returns the exact destinationDomain/mintRecipient/destinationCaller/hookData the caller must use when burning on the source chain via depositForBurnWithHook. mintRecipient and destinationCaller MUST both be set to the returned value or funds are unrecoverable.',
+      'Get the current status of a bridge transfer by its reference.',
   })
-  @ApiBody({ type: CreateBridgeTransferDto })
-  @ApiResponse({ status: 201, description: 'Transfer intent created with burn instructions' })
-  async createTransfer(@CurrentUser() user: any, @Body() dto: CreateBridgeTransferDto) {
-    return this.bridgeService.createTransferIntent(dto, user?.id);
+  @ApiParam({
+    name: 'reference',
+    description: 'The unique reference of the transfer',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Transfer status retrieved successfully.',
+    type: BridgeStatusResponseDto,
+  })
+  async checkStatus(@Param('reference') reference: string) {
+    return this.bridgeService.checkTransferStatus(reference);
   }
 
-  @Post('evm-swap')
+  /**
+   * Get transfer history
+   * GET /bridge/history
+   */
+  @Get('history')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Build a same-chain swap between two tokens on an EVM chain',
+    summary: 'Get transfer history',
     description:
-      "No bridging involved — both tokens stay on chainName throughout. Returns unsigned approve+swap calldata for the caller's own connected wallet to sign, same trust model as every other EVM calldata this module builds.",
+      'Returns the bridge transfer history for the current user/merchant.',
   })
-  @ApiBody({ type: BuildEvmSwapDto })
-  @ApiResponse({ status: 201, description: 'Unsigned approve + swap transactions' })
-  async buildEvmSwap(@Body() dto: BuildEvmSwapDto) {
-    return this.bridgeService.buildEvmSwap(dto);
-  }
-
-  @Post('transfers/:reference/burn-transaction')
-  @ApiOperation({
-    summary: 'Build the Stellar-source burn transaction (step 2 of 2)',
-    description:
-      'Stellar-source only. Call this after the approveTransactionXdr from POST /bridge/transfers has been signed and submitted — the burn transaction cannot be built/simulated until that allowance actually exists on-chain.',
+  @ApiResponse({
+    status: 200,
+    description: 'Transfer history retrieved successfully.',
+    type: BridgeHistoryResponseDto,
   })
-  @ApiParam({ name: 'reference', description: 'Bridge transfer reference' })
-  @ApiBody({ type: BuildBurnTransactionDto })
-  @ApiResponse({ status: 201, description: 'Unsigned burn transaction XDR' })
-  async buildBurnTransaction(@Param('reference') reference: string, @Body() dto: BuildBurnTransactionDto) {
-    return this.bridgeService.buildBurnTransaction(reference, dto.sourceAddress);
-  }
-
-  @Post('transfers/:reference/register-burn')
-  @ApiOperation({ summary: 'Report the source-chain burn transaction once submitted' })
-  @ApiParam({ name: 'reference', description: 'Bridge transfer reference' })
-  @ApiBody({ type: RegisterBurnDto })
-  @ApiResponse({ status: 201, description: 'Burn registered; relayer will complete the mint once attested' })
-  async registerBurn(@CurrentUser() user: any, @Param('reference') reference: string, @Body() dto: RegisterBurnDto) {
-    return this.bridgeService.registerBurn(reference, dto.burnTxHash, user?.id);
-  }
-
-  @Post('transfers/:reference/build-destination-swap')
-  @ApiOperation({
-    summary: 'Build the EVM destination follow-up swap (USDC -> payoutTokenCode)',
-    description:
-      'Call once the transfer is COMPLETED and has a payoutTokenCode. Returns unsigned approve+swap calldata (a live 0x quote) for the connected wallet on destinationChain to sign — self-custodial, the mint already landed directly in destinationAddress.',
-  })
-  @ApiParam({ name: 'reference', description: 'Bridge transfer reference' })
-  @ApiResponse({ status: 201, description: 'Unsigned approve + swap transactions' })
-  async buildDestinationSwap(@Param('reference') reference: string) {
-    return this.bridgeService.buildDestinationSwap(reference);
-  }
-
-  @Get('transfers/:reference')
-  @ApiOperation({ summary: 'Get the status of a bridge transfer' })
-  @ApiParam({ name: 'reference', description: 'Bridge transfer reference' })
-  @ApiResponse({ status: 200, description: 'Bridge transfer status' })
-  async getStatus(@Param('reference') reference: string) {
-    return this.bridgeService.getStatus(reference);
+  async getHistory(@CurrentUser() user: any) {
+    return this.bridgeService.getTransferHistory(user?.id, user?.merchantId);
   }
 }

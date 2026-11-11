@@ -1,8 +1,13 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+} from '@nestjs/common';
 
 /**
  * Admin Guard
- * 
+ *
  * Ensures that only users with ADMIN role can access protected routes.
  * Must be used after JwtAuthGuard to ensure user is authenticated.
  */
@@ -23,4 +28,3 @@ export class AdminGuard implements CanActivate {
     return true;
   }
 }
-

@@ -3,6 +3,14 @@
 import { useAdminOtcUsers, useAdminOtcTransactions } from "@/lib/hooks/use-admin-otc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -16,7 +24,8 @@ import {
     History,
     CheckCircle2,
     Clock,
-    XCircle
+    XCircle,
+    Search,
 } from "lucide-react";
 import Link from "next/link";
 import { formatDate } from "@/lib/utils";
@@ -24,17 +33,25 @@ import { useState } from "react";
 import { adminApi } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { useDebounce } from "@/lib/hooks/use-debounce";
+import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 
 export default function AdminOtcPage() {
     const [usersPage, setUsersPage] = useState(1);
-    const [txPage, setTxPage] = useState(1);
+    const txCursor = useCursorPagination();
     const [activeTab, setActiveTab] = useState("transactions");
-    
-    const { 
-        data: usersData, 
-        isLoading: isUsersLoading, 
-        refetch: refetchUsers, 
-        isFetching: isUsersFetching 
+    const [txSearch, setTxSearch] = useState("");
+    const [txStatusFilter, setTxStatusFilter] = useState("all");
+    const [txStartDate, setTxStartDate] = useState("");
+    const [txEndDate, setTxEndDate] = useState("");
+
+    const debouncedTxSearch = useDebounce(txSearch, 400);
+
+    const {
+        data: usersData,
+        isLoading: isUsersLoading,
+        refetch: refetchUsers,
+        isFetching: isUsersFetching
     } = useAdminOtcUsers(usersPage, 20);
 
     const {
@@ -42,10 +59,17 @@ export default function AdminOtcPage() {
         isLoading: isTxLoading,
         refetch: refetchTx,
         isFetching: isTxFetching
-    } = useAdminOtcTransactions(txPage, 20);
+    } = useAdminOtcTransactions(
+        20,
+        txStatusFilter === "all" ? undefined : txStatusFilter,
+        txStartDate || undefined,
+        txEndDate || undefined,
+        debouncedTxSearch || undefined,
+        txCursor.cursor,
+    );
 
     const queryClient = useQueryClient();
-    
+
     // Users Data
     const users = usersData?.users || [];
     const usersPagination = usersData?.pagination;
@@ -53,8 +77,6 @@ export default function AdminOtcPage() {
 
     // Transactions Data
     const transactions = txData?.transactions || [];
-    const txPagination = txData?.pagination;
-    const txTotalPages = txPagination?.totalPages || 1;
 
     const handleToggleOtc = async (userId: string, currentValue: boolean) => {
         try {
@@ -141,7 +163,47 @@ export default function AdminOtcPage() {
                 <TabsContent value="transactions">
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-base">OTC Transactions</CardTitle>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <CardTitle className="text-base">OTC Transactions</CardTitle>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <div className="relative">
+                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            type="search"
+                                            placeholder="Search reference or user..."
+                                            className="w-[200px] lg:w-[250px] pl-8 h-9"
+                                            value={txSearch}
+                                            onChange={(e) => { setTxSearch(e.target.value); txCursor.reset(); }}
+                                        />
+                                    </div>
+                                    <Select value={txStatusFilter} onValueChange={(val) => { setTxStatusFilter(val); txCursor.reset(); }}>
+                                        <SelectTrigger className="w-[150px] h-9">
+                                            <SelectValue placeholder="Status" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Statuses</SelectItem>
+                                            <SelectItem value="COMPLETED">Completed</SelectItem>
+                                            <SelectItem value="PENDING">Pending</SelectItem>
+                                            <SelectItem value="PROCESSING">Processing</SelectItem>
+                                            <SelectItem value="FAILED">Failed</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Input
+                                        type="date"
+                                        className="w-[150px] h-9"
+                                        value={txStartDate}
+                                        onChange={(e) => { setTxStartDate(e.target.value); txCursor.reset(); }}
+                                        placeholder="Start date"
+                                    />
+                                    <Input
+                                        type="date"
+                                        className="w-[150px] h-9"
+                                        value={txEndDate}
+                                        onChange={(e) => { setTxEndDate(e.target.value); txCursor.reset(); }}
+                                        placeholder="End date"
+                                    />
+                                </div>
+                            </div>
                         </CardHeader>
                         <CardContent>
                             {isTxLoading ? (
@@ -194,25 +256,25 @@ export default function AdminOtcPage() {
                                         ))}
                                     </div>
 
-                                    {txTotalPages > 1 && (
+                                    {(txCursor.canGoPrevious || txData?.hasMore) && (
                                         <div className="flex items-center justify-between mt-4 pt-4 border-t">
                                             <p className="text-sm text-muted-foreground">
-                                                Page {txPage} of {txTotalPages}
+                                                Page {txCursor.pageNumber}{txData?.total ? ` — ${txData.total} total` : ""}
                                             </p>
                                             <div className="flex gap-2">
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
-                                                    disabled={txPage <= 1 || isTxFetching}
-                                                    onClick={() => setTxPage((p) => p - 1)}
+                                                    disabled={!txCursor.canGoPrevious || isTxFetching}
+                                                    onClick={txCursor.goPrevious}
                                                 >
                                                     Previous
                                                 </Button>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
-                                                    disabled={txPage >= txTotalPages || isTxFetching}
-                                                    onClick={() => setTxPage((p) => p + 1)}
+                                                    disabled={!txData?.hasMore || isTxFetching}
+                                                    onClick={() => txData?.nextCursor && txCursor.goNext(txData.nextCursor)}
                                                 >
                                                     Next
                                                 </Button>

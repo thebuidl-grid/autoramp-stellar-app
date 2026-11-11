@@ -10,6 +10,7 @@ import {
   Loader2,
   ArrowDown,
   ArrowUpRight,
+  ArrowLeft,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import Footer from "@/components/layout/footer";
@@ -34,13 +35,14 @@ import {
   useSwapWebSocket,
   useCreateSimpleSwap,
   useResolveAccount,
-  useSupportedChains,
   useBridge,
   useBridgeStatus,
 } from "@/lib/hooks";
 import { SearchableBankSelect } from "@/components/ui/searchable-bank-select";
 import { parseFormattedNumber } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
+import { stablestackApi, miscApi } from "@/lib/api";
+import { ngnAmountForUsdc } from "@/lib/offramp-amount";
 import { EmailOtpModal } from "@/components/auth/email-otp-modal";
 import { copyToClipboard } from "@/lib/utils";
 import {
@@ -62,14 +64,35 @@ import {
 } from "@/lib/constants/swap-constants";
 import { parseUnits, formatUnits, hexToBigInt, maxUint256, concat } from "viem";
 import { QuoteView } from "@/components/swap/QuoteView";
-import { useTransactionStore } from "@/lib/store";
+import { UsdcxSwapPanel } from "@/components/swap/usdcx-swap-panel";
+import { useTransactionStore, type CryptoType } from "@/lib/store";
+import { useStacksWallet } from "@/lib/hooks/use-stacks-wallet";
+import { useStellarWallet } from "@/lib/hooks/use-stellar-wallet";
+import {
+  useSolanaWallet,
+  isValidSolanaAddress,
+} from "@/lib/hooks/use-solana-wallet";
 import axios from "axios";
 import { AlertTriangle as LucideAlertTriangle } from "lucide-react";
 import { USDC_ADDRESSES } from "@/lib/constants/bridge-constants";
-import { SUPPORTED_CHAINS, IS_TESTNET } from "@/lib/constants/networks";
+import { explorerTxUrl } from "@/lib/explorers";
+import {
+  SUPPORTED_CHAINS,
+  IS_TESTNET,
+  getBridgeChains,
+  isStellarChain,
+  isSolanaChain,
+} from "@/lib/constants/networks";
 
 export default function HomePage() {
   const { toast } = useToast();
+  useEffect(() => {
+    const onError = (e: Event) =>
+      toast({ title: "Stellar wallet", description: String((e as CustomEvent).detail), variant: "destructive" });
+    window.addEventListener("stellar-wallet-error", onError);
+    return () => window.removeEventListener("stellar-wallet-error", onError);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { data: banks = [] } = useBanks();
   const offRamp = useOffRamp();
   const onRamp = useOnRamp();
@@ -77,9 +100,36 @@ export default function HomePage() {
   const updateSwap = useUpdateSwapAfterExecution();
   const createSimpleSwap = useCreateSimpleSwap();
   const { address, isConnected } = useAccount();
+  const {
+    stacksAddress,
+    isStacksConnected,
+    isConnecting: isStacksConnecting,
+    connectStacks,
+    disconnectStacks,
+  } = useStacksWallet();
+  const {
+    stellarAddress,
+    isStellarConnected,
+    isStellarConnecting,
+    connectStellar,
+    disconnectStellar,
+    sendUsdc,
+    signStellarTransaction,
+  } = useStellarWallet();
+  const {
+    solanaAddress,
+    isSolanaConnected,
+    isSolanaConnecting,
+    connectSolana,
+    disconnectSolana,
+  } = useSolanaWallet();
 
   const activeTab = useTransactionStore((state) => state.activeTab);
   const cryptoType = useTransactionStore((state) => state.cryptoType);
+  const buyReceiveType = useTransactionStore((state) => state.buyReceiveType);
+  const setBuyReceiveType = useTransactionStore(
+    (state) => state.setBuyReceiveType,
+  );
   const fromCryptoType = useTransactionStore((state) => state.fromCryptoType);
   const toCryptoType = useTransactionStore((state) => state.toCryptoType);
   const isCryptoModalOpen = useTransactionStore(
@@ -144,10 +194,13 @@ export default function HomePage() {
   const resolveAccount = useResolveAccount();
 
   // Local UI state
+  // NOTE: USDCX lives on Stacks (no EVM address). For EVM-leg estimation we
+  // map it 1:1 to USDC; xReserve redeem/deposit flows bypass 0x quotes.
   const getTokenAddress = useCallback((type: string) => {
     if (type === "USDC") return SWAP_CONSTANTS.USDC;
     if (type === "USDT") return SWAP_CONSTANTS.USDT;
     if (type === "WETH") return SWAP_CONSTANTS.WETH;
+    if (type === "USDCX") return SWAP_CONSTANTS.USDC;
     return SWAP_CONSTANTS.CNGN;
   }, []);
 
@@ -155,8 +208,13 @@ export default function HomePage() {
     if (type === "USDC") return SWAP_CONSTANTS.USDC_DECIMALS;
     if (type === "USDT") return SWAP_CONSTANTS.USDT_DECIMALS;
     if (type === "WETH") return SWAP_CONSTANTS.WETH_DECIMALS;
+    if (type === "USDCX") return SWAP_CONSTANTS.USDC_DECIMALS;
     return SWAP_CONSTANTS.CNGN_DECIMALS;
   };
+
+  const isXReservePair =
+    activeTab === "swap" &&
+    (fromCryptoType === "USDCX" || toCryptoType === "USDCX");
 
   const calculateExchangeRate = (
     fromAmount: number,
@@ -175,11 +233,27 @@ export default function HomePage() {
   const [isApproving, setIsApproving] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
   const [isAddWalletDialogOpen, setIsAddWalletDialogOpen] = useState(false);
+  const [stellarSourceAddress, setStellarSourceAddress] = useState("");
   const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
   const [isBuyConfirmationModalOpen, setIsBuyConfirmationModalOpen] =
     useState(false);
+
+  // Auto-fill the Stellar source address when a Stellar wallet connects.
+  useEffect(() => {
+    if (stellarAddress) {
+      setStellarSourceAddress(stellarAddress);
+    } else if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("stellar-wallet-address");
+      if (saved) setStellarSourceAddress(saved);
+    }
+  }, [stellarAddress]);
+  const [isSendingUsdc, setIsSendingUsdc] = useState(false);
+  const [sentUsdcHash, setSentUsdcHash] = useState<string | null>(null);
+  const [sendUsdcError, setSendUsdcError] = useState<string | null>(null);
   const [isFromChainModalOpen, setIsFromChainModalOpen] = useState(false);
   const [isToChainModalOpen, setIsToChainModalOpen] = useState(false);
+  /** Bridge-only reference (bridges don't go through the swap transaction flow). */
+  const [bridgeRef, setBridgeRef] = useState<string | undefined>(undefined);
 
   const fromChain = useTransactionStore((state) => state.fromChain);
   const toChain = useTransactionStore((state) => state.toChain);
@@ -193,6 +267,9 @@ export default function HomePage() {
   const [priceDataForQuote, setPriceDataForQuote] = useState<any>(null);
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(0);
+  // Buy tab: NGN -> USDC/USDT at Bitnob's onramp rate for the selected chain.
+  const [buyRate, setBuyRate] = useState<number | null>(null);
+  const [isBuyRateLoading, setIsBuyRateLoading] = useState(false);
   const [isLiquidityAvailable, setIsLiquidityAvailable] = useState(true);
   const { writeContractAsync } = useWriteContract();
   const { signTypedDataAsync } = useSignTypedData();
@@ -219,7 +296,7 @@ export default function HomePage() {
   const hasUpdatedSwap = useRef(false);
   const isSubmittingSwap = useRef(false);
 
-  const { data: supportedChains = [] } = useSupportedChains();
+  const bridgeChains = getBridgeChains();
   const { executeBridge, isBridging, bridgeResult } = useBridge();
 
   const parsedSellAmount = sellAmount ? parseFormattedNumber(sellAmount) : null;
@@ -430,8 +507,22 @@ export default function HomePage() {
   });
 
   const { data: bridgeStatus } = useBridgeStatus(
-    activeTab === "bridge" && step === "pending" ? reference : undefined,
+    activeTab === "bridge" && step === "pending"
+      ? (bridgeRef ?? reference)
+      : undefined,
   );
+  // Bridge finished when Circle attested + mint landed (backend) or when the
+  // BridgeKit flow itself resolved successfully (frontend ground truth).
+  // Gated on bridgeRef so a stale success from a previous attempt can never
+  // complete a freshly started one (executeBridge resets bridgeResult).
+  const bridgeDone =
+    bridgeRef !== undefined &&
+    (bridgeStatus?.status === "COMPLETED" || bridgeResult?.state === "success");
+  useEffect(() => {
+    if (activeTab === "bridge" && step === "pending" && bridgeDone) {
+      setStep("completed");
+    }
+  }, [activeTab, step, bridgeDone, setStep]);
 
 
 
@@ -494,7 +585,7 @@ export default function HomePage() {
     { id: "buy" as const, label: "Buy" },
     { id: "sell" as const, label: "Sell" },
     { id: "swap" as const, label: "Swap" },
-    // { id: "bridge" as const, label: "Bridge" },
+    { id: "bridge" as const, label: "Bridge" },
   ];
 
   const handleSellAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -517,33 +608,48 @@ export default function HomePage() {
     setBuyAmount(formatted);
   };
 
-  const handleCryptoSelect = (type: "CNGN" | "USDC" | "USDT" | "WETH") => {
-    setCryptoType(type);
+  const handleCryptoSelect = (type: "CNGN" | "USDC" | "USDT" | "WETH" | "USDCX") => {
+    // USDCx lives only on Stacks — not offered on Buy/Sell (EVM-only flows)
+    if (type === "USDCX") return;
+    setCryptoType(type as "CNGN" | "USDC" | "USDT" | "WETH");
     setIsCryptoModalOpen(false);
   };
 
-  const handleFromCryptoSelect = (type: "CNGN" | "USDC" | "USDT" | "WETH") => {
-    setFromCryptoType(type);
-    setIsFromCryptoModalOpen(false);
-    if (type === toCryptoType) {
-      if (type === "CNGN") {
-        setToCryptoType("USDC"); // Default to USDC if CNGN selected
-      } else {
-        setToCryptoType("CNGN"); // Default to CNGN
-      }
-    }
+  const handleBuyReceiveSelect = (type: CryptoType) => {
+    if (type !== "CNGN" && type !== "USDC") return;
+    setBuyReceiveType(type);
+    setIsCryptoModalOpen(false);
   };
 
-  const handleToCryptoSelect = (type: "CNGN" | "USDC" | "USDT" | "WETH") => {
-    setToCryptoType(type);
+  // Same token on the same chain is never a swap (USDC->USDC, USDCx->USDCx).
+  // USDCx lives only on Stacks, so it only pairs cross-chain:
+  //  - redeem: USDCx -> USDC (or USDCx -> CNGN via auto-swap on Base)
+  //  - deposit: USDC -> USDCx  (xReserve deposit only accepts USDC)
+  const isValidSwapPair = useCallback((from: CryptoType, to: CryptoType) => {
+    if (from === to) return false;
+    if (from === "USDCX") return to === "USDC" || to === "CNGN";
+    if (to === "USDCX") return from === "USDC";
+    return true;
+  }, []);
+
+  // Options that would create an invalid pair with the opposite side
+  const disabledFromOptions = (
+    ["CNGN", "USDC", "USDT", "WETH", "USDCX"] as CryptoType[]
+  ).filter((t) => !isValidSwapPair(t, toCryptoType));
+  const disabledToOptions = (
+    ["CNGN", "USDC", "USDT", "WETH", "USDCX"] as CryptoType[]
+  ).filter((t) => !isValidSwapPair(fromCryptoType, t));
+
+  const handleFromCryptoSelect = (type: "CNGN" | "USDC" | "USDT" | "WETH" | "USDCX") => {
+    setIsFromCryptoModalOpen(false);
+    if (!isValidSwapPair(type, toCryptoType)) return;
+    setFromCryptoType(type);
+  };
+
+  const handleToCryptoSelect = (type: "CNGN" | "USDC" | "USDT" | "WETH" | "USDCX") => {
     setIsToCryptoModalOpen(false);
-    if (type === fromCryptoType) {
-      if (type === "CNGN") {
-        setFromCryptoType("USDC");
-      } else {
-        setFromCryptoType("CNGN");
-      }
-    }
+    if (!isValidSwapPair(fromCryptoType, type)) return;
+    setToCryptoType(type);
   };
 
   const isAuthenticated = () => {
@@ -557,6 +663,7 @@ export default function HomePage() {
     setAccountName(null);
     setAccountResolved(false);
     setShowQuote(false);
+    setStellarSourceAddress("");
   };
 
   const lastResolvedRef = useRef<{
@@ -701,8 +808,64 @@ export default function HomePage() {
         return;
       }
 
+      // xReserve pairs (USDCx <-> USDC/CNGN) are 1:1 minus bridge fees —
+      // no 0x liquidity. Estimate par so the Swap tab can route to
+      // deposit (EVM->Stacks) or redeem (Stacks->Base) flows.
+      if (
+        activeTab === "swap" &&
+        (fromCryptoType === "USDCX" || toCryptoType === "USDCX")
+      ) {
+        setIsQuoteLoading(false);
+        setIsLiquidityAvailable(true);
+        // Scale across decimals (all 6dp today, keep generic)
+        const outAmount =
+          quoteDecimalsIn === quoteDecimalsOut
+            ? parsedQuoteAmount
+            : (parsedQuoteAmount * 10n ** BigInt(quoteDecimalsOut)) /
+              10n ** BigInt(quoteDecimalsIn);
+        setQuoteAmountOut(outAmount);
+        setPriceDataForQuote({
+          buyAmount: outAmount.toString(),
+          xReserve: true,
+          route:
+            fromCryptoType === "USDCX"
+              ? "USDCx (Stacks) -> USDC (Base) via xReserve redeem"
+              : "USDC (Base) -> USDCx (Stacks) via xReserve deposit",
+        });
+        const { exchangeRate: rate } = calculateExchangeRate(
+          parseFormattedNumber(sellAmount),
+          outAmount,
+          quoteDecimalsOut,
+        );
+        setExchangeRate(rate);
+        return;
+      }
+
       setIsQuoteLoading(true);
       setIsLiquidityAvailable(true); // Reset before fetch
+
+      // Sell USDC/USDT -> NGN: price it with Bitnob's offramp rate for the selected chain (the provider
+      // that pays out), not an on-chain 0x quote.
+      if (isSellQuoteMode) {
+        try {
+          const usdAmount = parseFormattedNumber(sellAmount);
+          const { data } = await miscApi.getUsdNgnRate(undefined, { network: rampNetwork, direction: "offramp" });
+          const rate = Number(data.rate);
+          if (!Number.isFinite(rate) || rate <= 0 || !(usdAmount > 0)) throw new Error("no rate");
+          const out = parseUnits((usdAmount * rate).toFixed(quoteDecimalsOut), quoteDecimalsOut);
+          setQuoteAmountOut(out);
+          setPriceDataForQuote({ buyAmount: out.toString(), source: data.source ?? "bitnob", rate });
+          setExchangeRate(rate);
+        } catch (error) {
+          console.error("Bitnob rate error:", error);
+          setQuoteAmountOut(0n);
+          setExchangeRate(0);
+        } finally {
+          setIsQuoteLoading(false);
+        }
+        return;
+      }
+
       try {
         const response = await axios.get("/api/swap/price", {
           params: {
@@ -754,8 +917,34 @@ export default function HomePage() {
 
     const debounceTimer = setTimeout(fetchQuote, 500);
     return () => clearTimeout(debounceTimer);
-  }, [shouldFetchQuote, quoteTokenIn, quoteTokenOut, parsedQuoteAmount, address, sellAmount, quoteDecimalsOut]);
+  }, [shouldFetchQuote, quoteTokenIn, quoteTokenOut, parsedQuoteAmount, address, sellAmount, quoteDecimalsOut, activeTab, fromCryptoType, toCryptoType, quoteDecimalsIn, isSellQuoteMode, rampNetwork]);
 
+
+  useEffect(() => {
+    if (activeTab !== "buy" || buyReceiveType !== "USDC" || !buyAmount) {
+      setBuyRate(null);
+      setIsBuyRateLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setIsBuyRateLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await miscApi.getUsdNgnRate(undefined, { network: rampNetwork, direction: "onramp" });
+        const r = Number(data.rate);
+        if (!cancelled) setBuyRate(Number.isFinite(r) && r > 0 ? r : null);
+      } catch (e) {
+        console.error("Bitnob buy rate error:", e);
+        if (!cancelled) setBuyRate(null);
+      } finally {
+        if (!cancelled) setIsBuyRateLoading(false);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [activeTab, buyReceiveType, buyAmount, rampNetwork]);
 
   // Handle sell: CNGN to NGN (offramp) or USDC to NGN (swap)
   const handleSell = async () => {
@@ -768,6 +957,35 @@ export default function HomePage() {
       toast({
         title: "Missing fields",
         description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const effectiveStellarSource =
+      stellarSourceAddress ||
+      stellarAddress ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("stellar-wallet-address") || ""
+        : "");
+
+    if (rampNetwork === "stellar" && !effectiveStellarSource.startsWith("G")) {
+      toast({
+        title: "Invalid Stellar address",
+        description: "Please enter a valid Stellar source address",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (
+      (cryptoType === "USDC" || cryptoType === "USDT") &&
+      rampNetwork !== "stellar" &&
+      !isConnected
+    ) {
+      toast({
+        title: "Wallet not connected",
+        description: "Connect your wallet to sell USDC/USDT",
         variant: "destructive",
       });
       return;
@@ -821,7 +1039,58 @@ export default function HomePage() {
         },
       );
     } else if (cryptoType === "USDC" || cryptoType === "USDT") {
-      
+      if (rampNetwork === "stellar") {
+        const effectiveStellarSource =
+          stellarSourceAddress ||
+          stellarAddress ||
+          (typeof window !== "undefined"
+            ? localStorage.getItem("stellar-wallet-address") || ""
+            : "");
+        // The order API takes a NAIRA amount (min ₦2,000); the form collects USDC, so convert at the live rate.
+        const usdcAmount = Number(parseFloat(sellAmount.replace(/,/g, "")).toFixed(6));
+        void (async () => {
+          let rate: number | null = null;
+          try {
+            rate = (await miscApi.getUsdNgnRate(undefined, { network: rampNetwork, direction: "offramp" })).data.rate;
+          } catch {
+            rate = null;
+          }
+          const result = rate ? ngnAmountForUsdc(usdcAmount, rate) : null;
+          if (!result || !result.ok) {
+            setIsConfirmationModalOpen(false);
+            toast({
+              title: !result ? "Rate unavailable" : result.reason === "below_minimum" ? "Amount too small" : "Invalid amount",
+              description: !result
+                ? "We couldn't get the current USDC/NGN rate. Please try again in a moment."
+                : result.reason === "below_minimum"
+                  ? `The minimum cash-out is ₦2,000 (about ${result.minUsdc} USDC).`
+                  : "Enter a valid USDC amount.",
+              variant: "destructive",
+            });
+            return;
+          }
+          offRamp.mutate(
+            {
+              network: rampNetwork,
+              amount: result.ngn,
+              destination: { bankCode, accountNumber },
+              sourceAddress: effectiveStellarSource,
+            },
+            {
+              onSuccess: (response) => {
+                setTransactionData(response.data);
+                setStep("pending");
+                setIsConfirmationModalOpen(false);
+              },
+              onError: () => {
+                setIsConfirmationModalOpen(false);
+              },
+            },
+          );
+        })();
+        return;
+      }
+
       const projectedNgnAmount = parseFloat(
         formatUnits(quoteAmountOut, SWAP_CONSTANTS.CNGN_DECIMALS),
       );
@@ -855,46 +1124,150 @@ export default function HomePage() {
     }
   };
 
-  // Handle bridge: USDC Ethereum to USDC Base (or vice versa)
+  // Handle bridge: USDC Base -> Stellar (D2), or between the supported EVM chains.
   const handleBridge = async () => {
     if (!isAuthenticated()) {
       setIsAuthModalOpen(true);
       return;
     }
 
-    if (!sellAmount || !walletAddress) {
+    if (!sellAmount) {
       toast({
-        title: "Missing fields",
-        description: "Please enter amount and destination wallet",
+        title: "Missing amount",
+        description: "Please enter an amount to bridge",
         variant: "destructive",
       });
       return;
     }
 
-    const isMainnet = process.env.NEXT_PUBLIC_NETWORK === "mainnet";
-    if (fromChain === toChain && isMainnet) {
+    if (fromChain === toChain) {
       toast({
         title: "Invalid chains",
-        description:
-          "Source and destination chains must be different on mainnet",
+        description: "Source and destination chains must be different",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const sourceIsStellar = isStellarChain(fromChain);
+    const sourceIsSolana = isSolanaChain(fromChain);
+    const destinationIsStellar = isStellarChain(toChain);
+    const destinationIsSolana = isSolanaChain(toChain);
+
+    const effectiveStellarAddress =
+      stellarSourceAddress ||
+      stellarAddress ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("stellar-wallet-address") || ""
+        : "");
+    const effectiveSolanaAddress =
+      solanaAddress ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("solana-wallet-address") || ""
+        : "");
+
+    // --- Source wallet gating (must own/hold the source chain's assets) ---
+    let sourceAddress = address || "";
+    if (sourceIsStellar) {
+      sourceAddress = effectiveStellarAddress;
+      if (!sourceAddress.startsWith("G")) {
+        toast({
+          title: "Connect Stellar wallet",
+          description:
+            "Bridging from Stellar requires a connected Stellar wallet.",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else if (sourceIsSolana) {
+      sourceAddress = effectiveSolanaAddress;
+      if (!isValidSolanaAddress(sourceAddress)) {
+        toast({
+          title: "Connect Solana wallet",
+          description:
+            "Bridging from Solana requires a connected Solana wallet.",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else if (!isConnected || !sourceAddress.startsWith("0x")) {
+      toast({
+        title: "Connect EVM wallet",
+        description: "Bridging from an EVM chain requires an EVM wallet.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // --- Destination address gating (must be the right address format) ---
+    // A valid manually-entered destination wins; otherwise fall back to the
+    // connected wallet on that chain.
+    let recipientAddress = walletAddress || address || "";
+    if (destinationIsStellar) {
+      recipientAddress =
+        walletAddress && walletAddress.startsWith("G")
+          ? walletAddress
+          : effectiveStellarAddress;
+      if (!recipientAddress.startsWith("G")) {
+        toast({
+          title: "Stellar destination required",
+          description:
+            "Connect or enter a valid Stellar destination address (G…).",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else if (destinationIsSolana) {
+      recipientAddress =
+        walletAddress && isValidSolanaAddress(walletAddress)
+          ? walletAddress
+          : effectiveSolanaAddress;
+      if (!isValidSolanaAddress(recipientAddress)) {
+        toast({
+          title: "Solana destination required",
+          description: "Connect or enter a valid Solana destination address.",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else if (!recipientAddress.startsWith("0x")) {
+      toast({
+        title: "EVM destination required",
+        description: "Connect or enter a valid EVM destination address.",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      const reference = await executeBridge({
-        fromChain: "Ethereum_Sepolia",
-        toChain: "Base_Sepolia",
-        amount: sellAmount.replace(/,/g, ""),
-        recipientAddress: walletAddress,
-      });
+      // Show the status card up front: the CCTP flow can take minutes and
+      // the user should follow it (reference, tx hashes, ticks) while the
+      // wallet prompts happen, instead of a frozen button.
+      setBridgeRef(undefined);
+      setStep("pending");
+      const outcome = await executeBridge(
+        {
+          fromChain,
+          toChain,
+          amount: sellAmount.replace(/,/g, ""),
+          sourceAddress,
+          recipientAddress,
+          stellarSigner: isStellarConnected ? signStellarTransaction : undefined,
+          stellarWalletAddress: stellarAddress ?? undefined,
+        },
+        setBridgeRef,
+      );
 
-      if (reference) {
-        setStep("pending");
+      if (outcome?.state === "success") {
+        setStep("completed");
+      } else if (!outcome) {
+        // validation / wallet not connected — back to the form
+        setStep("form");
       }
+      // state === "pending": stay on the status card; ticks below finish it.
     } catch (error) {
-      // Error handled in useBridge
+      // Error already toasted in useBridge
+      setStep("form");
     }
   };
 
@@ -909,6 +1282,15 @@ export default function HomePage() {
       toast({
         title: "Missing fields",
         description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (rampNetwork === "stellar" && !walletAddress.startsWith("G")) {
+      toast({
+        title: "Invalid Stellar address",
+        description: "Please enter a valid Stellar destination address",
         variant: "destructive",
       });
       return;
@@ -953,6 +1335,36 @@ export default function HomePage() {
 
   // Handle swap: USDC ↔ CNGN (simple swap, no offramp)
   const handleSwap = async () => {
+    // xReserve pairs (USDCx) route through the review panel, not 0x execution
+    if (isXReservePair) {
+      if (!isConnected || !address) {
+        toast({
+          title: "Wallet not connected",
+          description: "Please connect your wallet to continue",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!sellAmount || parseFormattedNumber(sellAmount) <= 0) {
+        toast({
+          title: "Invalid amount",
+          description: "Please enter a valid amount",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!quoteAmountOut || quoteAmountOut === 0n) {
+        toast({
+          title: "Quote not ready",
+          description: "Wait for the quote to load before reviewing.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setShowQuote(true);
+      return;
+    }
+
     // 1. Validation
     if (!isConnected || !address) {
       toast({
@@ -1282,17 +1694,30 @@ export default function HomePage() {
               <div className="flex justify-center -my-6">
                 <button
                   type="button"
-                  className="w-12 h-12 rounded-full bg-secondary hover:bg-secondary/90 flex items-center justify-center transition-colors shadow-lg"
                   onClick={
                     activeTab === "swap"
                       ? () => {
+                          // Never flip into an invalid pair (e.g. CNGN -> USDCx)
+                          if (!isValidSwapPair(toCryptoType, fromCryptoType)) {
+                            return;
+                          }
                           const temp = fromCryptoType;
                           setFromCryptoType(toCryptoType);
                           setToCryptoType(temp);
                         }
                       : undefined
                   }
-                >
+                  disabled={
+                    activeTab === "swap" &&
+                    !isValidSwapPair(toCryptoType, fromCryptoType)
+                  }
+                  className={`w-12 h-12 rounded-full bg-secondary hover:bg-secondary/90 flex items-center justify-center transition-colors shadow-lg ${
+                    activeTab === "swap" &&
+                    !isValidSwapPair(toCryptoType, fromCryptoType)
+                      ? "opacity-40 cursor-not-allowed"
+                      : ""
+                  }`}
+                  >
                   {activeTab === "buy" || activeTab === "sell" ? (
                     <ArrowDown size={18} className="text-black" />
                   ) : (
@@ -1308,6 +1733,11 @@ export default function HomePage() {
                     ? (() => {
                         if (!buyAmount) return "";
                         const parsed = parseFormattedNumber(buyAmount);
+                        if (buyReceiveType === "USDC") {
+                          if (isBuyRateLoading) return "...";
+                          if (!buyRate) return "—";
+                          return (parsed / buyRate).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        }
                         return parsed.toLocaleString("en-NG");
                       })()
                     : activeTab === "swap" ||
@@ -1345,19 +1775,30 @@ export default function HomePage() {
                 onAmountChange={() => {}}
                 currencyType={
                   activeTab === "buy"
-                    ? "CNGN"
+                    ? buyReceiveType
                     : activeTab === "swap"
                       ? (toCryptoType as "CNGN" | "USDC" | "USDT")
                       : "NGN"
                 }
                 onCurrencyClick={
-                  activeTab === "swap"
-                    ? () => setIsToCryptoModalOpen(true)
-                    : undefined
+                  activeTab === "buy"
+                    ? () => setIsCryptoModalOpen(true)
+                    : activeTab === "swap"
+                      ? () => setIsToCryptoModalOpen(true)
+                      : undefined
                 }
                 disabled={true}
                 isLoading={activeTab === "swap" && isQuoteLoading}
-                footer={activeTab === "swap" && priceDataForQuote ? (
+                footer={activeTab === "buy" && buyReceiveType === "USDC" && buyAmount ? (
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-white/40">Rate (Bitnob):</span>
+                    <span className="text-white/60 font-medium">
+                      {buyRate
+                        ? `1 ${buyReceiveType} = ₦${buyRate.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : isBuyRateLoading ? "fetching…" : "rate unavailable"}
+                    </span>
+                  </div>
+                ) : activeTab === "swap" && priceDataForQuote ? (
                   <div className="flex flex-col gap-1 text-[10px]">
                     <div className="flex justify-between items-center">
                       <span className="text-white/40">Indicative Rate:</span>
@@ -1410,7 +1851,24 @@ export default function HomePage() {
                 </div>
               )}
 
-              {activeTab === "swap" && showQuote && (
+              {activeTab === "swap" && showQuote && isXReservePair && (
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuote(false)}
+                    className="flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80"
+                  >
+                    <ArrowLeft size={14} /> Back to quote
+                  </button>
+                  <UsdcxSwapPanel
+                    direction={fromCryptoType === "USDCX" ? "redeem" : "deposit"}
+                    receiveToken={toCryptoType === "CNGN" ? "CNGN" : "USDC"}
+                    defaultAmount={sellAmount}
+                  />
+                </div>
+              )}
+
+              {activeTab === "swap" && showQuote && !isXReservePair && (
                 <QuoteView
                   sellToken={getTokenAddress(fromCryptoType)}
                   buyToken={getTokenAddress(toCryptoType)}
@@ -1453,7 +1911,7 @@ export default function HomePage() {
           )}
 
           {(activeTab === "buy" ||
-            activeTab === "swap" ||
+            (activeTab === "swap" && !isXReservePair) ||
             activeTab === "bridge") && (
             <div className="space-y-4">
               <SavedWalletSelector
@@ -1547,12 +2005,154 @@ export default function HomePage() {
           activeTab === "swap" ||
           activeTab === "bridge" ? (
             <div className="p-4 rounded-xl bg-black/50 border border-white/10">
-              <div className="flex md:items-center justify-between items-center mb-2">
-                <span className="text-sm text-white/70 font-normal">
-                  Wallet Connection
-                </span>
-                <ConnectButton showBalance={false} />
-              </div>
+              {rampNetwork !== "stellar" &&
+                !(
+                  activeTab === "bridge" &&
+                  (isStellarChain(fromChain) || isSolanaChain(fromChain))
+                ) && (
+                <div className="flex md:items-center justify-between items-center mb-2">
+                  <span className="text-sm text-white/70 font-normal">
+                    Wallet Connection
+                  </span>
+                  <ConnectButton showBalance={false} />
+                </div>
+              )}
+              {activeTab === "swap" && (
+                <div className="flex md:items-center justify-between items-center mb-2 pt-2 border-t border-white/10">
+                  <div className="flex flex-col">
+                    <span className="text-sm text-white/70 font-normal">
+                      Stacks Wallet
+                    </span>
+                    <span className="text-[10px] text-white/40">
+                      For USDCx (Leather / Xverse)
+                    </span>
+                  </div>
+                  {isStacksConnected && stacksAddress ? (
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-white/70 max-w-[140px] truncate">
+                        {stacksAddress.slice(0, 6)}…{stacksAddress.slice(-4)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => disconnectStacks()}
+                        className="text-xs text-white/40 hover:text-white/70 underline"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => connectStacks()}
+                      disabled={isStacksConnecting}
+                      className="bg-secondary text-black hover:bg-secondary/90 rounded-lg text-xs font-semibold h-8"
+                    >
+                      {isStacksConnecting ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        "Connect Stacks"
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )}
+              {(rampNetwork === "stellar" ||
+                (activeTab === "bridge" &&
+                  (isStellarChain(fromChain) ||
+                    isStellarChain(toChain)))) && (
+                <div className="flex md:items-center justify-between items-center mb-2 pt-2 border-t border-white/10">
+                  <div className="flex flex-col">
+                    <span className="text-sm text-white/70 font-normal">
+                      Stellar Wallet
+                    </span>
+                    <span className="text-[10px] text-white/40">
+                      {activeTab === "bridge" && isStellarChain(fromChain)
+                        ? "Required to bridge from Stellar"
+                        : "USDC destination (Varial / xBull / Albedo / Lobstr)"}
+                    </span>
+                  </div>
+                  {isStellarConnected && stellarAddress ? (
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-white/70 max-w-[140px] truncate">
+                        {stellarAddress.slice(0, 6)}…{stellarAddress.slice(-4)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => disconnectStellar()}
+                        className="text-xs text-white/40 hover:text-white/70 underline"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => connectStellar()}
+                      disabled={isStellarConnecting}
+                      className="bg-secondary text-black hover:bg-secondary/90 rounded-lg text-xs font-semibold h-8"
+                    >
+                      {isStellarConnecting ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        "Connect Stellar"
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )}
+              {activeTab === "bridge" &&
+                (isSolanaChain(fromChain) || isSolanaChain(toChain)) && (
+                  <div className="flex md:items-center justify-between items-center mb-2 pt-2 border-t border-white/10">
+                    <div className="flex flex-col">
+                      <span className="text-sm text-white/70 font-normal">
+                        Solana Wallet
+                      </span>
+                      <span className="text-[10px] text-white/40">
+                        {isSolanaChain(fromChain)
+                          ? "Required to bridge from Solana"
+                          : "USDC destination (Phantom / Solflare)"}
+                      </span>
+                    </div>
+                    {isSolanaConnected && solanaAddress ? (
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-white/70 max-w-[140px] truncate">
+                          {solanaAddress.slice(0, 6)}…{solanaAddress.slice(-4)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => disconnectSolana()}
+                          className="text-xs text-white/40 hover:text-white/70 underline"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() =>
+                          connectSolana().catch((err: Error) =>
+                            toast({
+                              title: "Solana wallet",
+                              description: err.message,
+                              variant: "destructive",
+                            }),
+                          )
+                        }
+                        disabled={isSolanaConnecting}
+                        className="bg-secondary text-black hover:bg-secondary/90 rounded-lg text-xs font-semibold h-8"
+                      >
+                        {isSolanaConnecting ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          "Connect Solana"
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                )}
               {isConnected &&
                 usdcBalance !== undefined &&
                 cngnBalance !== undefined && (
@@ -1623,13 +2223,16 @@ export default function HomePage() {
           {(activeTab === "buy" || activeTab === "sell") && (
             <div className="flex items-center gap-2 p-3 bg-black/50 rounded-xl border border-white/10">
               <span className="text-xs text-white/50 mr-auto">Network</span>
-              {(["base", "bsc"] as const).map((net) => (
+              {(["base", "bsc", "stellar"] as const).map((net) => (
                 <button
                   key={net}
                   type="button"
                   onClick={() => {
                     setRampNetwork(net);
-                    if (activeTab === "sell" && isConnected) {
+                    if (activeTab === "buy") {
+                      setBuyReceiveType(net === "stellar" ? "USDC" : "CNGN");
+                    }
+                    if (activeTab === "sell" && isConnected && net !== "stellar") {
                       const chainId = net === "bsc"
                         ? (IS_TESTNET ? 97 : 56)
                         : (IS_TESTNET ? 84532 : 8453);
@@ -1642,7 +2245,7 @@ export default function HomePage() {
                       : "bg-white/5 text-white/50 hover:bg-white/10"
                   }`}
                 >
-                  {net === "base" ? "Base" : "BSC"}
+                  {net === "base" ? "Base" : net === "bsc" ? "BSC" : "Stellar"}
                 </button>
               ))}
             </div>
@@ -1858,10 +2461,12 @@ export default function HomePage() {
             </p>
           </div>
 
-          {reference && (
+          {(reference || (activeTab === "bridge" && bridgeRef)) && (
             <div className="p-4 bg-black/50 rounded-xl">
               <p className="text-white/70 mb-2">Reference</p>
-              <code className="text-sm text-white font-mono">{reference}</code>
+              <code className="text-sm text-white font-mono">
+                {reference || bridgeRef}
+              </code>
               {wsConnected && (
                 <p className="text-sm text-green-400 mt-2 flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -1882,7 +2487,13 @@ export default function HomePage() {
                   {(bridgeResult?.sourceTxHash ||
                     bridgeStatus?.metadata?.SOURCE_TX) && (
                     <a
-                      href={`https://${fromChain.toLowerCase().includes("testnet") || fromChain.toLowerCase().includes("sepolia") ? "sepolia." : ""}etherscan.io/tx/${bridgeResult?.sourceTxHash || bridgeStatus?.metadata?.SOURCE_TX}`}
+                      href={
+                        explorerTxUrl(
+                          fromChain,
+                          (bridgeResult?.sourceTxHash ||
+                            bridgeStatus?.metadata?.SOURCE_TX) as string,
+                        ) ?? "#"
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-secondary text-xs hover:underline flex items-center gap-1"
@@ -1900,10 +2511,42 @@ export default function HomePage() {
                 ) : (
                   <div className="flex items-center gap-2 text-xs text-white/50">
                     <Loader2 className="w-3 h-3 animate-spin" />
-                    Waiting for transaction...
+                    {isBridging
+                      ? "Confirm the transactions in your wallet…"
+                      : "Waiting for transaction..."}
                   </div>
                 )}
               </div>
+
+              {/* Destination Transaction (once the mint lands) */}
+              {(bridgeResult?.destinationTxHash ||
+                bridgeStatus?.metadata?.DESTINATION_TX) && (
+                <div className="p-4 bg-black/50 rounded-xl space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-white/70 text-sm">
+                      Destination Transaction
+                    </span>
+                    <a
+                      href={
+                        explorerTxUrl(
+                          toChain,
+                          (bridgeResult?.destinationTxHash ||
+                            bridgeStatus?.metadata?.DESTINATION_TX) as string,
+                        ) ?? "#"
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-secondary text-xs hover:underline flex items-center gap-1"
+                    >
+                      View on Explorer <ArrowUpRight className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <code className="text-xs text-secondary block truncate bg-secondary/10 p-2 rounded">
+                    {bridgeResult?.destinationTxHash ||
+                      bridgeStatus?.metadata?.DESTINATION_TX}
+                  </code>
+                </div>
+              )}
 
               {/* Status Steps */}
               <div className="space-y-3">
@@ -1922,7 +2565,7 @@ export default function HomePage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {bridgeStatus?.status === "COMPLETED" ? (
+                  {bridgeDone ? (
                     <div className="bg-green-500/20 p-1 rounded-full">
                       <CheckCircle className="w-4 h-4 text-green-500" />
                     </div>
@@ -1942,7 +2585,7 @@ export default function HomePage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {bridgeStatus?.status === "COMPLETED" ? (
+                  {bridgeDone ? (
                     <div className="bg-green-500/20 p-1 rounded-full">
                       <CheckCircle className="w-4 h-4 text-green-500" />
                     </div>
@@ -1964,10 +2607,10 @@ export default function HomePage() {
 
               <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
                 <p className="text-xs text-blue-200">
-                  <span className="font-bold">Note:</span> Bridging involves
-                  Circle CCTP which requires block finality. This process can
-                  take 15-20 minutes on testnets. You can safely close this
-                  window; the transaction will complete automatically.
+                  <span className="font-bold">Note:</span> Bridging uses
+                  Circle CCTP which requires block finality — this can take
+                  up to ~20 minutes. You can safely close this window; the
+                  transaction will complete automatically.
                 </p>
               </div>
             </div>
@@ -2127,6 +2770,157 @@ export default function HomePage() {
                 </div>
               </div>
             )}
+
+          {activeTab === "sell" &&
+            (cryptoType === "USDC" || cryptoType === "USDT") &&
+            transactionData?.data?.deposit?.receiveAddress && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-4">
+                <div>
+                  <span className="text-amber-400/80 text-xs font-bold uppercase tracking-wider mb-1 block">
+                    Amount to Send
+                  </span>
+                  <p className="text-2xl font-bold text-white tracking-tight">
+                    {transactionData.data.deposit.amount || sellAmount}{" "}
+                    <span className="text-lg font-medium text-amber-400">
+                      {cryptoType}
+                    </span>
+                  </p>
+                </div>
+
+                <div className="h-px bg-amber-500/20 w-full" />
+
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="text-amber-400" size={16} />
+                    <span className="text-amber-400/80 text-xs font-bold uppercase tracking-wider">
+                      Stellar Deposit Address
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-black/20 p-2 rounded-lg border border-amber-500/10">
+                    <code className="text-xs text-white flex-1 break-all font-mono">
+                      {transactionData.data.deposit.receiveAddress}
+                    </code>
+                    <button
+                      onClick={async () => {
+                        const success = await copyToClipboard(
+                          transactionData.data.deposit.receiveAddress,
+                        );
+                        if (success) {
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                          toast({ title: "Copied!", variant: "success" });
+                        }
+                      }}
+                      className="p-2 hover:bg-white/10 rounded-md transition-colors"
+                    >
+                      {copied ? (
+                        <CheckCircle size={16} className="text-green-400" />
+                      ) : (
+                        <Copy size={16} className="text-amber-400/50" />
+                      )}
+                    </button>
+                  </div>
+
+                  {transactionData.data.deposit.memo && (
+                    <p className="text-xs text-white/50 mt-2">
+                      Memo: <strong>{transactionData.data.deposit.memo}</strong>
+                    </p>
+                  )}
+
+                  {transactionData.data.deposit.validUntil && (
+                    <p className="text-xs text-white/50 mt-2">
+                      Valid until: {new Date(transactionData.data.deposit.validUntil).toLocaleString()}
+                    </p>
+                  )}
+
+                  <div className="pt-3">
+                    <Button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          setIsSendingUsdc(true);
+                          setSendUsdcError(null);
+                          const hash = await sendUsdc({
+                            destination:
+                              transactionData.data.deposit.receiveAddress,
+                            amount: String(
+                              transactionData.data.deposit.amount ||
+                                sellAmount,
+                            ),
+                            memo: transactionData.data.deposit.memo || null,
+                            assetCode:
+                              transactionData.data.deposit.assetCode || null,
+                            assetIssuer:
+                              transactionData.data.deposit.assetIssuer || null,
+                          });
+                          setSentUsdcHash(hash);
+                          const ref =
+                            transactionData.data.databaseRecord?.reference;
+                          if (ref) {
+                            await stablestackApi
+                              .confirmOfframp(ref, hash)
+                              .catch(() => {});
+                          }
+                          toast({
+                            title: "USDC sent",
+                            description: hash,
+                            variant: "success",
+                          });
+                        } catch (err) {
+                          const msg =
+                            err instanceof Error
+                              ? err.message
+                              : "Failed to send USDC";
+                          setSendUsdcError(msg);
+                          toast({
+                            title: "Send failed",
+                            description: msg,
+                            variant: "destructive",
+                          });
+                        } finally {
+                          setIsSendingUsdc(false);
+                        }
+                      }}
+                      disabled={!isStellarConnected || isSendingUsdc}
+                      className="w-full bg-secondary text-black hover:bg-secondary/90 rounded-lg font-semibold h-11"
+                    >
+                      {isSendingUsdc ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Send USDC from wallet"
+                      )}
+                    </Button>
+
+                    {!isStellarConnected && (
+                      <p className="text-xs text-white/40 mt-2">
+                        Connect your Stellar wallet to send USDC automatically.
+                      </p>
+                    )}
+
+                    {sentUsdcHash && (
+                      <p className="text-xs text-green-400 mt-2 break-all font-mono">
+                        Tx:{" "}
+                        <a
+                          href={`https://stellar.expert/explorer/testnet/tx/${sentUsdcHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-green-300"
+                        >
+                          {sentUsdcHash}
+                        </a>
+                      </p>
+                    )}
+
+                    {sendUsdcError && (
+                      <p className="text-xs text-red-400 mt-2 break-all">
+                        {sendUsdcError}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
         </div>
       );
     }
@@ -2164,7 +2958,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="bg-background overflow-hidden">
+    <div className="bg-background overflow-x-hidden">
       {/* <GridLines /> */}
       <Header onOpenAuthModal={() => setIsAuthModalOpen(true)} />
       <section className="relative min-h-screen flex items-center pt-32 pb-20 px-6 overflow-hidden">
@@ -2186,9 +2980,9 @@ export default function HomePage() {
         <CryptoSelectionModal
           open={isCryptoModalOpen}
           onOpenChange={setIsCryptoModalOpen}
-          selectedCrypto="CNGN"
-          onSelect={() => {}}
-          showComingSoon={true}
+          selectedCrypto={buyReceiveType}
+          onSelect={handleBuyReceiveSelect}
+          disabledIds={["USDT", "WETH", "USDCX"]}
         />
       ) : (
         <CryptoSelectionModal
@@ -2196,6 +2990,7 @@ export default function HomePage() {
           onOpenChange={setIsCryptoModalOpen}
           selectedCrypto={cryptoType}
           onSelect={handleCryptoSelect}
+          disabledIds={["USDCX"]}
         />
       )}
 
@@ -2204,6 +2999,7 @@ export default function HomePage() {
         onOpenChange={setIsFromCryptoModalOpen}
         selectedCrypto={fromCryptoType}
         onSelect={handleFromCryptoSelect}
+        disabledIds={disabledFromOptions}
       />
 
       <CryptoSelectionModal
@@ -2211,6 +3007,7 @@ export default function HomePage() {
         onOpenChange={setIsToCryptoModalOpen}
         selectedCrypto={toCryptoType}
         onSelect={handleToCryptoSelect}
+        disabledIds={disabledToOptions}
       />
 
       <EmailOtpModal
@@ -2254,7 +3051,7 @@ export default function HomePage() {
         onConfirm={handleExecuteBuy}
         amount={buyAmount}
         walletAddress={walletAddress}
-        network={rampNetwork === "bsc" ? "BSC" : "Base"}
+        network={rampNetwork === "bsc" ? "BSC" : rampNetwork === "stellar" ? "Stellar" : "Base"}
         isLoading={onRamp.isPending}
       />
 
@@ -2266,7 +3063,7 @@ export default function HomePage() {
           setFromChain(chain);
           setIsFromChainModalOpen(false);
         }}
-        chains={supportedChains}
+        chains={bridgeChains.filter((chain) => chain !== toChain)}
       />
 
       <ChainSelectionModal
@@ -2277,7 +3074,7 @@ export default function HomePage() {
           setToChain(chain);
           setIsToChainModalOpen(false);
         }}
-        chains={supportedChains}
+        chains={bridgeChains.filter((chain) => chain !== fromChain)}
       />
 
       <Footer />
