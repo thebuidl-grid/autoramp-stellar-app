@@ -139,6 +139,11 @@ h6 {
   scrollbar-width: none;
 }
 
+.recharts-wrapper,
+.recharts-surface {
+  background: transparent !important;
+}
+
 /* Animations */
 @keyframes fadeIn {
   from {

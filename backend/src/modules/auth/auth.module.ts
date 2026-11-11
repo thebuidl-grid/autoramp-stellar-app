@@ -8,10 +8,11 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AdminGuard } from './guards/admin.guard';
 import { OtpService } from './services/otp.service';
+import { DatabaseModule } from '../../database/database.module';
 
 /**
  * Auth Module
- * 
+ *
  * Provides authentication functionality including:
  * - User sign up and sign in
  * - Admin login
@@ -20,6 +21,8 @@ import { OtpService } from './services/otp.service';
  */
 @Module({
   imports: [
+    ConfigModule,
+    DatabaseModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -28,12 +31,9 @@ import { OtpService } from './services/otp.service';
         if (!secret) {
           throw new Error('JWT_SECRET is not defined in environment variables');
         }
-        const expiresIn = configService.get<string>('JWT_EXPIRES_IN') || '24h';
         return {
           secret,
-          signOptions: {
-            expiresIn: expiresIn as any, // Type assertion needed for compatibility
-          },
+          signOptions: { expiresIn: '24h' },
         };
       },
       inject: [ConfigService],
@@ -44,4 +44,3 @@ import { OtpService } from './services/otp.service';
   exports: [AuthService, OtpService, JwtAuthGuard, AdminGuard],
 })
 export class AuthModule {}
-

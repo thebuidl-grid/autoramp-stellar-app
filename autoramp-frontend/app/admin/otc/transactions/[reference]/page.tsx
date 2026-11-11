@@ -12,6 +12,8 @@ import Link from "next/link";
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits } from "viem";
 import { safeBigInt } from "@/lib/utils";
+import { OTC_TOKEN_ADDRESSES } from "@/lib/constants/swap-constants";
+import { getChainId } from "@/lib/constants/networks";
 
 
 export default function AdminOtcTransactionPage() {
@@ -32,7 +34,7 @@ export default function AdminOtcTransactionPage() {
     } = useQuery({
         queryKey: ["admin-otc-transaction", reference],
         queryFn: async () => {
-            const response = await adminApi.getOtcTransactions(1, 1, undefined, undefined, undefined, reference);
+            const response = await adminApi.getOtcTransactions(1, undefined, undefined, undefined, reference);
             if (response.data.transactions && response.data.transactions.length > 0) {
                 return response.data.transactions[0];
             }
@@ -82,17 +84,23 @@ export default function AdminOtcTransactionPage() {
 
         try {
             setSwapError("");
-            // The fromAmount is what the user sent and what we need to swap
-            // We need to fetch the tokens (assuming they are in txData.meta or fixed for now)
-            // For this example, let's assume we are selling USDC to buy CNGN 
-            // Replace with actual logic based on your system
-            const sellToken = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"; // USDC on Base
-            const buyToken = "0xc701eEBc6F72Dafb438253a6aCA3F5c1A1867cbb"; // CNGN on Base
-            
-            // Format sellAmount to base units (6 decimals for USDC)
-            const sellAmount = parseUnits(txData.toAmount.toString(), 6).toString(); // Swap the 'toAmount' they are receiving
+            const network = txData.network || "Base";
+            const tokenAddrs = OTC_TOKEN_ADDRESSES[network];
+            if (!tokenAddrs) {
+                setSwapError(`Unsupported network: ${network}`);
+                return;
+            }
 
-            const res = await adminApi.getOtcSwapQuote(sellToken, buyToken, sellAmount, address);
+            const sellToken = tokenAddrs.USDC.address;
+            const buyToken = tokenAddrs.CNGN.address;
+            const sellDecimals = tokenAddrs.USDC.decimals;
+            
+            const chainId = getChainId(network);
+            
+            // Format sellAmount to base units
+            const sellAmount = parseUnits((txData.toAmount || 0).toString(), sellDecimals).toString();
+
+            const res = await adminApi.getOtcSwapQuote(sellToken, buyToken, sellAmount, address, chainId);
             setSwapQuote(res.data);
         } catch (err: any) {
             setSwapError(err.message || "Failed to load quote");

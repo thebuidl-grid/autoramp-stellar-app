@@ -23,6 +23,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "No file provided" }, { status: 400 });
         }
 
+        const isPdf = file.name.toLowerCase().endsWith('.pdf');
+
         console.log(`Uploading file: ${file.name}, size: ${file.size}, folder: ${folder}`);
 
         // Convert file to buffer
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest) {
             const uploadStream = cloudinary.uploader.upload_stream(
                 {
                     folder: folder,
-                    resource_type: "auto",
+                    resource_type: isPdf ? "raw" : "auto",
                     upload_preset: process.env.CL_PRESET_NAME,
                 },
                 (error, result) => {

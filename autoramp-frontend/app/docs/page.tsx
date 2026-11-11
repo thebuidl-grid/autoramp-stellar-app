@@ -355,6 +355,30 @@ export default function DocsPage() {
   }
 }`}
             />
+
+            {/* Dashboard Analytics */}
+            <EndpointSection
+              method="GET"
+              endpoint="/dashboard"
+              title="Dashboard Analytics"
+              description="Get platform analytics data including users, merchants, and transaction counts. Requires the x-admin-email header with an authorized admin email — view it live on the AutoRamp Dashboard."
+              auth={false}
+              requestBody={`x-admin-email: admin@autoramp.com  (required header)`}
+              responseExample={`{
+  "totalUsers": 12847,
+  "activeMerchants": 482,
+  "pendingVerifications": 23,
+  "totalTransactions": 45620,
+  "merchantTransactions": 45620,
+  "onramps": 15430,
+  "offramps": 12100,
+  "swaps": 6540,
+  "bankTransfers": 11550,
+  "failedTransactions": 310,
+  "totalAmountTransacted": 2450000000.50,
+  "currency": "NGN"
+}`}
+            />
           </div>
         </section>
 

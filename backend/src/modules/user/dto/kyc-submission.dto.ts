@@ -10,7 +10,7 @@ import {
 
 /**
  * KYC Submission DTO
- * 
+ *
  * Validates KYC (Know Your Customer) submission data.
  * All fields are optional to allow partial submissions, but certain fields
  * may be required for verification depending on business rules.
@@ -198,4 +198,3 @@ export class KycSubmissionDto {
   @IsUrl()
   selfieUrl?: string;
 }
-

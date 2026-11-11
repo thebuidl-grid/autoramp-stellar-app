@@ -38,7 +38,7 @@ export default function AdminLoginPage() {
                 description: "Welcome to the admin portal.",
                 variant: "success",
             });
-            router.push("/admin");
+            router.replace("/admin");
         } catch (error) {
             toast({
                 title: "Login Failed",

@@ -1,174 +1,51 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
-import { Asset } from '@stellar/stellar-sdk';
-import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../../database/prisma.service';
-import { StablestackService } from '../stablestack/stablestack.service';
-import { StellarService } from '../stellar/stellar.service';
-import { getUsdcAsset, getBridgeUsdcAsset, getAssetForCorridor } from './config/constant';
-
-/**
- * Hub-like assets that trade freely against each other with no corridor
- * minimum — USDC (the NGN-corridor hub), native XLM, and Circle's real
- * bridge-compatible USDC. Everything else is a corridor stablecoin, which
- * keeps the $100 floor (see createSimpleSwap).
- */
-const HUB_ASSET_CODES = new Set(['USDC', 'XLM', 'BRIDGE_USDC']);
-import { CorridorService } from '../corridor/corridor.service';
+import { RampService } from '../ramp/ramp.service';
+import { NotificationsService } from '../merchants/notifications/notifications.service';
+import { ADDRESSES, TOKENS } from './config/constant';
 import { InitializeSwapDto } from './dto/initialize-swap.dto';
 import { CreateSimpleSwapDto } from './dto/create-simple-swap.dto';
 import { generateTrxReference } from '../../utils/reference.util';
-import { MOBILE_MONEY_ONRAMP_CURRENCIES } from '../stablestack/providers/paystack-ramp-processor.service';
+import { ethers } from 'ethers';
+import { Swapper } from './integrations/swapper';
 
 @Injectable()
 export class SwapService {
   private readonly logger = new Logger(SwapService.name);
+  private readonly rpcUrl?: string;
+  private readonly swapper: any;
 
   // Cache for USD/NGN rate (respects 1 request/minute limit)
   private usdNgnRateCache: { rate: number; timestamp: number } | null = null;
   private readonly CACHE_TTL_MS = 60 * 1000; // 1 minute in milliseconds
+  // If a fresh quote can't be fetched (RPC outage), serve the last good rate for up to this long.
+  private readonly STALE_RATE_MAX_MS = 60 * 60 * 1000;
 
   constructor(
     private configService: ConfigService,
     private prisma: PrismaService,
-    private stablestackService: StablestackService,
-    private httpService: HttpService,
-    private stellarService: StellarService,
-    private corridorService: CorridorService,
-  ) {}
-
-  /**
-   * Public discovery list for the frontend: every active corridor's
-   * fiat/stablecoin pair, so currency selectors can be driven by the
-   * corridor registry instead of hardcoding NGN/CNGN.
-   */
-  async getActiveCorridors(): Promise<
-    {
-      countryCode: string;
-      fiatCurrency: string;
-      stablecoinCode: string;
-      /**
-       * How the frontend should collect the fiat side of a buy/onramp for
-       * this corridor: the usual bank-transfer deposit account, or (KES
-       * today) a phone number that gets an M-Pesa push prompt — see
-       * MOBILE_MONEY_ONRAMP_CURRENCIES / PaystackRampProcessor.
-       */
-      onrampCollectionMethod: 'bank_transfer' | 'mobile_money';
-    }[]
-  > {
-    const corridors = await this.corridorService.findAll({ activeOnly: true });
-    return corridors.map((c) => ({
-      countryCode: c.countryCode,
-      fiatCurrency: c.fiatCurrency,
-      stablecoinCode: c.stablecoinCode,
-      onrampCollectionMethod: MOBILE_MONEY_ONRAMP_CURRENCIES.has(c.fiatCurrency.toUpperCase())
-        ? 'mobile_money'
-        : 'bank_transfer',
-    }));
-  }
-
-  /**
-   * Resolves any tradable asset code to a Stellar Asset. 'USDC' is the
-   * fixed hub asset every corridor pairs against; 'XLM' is native lumens;
-   * 'BRIDGE_USDC' is Circle's real, CCTP-bridge-compatible USDC (a
-   * different issuer than 'USDC' — see getBridgeUsdcAsset's doc comment).
-   * Anything else is looked up in the corridor registry by stablecoin code
-   * (e.g. 'CNGN', 'CGHS') — so a new corridor becomes tradable the moment
-   * its row exists, with no code change here.
-   */
-  async resolveAsset(code: string): Promise<Asset> {
-    const upper = code.toUpperCase();
-    if (upper === 'USDC') return getUsdcAsset();
-    if (upper === 'XLM') return Asset.native();
-    if (upper === 'BRIDGE_USDC') return getBridgeUsdcAsset();
-    const corridor = await this.corridorService.findByStablecoinCode(upper);
-    return getAssetForCorridor(corridor);
-  }
-
-  /**
-   * Get a live swap quote between two tradable assets (USDC/XLM/BRIDGE_USDC
-   * or a corridor stablecoin) via Stellar's native path-payment routing
-   * (replaces the old direct on-chain Aerodrome quoter call the frontend
-   * used to make). `issuer` is omitted for native XLM — callers must treat
-   * a missing issuer as native, not attempt `new Asset(code, undefined)`.
-   */
-  async getSwapQuote(
-    fromToken: string,
-    toToken: string,
-    amount: number,
-  ): Promise<{
-    sourceAmount: string;
-    destinationAmount: string;
-    exchangeRate: number;
-    sourceAsset: { code: string; issuer?: string };
-    destAsset: { code: string; issuer?: string };
-  }> {
-    try {
-      const sourceAsset = await this.resolveAsset(fromToken);
-      const destAsset = await this.resolveAsset(toToken);
-
-      const quote = await this.stellarService.getStrictSendQuote(
-        sourceAsset,
-        amount.toString(),
-        destAsset,
-      );
-
-      const exchangeRate =
-        parseFloat(quote.destinationAmount) / parseFloat(quote.sourceAmount);
-
-      return {
-        sourceAmount: quote.sourceAmount,
-        destinationAmount: quote.destinationAmount,
-        exchangeRate,
-        sourceAsset: { code: sourceAsset.getCode(), issuer: sourceAsset.getIssuer() },
-        destAsset: { code: destAsset.getCode(), issuer: destAsset.getIssuer() },
-      };
-    } catch (error: any) {
-      this.logger.error('Error getting swap quote:', error.message);
-      throw new BadRequestException(`Failed to get swap quote: ${error.message}`);
+    private rampService: RampService,
+    private notificationsService: NotificationsService,
+  ) {
+    this.rpcUrl = this.configService.get<string>('RPC_URL');
+    if (!this.rpcUrl) {
+      throw new BadRequestException('RPC_URL is required in config');
     }
-  }
 
-  async hasTrustline(token: string, address: string): Promise<{ hasTrustline: boolean }> {
-    try {
-      const asset = await this.resolveAsset(token);
-      const hasTrustline = await this.stellarService.hasTrustline(address, asset);
-      return { hasTrustline };
-    } catch (error: any) {
-      this.logger.error('Error checking trustline:', error.message);
-      throw new BadRequestException(`Failed to check trustline: ${error.message}`);
-    }
-  }
-
-  /**
-   * Build a distribution-account-sponsored trustline transaction for the
-   * user to sign — they never have to fund the reserve a new trustline
-   * would normally require.
-   */
-  async getSponsoredTrustlineTransaction(
-    token: string,
-    address: string,
-  ): Promise<{ xdr: string; networkPassphrase: string }> {
-    try {
-      const asset = await this.resolveAsset(token);
-      return await this.stellarService.buildSponsoredTrustlineTransaction({
-        userPublicKey: address,
-        asset,
-      });
-    } catch (error: any) {
-      this.logger.error('Error building sponsored trustline transaction:', error.message);
-      throw new BadRequestException(`Failed to build sponsored trustline transaction: ${error.message}`);
-    }
+    // Initialize swapper for on-chain queries
+    const provider = new ethers.JsonRpcProvider(this.rpcUrl);
+    // Provide a random wallet for read-only Quoter tasks if explicit signer is needed
+    const wallet = ethers.Wallet.createRandom().connect(provider);
+    this.swapper = new Swapper(provider, wallet);
   }
 
   async getTokenBalance(
     token: string,
-    address: string,
+    address?: string,
   ): Promise<string | null> {
     try {
-      const asset = await this.resolveAsset(token);
-      return await this.stellarService.getBalance(address, asset);
+      return await this.swapper.getTokenBalance(token, address);
     } catch (error: any) {
       this.logger.error('Error fetching token balance:', error.message);
       throw new BadRequestException(
@@ -177,26 +54,9 @@ export class SwapService {
     }
   }
 
-  /**
-   * Balances for USDC (the hub) plus every active corridor's stablecoin —
-   * dynamic over the corridor registry rather than a fixed cngn/usdc pair.
-   * Also includes native XLM always, and Circle's real bridge-compatible
-   * USDC when BRIDGE_USDC_ISSUER_PUBLIC_KEY is configured (omitted rather
-   * than erroring for deployments that haven't set it up).
-   */
-  async getTokenBalances(
-    address: string,
-  ): Promise<Record<string, string | null>> {
+  async getTokenBalances(address?: string): Promise<Record<string, string>> {
     try {
-      const corridors = await this.corridorService.findAll({ activeOnly: true });
-      const assets: Record<string, Asset> = { usdc: getUsdcAsset(), xlm: Asset.native() };
-      for (const corridor of corridors) {
-        assets[corridor.stablecoinCode.toLowerCase()] = getAssetForCorridor(corridor);
-      }
-      if (process.env.BRIDGE_USDC_ISSUER_PUBLIC_KEY) {
-        assets.bridge_usdc = getBridgeUsdcAsset();
-      }
-      return await this.stellarService.getBalances(address, assets);
+      return await this.swapper.getTokenBalances(address);
     } catch (error: any) {
       this.logger.error('Error fetching token balances:', error.message);
       throw new BadRequestException(
@@ -214,6 +74,7 @@ export class SwapService {
     try {
       const now = Date.now();
 
+      // Check if we have a valid cached rate (within 1 minute)
       if (
         this.usdNgnRateCache &&
         now - this.usdNgnRateCache.timestamp < this.CACHE_TTL_MS
@@ -224,51 +85,46 @@ export class SwapService {
         return this.usdNgnRateCache.rate;
       }
 
-      const apiKey = this.configService.get<string>('MONIE_RATE_API_KEY');
-      if (!apiKey) {
-        throw new Error('MONIE_RATE_API_KEY is not configured');
-      }
+      // Cache expired or doesn't exist - fetch new rate from on-chain
+      this.logger.debug('Fetching USD/NGN rate from on-chain Swapper');
 
-      this.logger.debug('Fetching USD/NGN rate from MonieRate API');
-      const response = await firstValueFrom(
-        this.httpService.get<{
-          status: string;
-          message: string;
-          data: {
-            timestamp: number;
-            base: string;
-            market: string;
-            rates: {
-              NGN: number;
-            };
-          };
-        }>(
-          'https://api.monierate.com/core/rates/latest.json?base=USD&market=mid',
-          {
-            headers: {
-              api_key: apiKey,
-            },
-          },
-        ),
+      const quote = await this.swapper.getQuote({
+        tokenIn: ADDRESSES.USDC,
+        tokenOut: ADDRESSES.CNGN,
+        amountIn: '1', // 1 USDC
+        slippageTolerance: 50, // 0.5%
+      });
+
+      // Convert from BigInt amountOut to decimal number
+      const cngnDecimals = TOKENS.CNGN?.decimals ?? 18;
+      const rate = parseFloat(
+        ethers.formatUnits(quote.amountOut, cngnDecimals),
       );
 
-      const rate = response.data?.data?.rates?.NGN;
       if (!rate || rate <= 0) {
-        throw new Error('Invalid rate from MonieRate API');
+        throw new Error('Invalid rate from Swapper quote');
       }
 
+      // Cache the rate with current timestamp
       this.usdNgnRateCache = {
         rate,
         timestamp: now,
       };
 
-      this.logger.debug(`Cached USD/NGN rate: ${rate}`);
+      this.logger.debug(`Cached on-chain USD/NGN rate: ${rate}`);
       return rate;
     } catch (error: any) {
       this.logger.error(
-        'Error fetching USD/NGN rate from MonieRate:',
+        'Error fetching USD/NGN rate from on-chain:',
         error.message,
       );
+      const cached = this.usdNgnRateCache;
+      if (cached && Date.now() - cached.timestamp < this.STALE_RATE_MAX_MS) {
+        this.logger.warn(
+          `Serving stale USD/NGN rate ${cached.rate} (${Math.round((Date.now() - cached.timestamp) / 1000)}s old) because the live quote failed`,
+        );
+        return cached.rate;
+      }
       throw new BadRequestException(
         `Failed to fetch USD/NGN rate: ${error.message}`,
       );
@@ -277,14 +133,23 @@ export class SwapService {
 
   /**
    * Calculate estimated NGN value from CNGN amount
+   * Uses USD/NGN rate from on-chain Swapper
    * Since CNGN = NGN (1:1 peg), we just multiply CNGN amount by USD/NGN rate
+   * @param cngnAmount - Amount in CNGN
+   * @returns Object with estimatedNgn, usdNgnRate, and usdValue
    */
   async calculateEstimatedNgn(
     cngnAmount: number,
   ): Promise<{ estimatedNgn: number; usdNgnRate: number; usdValue: number }> {
     try {
+      // Get USD/NGN rate from on-chain Swapper (e.g., 1619.01 means 1 USD = 1619.01 NGN)
       const usdNgnRate = await this.getUsdNgnRate();
+
+      // Since CNGN = NGN (1:1), multiply CNGN amount by USD/NGN rate
+      // Example: 100 CNGN * 1619.01 = 161,901 NGN
       const estimatedNgn = cngnAmount * usdNgnRate;
+
+      // Calculate USD value: NGN / (USD/NGN rate)
       const usdValue = cngnAmount;
 
       return {
@@ -302,45 +167,52 @@ export class SwapService {
 
   /**
    * Initialize swap transaction
-   * Creates offramp first to get the AutoRamp collection account + memo,
-   * then creates a linked swap record. Frontend builds/signs the actual
-   * PathPaymentStrictSend transaction using the returned swapParams.
+   * Creates offramp first to get recipient wallet address, then creates swap record
+   * Frontend will execute the swap using the returned recipient address
+   *
+   * @param userId - User ID from authenticated request
+   * @param dto - Swap initialization data
+   * @param ipAddress - Client IP address (optional)
+   * @param userAgent - Client user agent (optional)
+   * @returns Swap and offramp transaction data with recipient address
    */
   async initializeSwap(
     userId: string,
+    isOtcEnabled: boolean,
     dto: InitializeSwapDto,
     ipAddress?: string,
     userAgent?: string,
+    merchantId?: string,
+    merchantApiKeyId?: string,
   ): Promise<any> {
     try {
-      const currency = (dto.currency || 'NGN').toUpperCase();
-      const corridor = await this.corridorService.findByCurrency(currency);
-
-      // Validated (and the offramp only created) before touching anything
-      // stateful — an invalid fromTokenType shouldn't leave an orphaned
-      // offramp transaction behind.
-      const fromTokenType = (dto.fromTokenType || 'USDC').toUpperCase();
-      const fromAsset = await this.resolveAsset(fromTokenType);
-      if (fromTokenType === corridor.stablecoinCode) {
-        throw new BadRequestException(
-          `fromTokenType and the destination corridor's stablecoin (${corridor.stablecoinCode}) must differ — selling a coin for its own fiat doesn't need a swap`,
-        );
-      }
-      if (!HUB_ASSET_CODES.has(fromTokenType) && dto.fromAmount < 100) {
-        throw new BadRequestException(`Minimum amount for ${fromTokenType} is 100`);
+      // Step 1: Initialize offramp to get recipient wallet address
+      // If merchantId is provided, use merchant owner's user id for external API calls
+      let actorUserId = userId;
+      if (merchantId) {
+        const merchant = await this.prisma.merchant.findUnique({
+          where: { id: merchantId },
+          include: { user: true },
+        });
+        if (!merchant || !merchant.user) {
+          throw new BadRequestException('Merchant or merchant user not found');
+        }
+        actorUserId = merchant.user.id;
       }
 
-      const offrampResult = await this.stablestackService.offRamp(
-        userId,
+      const offrampResult = await this.rampService.offRamp(
+        merchantId || userId,
+        '',
+        merchantId ? true : false,
+        isOtcEnabled,
         {
           type: 'off',
-          network: 'stellar',
-          amount: dto.amount, // fiat amount (estimated value from frontend), in the corridor's currency
+          network: dto.network || 'base',
+          amount: dto.amount, // NGN amount (estimated NGN value from frontend)
           destination: {
             bankCode: dto.offrampDestination.bankCode,
             accountNumber: dto.offrampDestination.accountNumber,
           },
-          currency,
         },
         ipAddress,
         userAgent,
@@ -353,72 +225,157 @@ export class SwapService {
         );
       }
 
-      // Stellar offramp deposits land on AutoRamp's shared collection
-      // account, disambiguated by memo (no per-transaction address like Base).
-      const recipientAddress = offrampResult?.data?.depositAddress;
-      const memo = offrampResult?.data?.memo;
+      // Extract recipient address from offramp response
+      // The address is at data.depositAddress, not data.depositAccount.address
+      const recipientAddress =
+        offrampResult?.data?.depositAddress ||
+        offrampResult?.data?.depositAccount?.address;
 
-      if (!recipientAddress || !memo) {
+      if (!recipientAddress) {
         this.logger.error(
           'Offramp response structure:',
           JSON.stringify(offrampResult, null, 2),
         );
         throw new BadRequestException(
-          'Recipient address/memo not found in offramp response',
+          'Recipient address not found in offramp response',
         );
       }
 
-      const toTokenType = corridor.stablecoinCode;
-      const fromAmountDecimal = dto.fromAmount;
+      // Step 2: Prepare swap transaction data
+      // Note: Quote is not fetched here - actual amounts will be determined when the swap executes on-chain
+      const fromTokenType = 'USDC';
+      const toTokenType = 'CNGN';
+      const fromAmountDecimal = dto.usdcAmount;
 
-      // Use estimated fiat amount from frontend as the expected output amount
+      // Use estimated NGN amount from frontend as the expected output amount
       const toAmountDecimal = dto.amount;
-      const exchangeRate = dto.fromAmount > 0 ? dto.amount / dto.fromAmount : 0;
 
-      const swapTransaction = await this.prisma.swapTransaction.create({
-        data: {
-          userId,
-          reference: offrampTransaction.reference, // Same reference as offramp
-          fromTokenType,
-          fromAmount: fromAmountDecimal,
-          fromNetwork: 'stellar',
-          toTokenType,
-          toAmount: toAmountDecimal,
-          toNetwork: 'stellar',
-          exchangeRate,
-          sourceAddress: '', // Will be set when user executes swap from frontend
-          destinationAddress: recipientAddress,
-          memo,
-          status: 'PENDING',
-          ipAddress: ipAddress || null,
-          userAgent: userAgent || null,
-        },
-      });
+      // Calculate estimated exchange rate (NGN / USDC)
+      // explicit check to avoid division by zero, though DTO validation should prevent it
+      const exchangeRate = dto.usdcAmount > 0 ? dto.amount / dto.usdcAmount : 0;
 
-      await this.prisma.offrampTransaction.update({
-        where: { id: offrampTransaction.id },
-        data: {
-          swapId: swapTransaction.id,
-        },
-      });
+      // Step 3: Create swap transaction record with same reference as offramp
+      let swapTransaction: any = null;
+      if (merchantId) {
+        swapTransaction = await this.prisma.merchantSwapTransaction.create({
+          data: {
+            merchantId,
+            reference: offrampTransaction.reference,
+            fromTokenType,
+            fromAmount: fromAmountDecimal,
+            fromNetwork: dto.network || 'base',
+            toTokenType,
+            toAmount: toAmountDecimal,
+            toNetwork: dto.network || 'base',
+            exchangeRate,
+            sourceAddress: '',
+            destinationAddress: recipientAddress,
+            status: 'PENDING',
+            ipAddress: ipAddress || null,
+            userAgent: userAgent || null,
+          },
+        });
+      } else {
+        swapTransaction = await this.prisma.swapTransaction.create({
+          data: {
+            userId,
+            reference: offrampTransaction.reference, // Same reference as offramp
+            fromTokenType,
+            fromAmount: fromAmountDecimal,
+            fromNetwork: dto.network || 'base',
+            toTokenType,
+            toAmount: toAmountDecimal,
+            toNetwork: dto.network || 'base',
+            exchangeRate,
+            sourceAddress: '', // Will be set when user executes swap from frontend
+            destinationAddress: recipientAddress, // Offramp recipient address
+            status: 'PENDING',
+            ipAddress: ipAddress || null,
+            userAgent: userAgent || null,
+          },
+        });
+      }
 
-      await this.prisma.transactionLog.create({
-        data: {
-          transactionType: 'swap',
-          transactionId: swapTransaction.id,
-          userId,
-          action: 'created',
-          newStatus: 'PENDING',
-          description: 'Swap transaction initialized (pending user execution)',
-        },
-      });
+      // Link swap to offramp
+      // For user-level offramp, link swapId on OfframpTransaction
+      try {
+        if (!merchantId) {
+          await this.prisma.offrampTransaction.update({
+            where: { id: offrampTransaction.id },
+            data: {
+              swapId: swapTransaction.id,
+            },
+          });
+        } else {
+          // Create a merchant-level offramp record to mirror the offramp
+          const depositAccount = offrampResult?.data?.depositAccount || {};
+          await this.prisma.merchantOfframpTransaction.create({
+            data: {
+              merchantId,
+              reference: offrampTransaction.reference,
+              amount: dto.amount,
+              currency: 'NGN',
+              tokenType: 'CNGN',
+              status: offrampTransaction.status || 'PENDING',
+              bankCode: dto.offrampDestination.bankCode,
+              accountNumber: dto.offrampDestination.accountNumber,
+              accountName: depositAccount?.accountName || null,
+              bankName: depositAccount?.bankName || null,
+              network: dto.network || null,
+              notifyUrl: null,
+              ipAddress: ipAddress || null,
+              userAgent: userAgent || null,
+            },
+          });
+        }
+      } catch (e) {
+        this.logger.error(
+          'Failed linking offramp to swap or creating merchant offramp record',
+          e,
+        );
+      }
 
-      const corridorAsset = getAssetForCorridor(corridor);
-      // toFixed(7), not toString() — Stellar rejects more than 7 decimal
-      // places, and floating-point multiplication routinely produces more
-      // (e.g. 354.6341872 * 0.95 === 336.90247783999996), which
-      // pathPaymentStrictSend's destMin then rejects outright.
-      const destMin = (dto.amount * (1 - dto.slippage)).toFixed(7);
+      // Create transaction log
+      // Create transaction log for user swaps
+      if (!merchantId) {
+        await this.prisma.transactionLog.create({
+          data: {
+            transactionType: 'swap',
+            transactionId: swapTransaction.id,
+            userId,
+            action: 'created',
+            newStatus: 'PENDING',
+            description:
+              'Swap transaction initialized (pending user execution)',
+          },
+        });
+      } else {
+        // For merchant flows, create a merchant API request log
+        try {
+          await this.prisma.merchantApiRequestLog.create({
+            data: {
+              merchantApiKeyId: merchantApiKeyId || null,
+              merchantId: merchantId || null,
+              method: 'POST',
+              path: '/swap/initialize',
+              statusCode: 201,
+              ipAddress: ipAddress || null,
+              userAgent: userAgent || null,
+              requestBody: dto as any,
+              responseBody: {
+                swapId: swapTransaction.id,
+                reference: swapTransaction.reference,
+              },
+              errorMessage: null,
+            },
+          });
+        } catch (logErr) {
+          this.logger.error(
+            'Failed to write merchant_api_request_log for initializeSwap',
+            logErr,
+          );
+        }
+      }
 
       return {
         swap: {
@@ -435,21 +392,14 @@ export class SwapService {
           reference: offrampTransaction.reference,
           status: offrampTransaction.status,
         },
+        // Return recipient address for frontend to use in swap
         recipientAddress,
-        // Params for the frontend to build/sign a PathPaymentStrictSend
+        // Return swap parameters for frontend
         swapParams: {
-          sendAsset: {
-            code: fromAsset.getCode(),
-            issuer: fromAsset.getIssuer(),
-          },
-          sendAmount: dto.fromAmount.toString(),
-          destAsset: {
-            code: corridorAsset.getCode(),
-            issuer: corridorAsset.getIssuer(),
-          },
-          destMin,
-          destination: recipientAddress,
-          memo,
+          tokenIn: ADDRESSES.USDC,
+          tokenOut: ADDRESSES.CNGN,
+          amountIn: dto.usdcAmount.toString(),
+          recipient: recipientAddress,
           slippage: dto.slippage,
         },
       };
@@ -462,18 +412,32 @@ export class SwapService {
   }
 
   /**
-   * Update swap transaction after frontend executes the swap.
-   * Sanity-checks the reported hash against Horizon before trusting it.
+   * Update swap transaction after frontend executes the swap
+   * Called when user successfully executes the swap transaction
+   *
+   * @param reference - Swap transaction reference
+   * @param transactionHash - Blockchain transaction hash
+   * @param sourceAddress - User's wallet address that executed the swap
+   * @returns Updated swap transaction
    */
   async updateSwapAfterExecution(
     reference: string,
     transactionHash: string,
     sourceAddress: string,
+    merchantId?: string,
+    merchantApiKeyId?: string,
   ): Promise<any> {
     try {
-      const swapTransaction = await this.prisma.swapTransaction.findUnique({
-        where: { reference },
-      });
+      let swapTransaction: any = null;
+      if (merchantId) {
+        swapTransaction = await this.prisma.merchantSwapTransaction.findUnique({
+          where: { reference },
+        });
+      } else {
+        swapTransaction = await this.prisma.swapTransaction.findUnique({
+          where: { reference },
+        });
+      }
 
       if (!swapTransaction) {
         throw new BadRequestException('Swap transaction not found');
@@ -485,44 +449,88 @@ export class SwapService {
         );
       }
 
-      const verified =
-        await this.stellarService.getTransactionByHash(transactionHash);
-      if (verified && !verified.successful) {
-        throw new BadRequestException(
-          'Reported transaction was not successful on-chain',
-        );
+      // Check if this swap is linked to an offramp transaction
+      // If linked to offramp, set to PROCESSING (offramp will complete it)
+      // Otherwise, set to COMPLETED (simple swap, no offramp)
+      let hasOfframp: any = null;
+      if (merchantId) {
+        hasOfframp = await this.prisma.merchantOfframpTransaction.findFirst({
+          where: { reference },
+        });
+      } else {
+        hasOfframp = await this.prisma.offrampTransaction.findFirst({
+          where: { swapId: swapTransaction.id },
+        });
       }
-
-      // If linked to an offramp, leave COMPLETED to the offramp webhook/memo
-      // watcher. Otherwise (plain swap), this execution is the whole story.
-      const hasOfframp = await this.prisma.offrampTransaction.findFirst({
-        where: { swapId: swapTransaction.id },
-      });
 
       const newStatus = hasOfframp ? 'PROCESSING' : 'COMPLETED';
       const completedAt = hasOfframp ? null : new Date();
 
-      const updatedSwap = await this.prisma.swapTransaction.update({
-        where: { reference },
-        data: {
-          transactionHash,
-          sourceAddress,
-          status: newStatus,
-          completedAt,
-        },
-      });
+      let updatedSwap: any;
+      if (merchantId) {
+        updatedSwap = await this.prisma.merchantSwapTransaction.update({
+          where: { reference },
+          data: {
+            transactionHash,
+            sourceAddress,
+            status: newStatus,
+            completedAt,
+          },
+        });
+        await this.notificationsService.notifyMerchant(
+          merchantId,
+          'swap.updated',
+          updatedSwap,
+        );
+      } else {
+        updatedSwap = await this.prisma.swapTransaction.update({
+          where: { reference },
+          data: {
+            transactionHash,
+            sourceAddress, // User's wallet address
+            status: newStatus,
+            completedAt,
+          },
+        });
+      }
 
-      await this.prisma.transactionLog.create({
-        data: {
-          transactionType: 'swap',
-          transactionId: swapTransaction.id,
-          userId: swapTransaction.userId,
-          action: 'status_changed',
-          oldStatus: 'PENDING',
-          newStatus: newStatus,
-          description: `Swap transaction executed on-chain: ${transactionHash}`,
-        },
-      });
+      // Create transaction log
+      if (!merchantId) {
+        await this.prisma.transactionLog.create({
+          data: {
+            transactionType: 'swap',
+            transactionId: swapTransaction.id,
+            userId: swapTransaction.userId,
+            action: 'status_changed',
+            oldStatus: 'PENDING',
+            newStatus: newStatus,
+            description: `Swap transaction executed on blockchain: ${transactionHash}`,
+          },
+        });
+      } else {
+        // Optionally create merchant api request log for execution
+        try {
+          await this.prisma.merchantApiRequestLog.create({
+            data: {
+              merchantApiKeyId: merchantApiKeyId || null,
+              merchantId: merchantId || null,
+              method: 'POST',
+              path: '/swap/:reference/complete',
+              statusCode: 200,
+              ipAddress: null,
+              userAgent: null,
+              requestBody: { transactionHash, sourceAddress },
+              responseBody: updatedSwap,
+              errorMessage: null,
+            },
+          });
+        } catch (logErr) {
+          this.logger.error(
+            'Failed to write merchant_api_request_log for updateSwapAfterExecution',
+            logErr,
+          );
+        }
+      }
 
       return updatedSwap;
     } catch (error: any) {
@@ -532,97 +540,162 @@ export class SwapService {
   }
 
   /**
-   * Create a simple swap transaction (just store in database).
-   * Used for frontend-initiated swaps where execution happens on-chain,
-   * self-to-self (source === destination), so no memo is needed.
+   * Create a simple swap transaction (just store in database)
+   * Used for frontend-initiated swaps where execution happens on-chain
    */
   async createSimpleSwap(
-    userId: string,
     dto: CreateSimpleSwapDto,
+    merchantId?: string,
+    merchantApiKeyId?: string,
+    userId?: string,
     ipAddress?: string,
     userAgent?: string,
   ): Promise<any> {
     try {
-      const fromToken = dto.fromTokenType.toUpperCase();
-      const toToken = dto.toTokenType.toUpperCase();
-      // Validates against the corridor registry (plus the fixed USDC hub) —
-      // throws NotFoundException for anything not USDC and not a known
-      // corridor's stablecoin code.
-      await this.resolveAsset(fromToken);
-      await this.resolveAsset(toToken);
-      if (fromToken === toToken) {
+      if (!TOKENS[dto.fromTokenType.toUpperCase()]) {
+        throw new BadRequestException(
+          `fromTokenType must be ${Object.keys(TOKENS).join(', ')}`,
+        );
+      }
+      if (!TOKENS[dto.toTokenType.toUpperCase()]) {
+        throw new BadRequestException(
+          `toTokenType must be ${Object.keys(TOKENS).join(', ')}`,
+        );
+      }
+      if (dto.fromTokenType.toUpperCase() === dto.toTokenType.toUpperCase()) {
         throw new BadRequestException(
           'fromTokenType and toTokenType must be different',
         );
       }
 
-      // The $100 floor exists for corridor stablecoins (meant to represent
-      // meaningful real-world fiat amounts); it doesn't make sense for
-      // hub-like assets — XLM trades well under $1/unit, and BRIDGE_USDC
-      // (like USDC) is already dollar-denominated.
-      if (!HUB_ASSET_CODES.has(fromToken) && dto.fromAmount < 100) {
-        throw new BadRequestException(
-          `Minimum amount for ${fromToken} to ${toToken} swap is 100 ${fromToken}`,
-        );
-      } else if (!HUB_ASSET_CODES.has(toToken) && dto.toAmount < 100) {
-        throw new BadRequestException(
-          `Minimum amount for ${fromToken} to ${toToken} swap is 100 ${toToken}`,
-        );
-      }
+      // if (dto.fromAmount < 100 || dto.toAmount < 100) {
+      //   throw new BadRequestException(
+      //     `Minimum amount for ${dto.fromTokenType.toUpperCase()} to ${dto.toTokenType.toUpperCase()} swap is 100 ${dto.fromTokenType.toUpperCase()}`,
+      //   );
+      // }
 
-      const reference = generateTrxReference();
+      const reference = generateTrxReference(16, 'swp');
       const fromAmountDecimal = dto.fromAmount.toString();
       const toAmountDecimal = dto.toAmount.toString();
+      if (merchantId) {
+        const merchantSwapTransaction =
+          await this.prisma.merchantSwapTransaction.create({
+            data: {
+              merchantId,
+              reference,
+              fromTokenType: dto.fromTokenType.toUpperCase(),
+              fromAmount: fromAmountDecimal,
+              fromNetwork: dto.network || 'base',
+              toTokenType: dto.toTokenType.toUpperCase(),
+              toAmount: toAmountDecimal,
+              toNetwork: dto.network || 'base',
+              exchangeRate: dto.exchangeRate.toString(),
+              sourceAddress: dto.sourceAddress,
+              destinationAddress: dto.destinationAddress,
+              status: 'PENDING',
+              ipAddress: ipAddress || null,
+              userAgent: userAgent || null,
+            },
+          });
 
-      const swapTransaction = await this.prisma.swapTransaction.create({
-        data: {
-          userId,
-          reference,
-          fromTokenType: dto.fromTokenType.toUpperCase(),
-          fromAmount: fromAmountDecimal,
-          fromNetwork: 'stellar',
-          toTokenType: dto.toTokenType.toUpperCase(),
-          toAmount: toAmountDecimal,
-          toNetwork: 'stellar',
-          exchangeRate: dto.exchangeRate.toString(),
-          sourceAddress: dto.sourceAddress,
-          destinationAddress: dto.destinationAddress,
-          status: 'PENDING',
-          ipAddress: ipAddress || null,
-          userAgent: userAgent || null,
-        },
-      });
+        this.logger.log(
+          `Simple swap transaction ${reference} created for merchant ${merchantId}`,
+        );
 
-      await this.prisma.transactionLog.create({
-        data: {
-          transactionType: 'swap',
-          transactionId: swapTransaction.id,
-          userId,
-          action: 'created',
-          newStatus: 'PENDING',
-          description:
-            'Simple swap transaction created (pending on-chain execution)',
-        },
-      });
+        // Log merchant API request
+        try {
+          await this.prisma.merchantApiRequestLog.create({
+            data: {
+              merchantApiKeyId: merchantApiKeyId || null,
+              merchantId,
+              method: 'POST',
+              path: '/swap/create',
+              statusCode: 201,
+              ipAddress: ipAddress || null,
+              userAgent: userAgent || null,
+              requestBody: dto as any,
+              responseBody: {
+                id: merchantSwapTransaction.id,
+                reference: merchantSwapTransaction.reference,
+              },
+              errorMessage: null,
+            },
+          });
+        } catch (logErr) {
+          this.logger.error(
+            'Failed to write merchant_api_request_log:',
+            logErr,
+          );
+        }
 
-      this.logger.log(
-        `Simple swap transaction ${reference} created for user ${userId}`,
-      );
+        return {
+          id: merchantSwapTransaction.id,
+          reference: merchantSwapTransaction.reference,
+          fromTokenType: merchantSwapTransaction.fromTokenType,
+          fromAmount: dto.fromAmount,
+          toTokenType: merchantSwapTransaction.toTokenType,
+          toAmount: dto.toAmount,
+          exchangeRate: dto.exchangeRate,
+          sourceAddress: merchantSwapTransaction.sourceAddress,
+          destinationAddress: merchantSwapTransaction.destinationAddress,
+          status: merchantSwapTransaction.status,
+          network: merchantSwapTransaction.fromNetwork,
+          createdAt: merchantSwapTransaction.createdAt,
+        };
+      }
+      if (userId) {
+        const userSwapTransaction = await this.prisma.swapTransaction.create({
+          data: {
+            userId,
+            reference,
+            fromTokenType: dto.fromTokenType.toUpperCase(),
+            fromAmount: fromAmountDecimal,
+            fromNetwork: dto.network || 'base',
+            toTokenType: dto.toTokenType.toUpperCase(),
+            toAmount: toAmountDecimal,
+            toNetwork: dto.network || 'base',
+            exchangeRate: dto.exchangeRate.toString(),
+            sourceAddress: dto.sourceAddress,
+            destinationAddress: dto.destinationAddress,
+            status: 'PENDING',
+            ipAddress: ipAddress || null,
+            userAgent: userAgent || null,
+          },
+        });
 
-      return {
-        id: swapTransaction.id,
-        reference: swapTransaction.reference,
-        fromTokenType: swapTransaction.fromTokenType,
-        fromAmount: dto.fromAmount,
-        toTokenType: swapTransaction.toTokenType,
-        toAmount: dto.toAmount,
-        exchangeRate: dto.exchangeRate,
-        sourceAddress: swapTransaction.sourceAddress,
-        destinationAddress: swapTransaction.destinationAddress,
-        status: swapTransaction.status,
-        network: swapTransaction.fromNetwork,
-        createdAt: swapTransaction.createdAt,
-      };
+        if (userSwapTransaction) {
+          await this.prisma.transactionLog.create({
+            data: {
+              transactionType: 'swap',
+              transactionId: userSwapTransaction.id,
+              userId,
+              action: 'created',
+              newStatus: 'PENDING',
+              description:
+                'Simple swap transaction created (pending on-chain execution)',
+            },
+          });
+
+          this.logger.log(
+            `Simple swap transaction ${reference} created for user ${userId}`,
+          );
+
+          return {
+            id: userSwapTransaction.id,
+            reference: userSwapTransaction.reference,
+            fromTokenType: userSwapTransaction.fromTokenType,
+            fromAmount: dto.fromAmount,
+            toTokenType: userSwapTransaction.toTokenType,
+            toAmount: dto.toAmount,
+            exchangeRate: dto.exchangeRate,
+            sourceAddress: userSwapTransaction.sourceAddress,
+            destinationAddress: userSwapTransaction.destinationAddress,
+            status: userSwapTransaction.status,
+            network: userSwapTransaction.fromNetwork,
+            createdAt: userSwapTransaction.createdAt,
+          };
+        }
+      }
     } catch (error: any) {
       this.logger.error('Error creating simple swap:', error.message);
       throw new BadRequestException(`Failed to create swap: ${error.message}`);

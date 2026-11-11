@@ -1,15 +1,22 @@
-import { Injectable, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  ExecutionContext,
+  UnauthorizedException,
+  Logger,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 
 /**
  * JWT Auth Guard
- * 
+ *
  * Protects routes by requiring a valid JWT token.
  * Can be used with @UseGuards(JwtAuthGuard) decorator or applied globally.
  */
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
+  private readonly logger = new Logger(JwtAuthGuard.name);
+
   constructor(private reflector: Reflector) {
     super();
   }
@@ -38,9 +45,15 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   handleRequest(err: any, user: any, info: any) {
     // You can throw an exception based on either "info" or "err" arguments
     if (err || !user) {
+      // Log details to help debug local issues
+      this.logger.error('JWT Auth Guard Error:', {
+        err,
+        info: info?.message || info,
+        user: user ? 'exists' : 'null/false',
+      });
+
       throw err || new UnauthorizedException('Invalid or missing token');
     }
     return user;
   }
 }
-

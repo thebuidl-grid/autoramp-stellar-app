@@ -1,31 +1,34 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { ApiKeysService } from '../api-keys/api-keys.service';
 
 /**
  * User Service
- * 
+ *
  * Handles user-related operations including:
  * - User profile management
  * - API key creation for approved merchants
  */
 @Injectable()
 export class UserService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly apiKeysService: ApiKeysService,
-  ) { }
+  private readonly logger = new Logger(UserService.name);
+
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Get user profile
-   * 
+   *
    * Retrieves the authenticated user's profile information.
-   * 
+   *
    * @param userId - User ID from authenticated request
    * @returns User profile
    */
   async getProfile(userId: string) {
-    console.log(`[UserService] Fetching profile for ID: ${userId}`);
+    this.logger.debug(`Fetching profile for ID: ${userId}`);
 
     // Try to find in User table first
     let profile = await this.prisma.user.findUnique({
@@ -35,19 +38,16 @@ export class UserService {
         email: true,
         phoneNumber: true,
         walletAddress: true,
+        isMerchant: true,
+        isOTCEnabled: true,
         role: true,
         createdAt: true,
         updatedAt: true,
       },
     });
 
-    if (profile) {
-      console.log(`[UserService] Found profile in User table for ID: ${userId}`);
-    }
-
     // If not found, try to find in Admin table
     if (!profile) {
-      console.log(`[UserService] Not found in User table, checking Admin table for ID: ${userId}`);
       const admin = await this.prisma.admin.findUnique({
         where: { id: userId },
         select: {
@@ -62,13 +62,14 @@ export class UserService {
       });
 
       if (admin) {
-        console.log(`[UserService] Found profile in Admin table for ID: ${userId}`);
         // Map Admin to a profile-like structure with ADMIN role
         profile = {
           id: admin.id,
           email: admin.email,
           phoneNumber: null,
           walletAddress: null,
+          isMerchant: false,
+          isOTCEnabled: false,
           role: 'ADMIN',
           createdAt: admin.createdAt,
           updatedAt: admin.updatedAt,
@@ -77,7 +78,6 @@ export class UserService {
     }
 
     if (!profile) {
-      console.error(`[UserService] Profile NOT FOUND in either table for ID: ${userId}`);
       throw new NotFoundException(`Profile not found for ID: ${userId}`);
     }
 
@@ -86,7 +86,7 @@ export class UserService {
 
   /**
    * Get user's API keys
-   * 
+   *
    * @param userId - User ID
    * @returns List of user's API keys
    */
@@ -109,56 +109,29 @@ export class UserService {
   }
 
   /**
-   * Create API key for user
-   * 
-   * Only allowed if user has isApiAccessApproved = true
-   * 
-   * @param userId - User ID
-   * @param dto - API key creation data
-   * @returns Created API key (key shown only once)
-   */
-  async createApiKey(userId: string, dto: any) {
-    // Check if user has API access approved
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { isApiAccessApproved: true },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (!user.isApiAccessApproved) {
-      throw new ForbiddenException('API access not approved. Please contact admin for approval.');
-    }
-
-    // Create API key using ApiKeysService
-    return this.apiKeysService.createApiKey(userId, dto);
-  }
-
-  /**
    * Get user's API key statistics
-   * 
+   *
    * @param userId - User ID
    * @returns API key usage statistics
    */
   async getUserApiKeyStats(userId: string) {
-    const [totalKeys, activeKeys, totalRequests, lastRequest] = await Promise.all([
-      this.prisma.apiKey.count({
-        where: { userId },
-      }),
-      this.prisma.apiKey.count({
-        where: { userId, isActive: true },
-      }),
-      this.prisma.apiRequestLog.count({
-        where: { userId },
-      }),
-      this.prisma.apiRequestLog.findFirst({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        select: { createdAt: true },
-      }),
-    ]);
+    const [totalKeys, activeKeys, totalRequests, lastRequest] =
+      await Promise.all([
+        this.prisma.apiKey.count({
+          where: { userId },
+        }),
+        this.prisma.apiKey.count({
+          where: { userId, isActive: true },
+        }),
+        this.prisma.apiRequestLog.count({
+          where: { userId },
+        }),
+        this.prisma.apiRequestLog.findFirst({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true },
+        }),
+      ]);
 
     return {
       totalKeys,
@@ -170,7 +143,7 @@ export class UserService {
 
   /**
    * Get user's API key analytics over time
-   * 
+   *
    * @param userId - User ID
    * @param period - Time period for grouping (daily, weekly, monthly)
    * @returns Time-series analytics data
@@ -228,9 +201,10 @@ export class UserService {
       errorCount: Number(log.error_count),
       successRate:
         Number(log.request_count) > 0
-          ? Math.round((Number(log.success_count) / Number(log.request_count)) * 100)
+          ? Math.round(
+              (Number(log.success_count) / Number(log.request_count)) * 100,
+            )
           : 0,
     }));
   }
 }
-

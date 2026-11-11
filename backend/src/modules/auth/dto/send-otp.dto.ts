@@ -19,4 +19,3 @@ export class SendOtpDto {
   @IsOptional()
   purpose?: string = 'SIGNUP';
 }
-

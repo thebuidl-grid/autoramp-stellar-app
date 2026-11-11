@@ -1,37 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { userApi, UserApiKeyStatsResponse } from "@/lib/api";
+import { useMerchantApiKeyStats } from "@/lib/hooks";
 import { useToast } from "@/components/ui/toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Key, Activity, BarChart3, Settings } from "lucide-react";
+import { Key, Activity, BarChart3, Settings, Landmark } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, TrendingUp } from "lucide-react";
+import { useOtcStatus } from "@/lib/hooks";
 
 export default function MerchantDashboardPage() {
-    const [isLoading, setIsLoading] = useState(true);
-    const [stats, setStats] = useState<UserApiKeyStatsResponse | null>(null);
+    const { data: stats, isLoading } = useMerchantApiKeyStats();
     const router = useRouter();
     const { toast } = useToast();
-
-    useEffect(() => {
-        fetchStats();
-    }, []);
-
-    const fetchStats = async () => {
-        try {
-            const response = await userApi.getUserApiKeyStats();
-            setStats(response.data);
-        } catch (error) {
-            console.error("Failed to fetch dashboard stats:", error);
-            if ((error as any)?.response?.status === 401) {
-                router.push("/merchant/login");
-            }
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    const { isOTCEnabled } = useOtcStatus();
 
     if (isLoading) {
         return (
@@ -81,6 +63,17 @@ export default function MerchantDashboardPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
+                <Link href="/merchant/dashboard/bank">
+                    <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
+                        <CardHeader className="flex flex-row items-center gap-4">
+                            <Landmark className="h-8 w-8 text-emerald-500" />
+                            <div>
+                                <CardTitle>Banking</CardTitle>
+                                <p className="text-sm text-muted-foreground">Manage accounts & transfers</p>
+                            </div>
+                        </CardHeader>
+                    </Card>
+                </Link>
                 <Link href="/merchant/dashboard/api-keys">
                     <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
                         <CardHeader className="flex flex-row items-center gap-4">
@@ -92,12 +85,12 @@ export default function MerchantDashboardPage() {
                         </CardHeader>
                     </Card>
                 </Link>
-                <Link href="/merchant/dashboard/analytics">
+                <Link href="/merchant/dashboard/transactions">
                     <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
                         <CardHeader className="flex flex-row items-center gap-4">
                             <BarChart3 className="h-8 w-8 text-blue-500" />
                             <div>
-                                <CardTitle>Analytics</CardTitle>
+                                <CardTitle>Transactions</CardTitle>
                                 <p className="text-sm text-muted-foreground">View usage reports</p>
                             </div>
                         </CardHeader>
@@ -114,6 +107,19 @@ export default function MerchantDashboardPage() {
                         </CardHeader>
                     </Card>
                 </Link>
+                {isOTCEnabled && (
+                    <Link href="/otc/dashboard">
+                        <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full border-primary/20 bg-primary/5">
+                            <CardHeader className="flex flex-row items-center gap-4">
+                                <TrendingUp className="h-8 w-8 text-primary" />
+                                <div>
+                                    <CardTitle>OTC Dashboard</CardTitle>
+                                    <p className="text-sm text-muted-foreground">Access OTC trade portal</p>
+                                </div>
+                            </CardHeader>
+                        </Card>
+                    </Link>
+                )}
             </div>
         </div>
     );

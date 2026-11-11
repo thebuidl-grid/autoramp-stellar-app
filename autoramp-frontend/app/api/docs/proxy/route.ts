@@ -1,21 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
-import { v2 as cloudinary } from "cloudinary";
 
-// Configure Cloudinary
-cloudinary.config({
-    cloud_name: process.env.CL_NAME,
-    api_key: process.env.CL_API_KEY,
-    api_secret: process.env.CL_API_SECRET,
-});
-
-
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3003";
 
 /**
  * Document Proxy Route
  *
- * Fetches protected documents from remote URLs (Cloudinary/S3)
- * and streams them to the client to avoid CORS and Auth headers issues in the browser.
+ * Fetches protected documents from Cloudinary via the backend proxy.
+ * The backend has the API credentials to fetch private/authenticated resources.
  */
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
@@ -28,48 +20,34 @@ export async function GET(request: NextRequest) {
     console.log(`[Docs Proxy] Request received for URL: ${url}`);
 
     try {
-        let finalUrl = url;
-
         if (url.includes('cloudinary.com')) {
-            console.log(`[Docs Proxy] Detected Cloudinary URL. Attempting to generate signed access...`);
+            console.log(`[Docs Proxy] Fetching via backend proxy...`);
 
-            const parts = url.split('/');
-            const uploadIndex = parts.findIndex(p => p === 'upload' || p === 'private' || p === 'authenticated');
+            const response = await axios.get(`${BACKEND_URL}/uploads/proxy`, {
+                params: { url },
+                responseType: 'arraybuffer',
+                timeout: 30000,
+            });
 
-            if (uploadIndex !== -1) {
-                let startIndex = uploadIndex + 1;
+            const contentType = response.headers['content-type'] || 'application/octet-stream';
 
-                if (parts[startIndex].startsWith('v') && !isNaN(parseInt(parts[startIndex].substring(1)))) {
-                    startIndex++;
-                }
+            console.log(`[Docs Proxy] Successfully fetched. Type: ${contentType}`);
 
-                const publicIdWithExt = parts.slice(startIndex).join('/');
-                const publicId = publicIdWithExt.split('.')[0];
-                const resourceType = url.includes('/raw/') ? 'raw' : (url.includes('/video/') ? 'video' : 'image');
-                const type = url.includes('/authenticated/') ? 'authenticated' : (url.includes('/private/') ? 'private' : 'upload');
-
-                console.log(`[Docs Proxy] Extracted Public ID: ${publicId}, Type: ${type}, Resource: ${resourceType}`);
-
-                finalUrl = cloudinary.url(publicId, {
-                    resource_type: resourceType,
-                    type: type,
-                    sign_url: true,
-                    secure: true,
-                    expires_at: Math.floor(Date.now() / 1000) + 3600
-                });
-
-                console.log(`[Docs Proxy] Generated signed URL: ${finalUrl}`);
-            }
+            return new NextResponse(response.data, {
+                status: 200,
+                headers: {
+                    'Content-Type': contentType,
+                    'Cache-Control': 'public, max-age=3600',
+                },
+            });
         }
 
-        console.log(`[Docs Proxy] Fetching document content...`);
+        console.log(`[Docs Proxy] Non-Cloudinary URL, fetching directly...`);
 
-        const response = await axios.get(finalUrl, {
+        const response = await axios.get(url, {
             responseType: 'arraybuffer',
             timeout: 15000,
         });
-
-        console.log(`[Docs Proxy] Successfully fetched content. Status: ${response.status}, Type: ${response.headers['content-type']}`);
 
         const contentType = response.headers['content-type'] || 'application/octet-stream';
 
@@ -78,7 +56,6 @@ export async function GET(request: NextRequest) {
             headers: {
                 'Content-Type': contentType,
                 'Cache-Control': 'public, max-age=3600',
-                'Content-Disposition': `inline; filename="${url.split('/').pop() || 'document'}"`,
             },
         });
 

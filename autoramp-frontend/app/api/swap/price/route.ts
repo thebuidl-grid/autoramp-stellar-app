@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
-import { IS_TESTNET } from "@/lib/constants/networks";
+import { NETWORK_COOKIE, parseNetwork } from "@/lib/network";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
+  const isTestnet =
+    parseNetwork(request.cookies.get(NETWORK_COOKIE)?.value) === "testnet";
   const sellToken = searchParams.get("sellToken");
   const buyToken = searchParams.get("buyToken");
   const sellAmount = searchParams.get("sellAmount");
@@ -30,7 +32,7 @@ export async function GET(request: NextRequest) {
   const queryChainId = searchParams.get("chainId");
   const chainId = queryChainId
     ? parseInt(queryChainId)
-    : IS_TESTNET
+    : isTestnet
       ? 84532
       : 8453;
 

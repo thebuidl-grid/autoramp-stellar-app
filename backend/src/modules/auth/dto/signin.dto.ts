@@ -3,7 +3,7 @@ import { IsEmail, IsString } from 'class-validator';
 
 /**
  * Sign In DTO
- * 
+ *
  * Validates user login credentials (email and password).
  */
 export class SignInDto {
@@ -21,4 +21,3 @@ export class SignInDto {
   @IsString()
   password: string;
 }
-

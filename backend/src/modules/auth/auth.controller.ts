@@ -1,25 +1,20 @@
-import {
-  Controller,
-  Post,
-  Body,
-  HttpCode,
-  HttpStatus,
-} from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBody,
-} from '@nestjs/swagger';
+import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { OtpService } from './services/otp.service';
-import { SignUpDto, SignInDto, AdminLoginDto, SendOtpDto, VerifyOtpDto } from './dto';
+import {
+  SignUpDto,
+  SignInDto,
+  AdminLoginDto,
+  SendOtpDto,
+  VerifyOtpDto,
+} from './dto';
 import { Public } from './decorators/public.decorator';
 
 /**
  * Auth Controller
- * 
+ *
  * Handles authentication endpoints for users and admins.
  * All endpoints are public (no authentication required).
  */
@@ -35,7 +30,9 @@ export class AuthController {
   @Public()
   @Throttle({ short: { limit: 5, ttl: 60000 } }) // 5 requests per minute
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Sign up or login with email and OTP (simplified auth)' })
+  @ApiOperation({
+    summary: 'Sign up or login with email and OTP (simplified auth)',
+  })
   @ApiBody({ type: SignUpDto })
   @ApiResponse({
     status: 201,
@@ -46,7 +43,7 @@ export class AuthController {
           id: 'uuid',
           email: 'user@example.com',
           phoneNumber: null,
-          walletAddress: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37',
+          walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
           role: 'USER',
           createdAt: '2024-01-01T00:00:00.000Z',
         },
@@ -73,7 +70,7 @@ export class AuthController {
           id: 'uuid',
           email: 'user@example.com',
           phoneNumber: '+2348012345678',
-          walletAddress: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37',
+          walletAddress: '0x1234567890abcdef1234567890abcdef12345678',
           kycStatus: 'PENDING',
           role: 'USER',
           createdAt: '2024-01-01T00:00:00.000Z',
@@ -180,4 +177,3 @@ export class AuthController {
     };
   }
 }
-

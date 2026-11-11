@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { ChevronLeft, Building2, User, History } from "lucide-react";
+import { ChevronLeft, Building2, User, History, Landmark, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -9,6 +9,8 @@ import { adminApi } from "@/lib/api";
 import { MerchantKYBDetails } from "@/components/admin/merchants/MerchantKYBDetails";
 import { MerchantTransactions } from "@/components/admin/merchants/MerchantTransactions";
 import { MerchantApiKeys } from "@/components/admin/merchants/MerchantApiKeys";
+import { MerchantBankingAdmin } from "@/components/admin/merchants/MerchantBankingAdmin";
+import { MerchantAuditLogsAdmin } from "@/components/admin/merchants/MerchantAuditLogsAdmin";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface PageProps {
@@ -77,16 +79,26 @@ export default function MerchantDetailPage({ params }: PageProps) {
                     <TabsTrigger value="kyb" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex gap-2 items-center">
                         <Building2 className="h-4 w-4" /> KYB Application
                     </TabsTrigger>
+                    <TabsTrigger value="banking" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex gap-2 items-center">
+                        <Landmark className="h-4 w-4" /> Banking
+                    </TabsTrigger>
                     <TabsTrigger value="transactions" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex gap-2 items-center">
                         <History className="h-4 w-4" /> Transactions
                     </TabsTrigger>
                     <TabsTrigger value="api-keys" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex gap-2 items-center">
                         <User className="h-4 w-4" /> API Keys & Usage
                     </TabsTrigger>
+                    <TabsTrigger value="audit-logs" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex gap-2 items-center">
+                        <ScrollText className="h-4 w-4" /> Audit Logs
+                    </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="kyb" className="mt-0 outline-none">
                     <MerchantKYBDetails merchant={merchant} onStatusUpdate={() => refetch()} />
+                </TabsContent>
+
+                <TabsContent value="banking" className="mt-0 outline-none">
+                    <MerchantBankingAdmin merchantId={merchant.id} />
                 </TabsContent>
 
                 <TabsContent value="transactions" className="mt-0 outline-none">
@@ -95,6 +107,10 @@ export default function MerchantDetailPage({ params }: PageProps) {
 
                 <TabsContent value="api-keys" className="mt-0 outline-none">
                     <MerchantApiKeys merchantId={merchant.id} userId={merchant.userId} />
+                </TabsContent>
+
+                <TabsContent value="audit-logs" className="mt-0 outline-none">
+                    <MerchantAuditLogsAdmin merchantId={merchant.id} />
                 </TabsContent>
             </Tabs>
         </div>

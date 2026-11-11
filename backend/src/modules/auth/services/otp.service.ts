@@ -1,8 +1,8 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../database/prisma.service';
 import { Resend } from 'resend';
-import * as crypto from 'crypto';
+import * as bcrypt from 'bcrypt';
 
 /**
  * OTP Service
@@ -11,10 +11,8 @@ import * as crypto from 'crypto';
  */
 @Injectable()
 export class OtpService {
-  private readonly logger = new Logger(OtpService.name);
   private readonly resend: Resend;
   private readonly fromEmail: string;
-  private readonly returnCodeOnSendFailure: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -25,22 +23,16 @@ export class OtpService {
       throw new Error('RESEND_API_KEY is required in environment variables');
     }
     this.resend = new Resend(apiKey);
-    this.fromEmail = this.configService.get<string>('RESEND_FROM_EMAIL') || 'onboarding@resend.dev';
-    // Handing the code back in the HTTP response lets anyone who can make
-    // email delivery fail sign in as any address, so it must be an explicit
-    // opt-in — NODE_ENV alone isn't enough, since it defaults to
-    // 'development' and a deploy that forgets to set it would silently leak
-    // codes. Never honored in production, even if the flag is set.
-    this.returnCodeOnSendFailure =
-      this.configService.get<string>('OTP_DEV_RETURN_CODE') === 'true' &&
-      this.configService.get<string>('NODE_ENV') !== 'production';
+    this.fromEmail =
+      this.configService.get<string>('RESEND_FROM_EMAIL') ||
+      'onboarding@resend.dev';
   }
 
   /**
-   * Generate a 6-digit OTP code from a CSPRNG (Math.random is predictable).
+   * Generate a 6-digit OTP code
    */
   private generateOtpCode(): string {
-    return crypto.randomInt(100000, 1000000).toString();
+    return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
   /**
@@ -53,7 +45,7 @@ export class OtpService {
   async sendOtp(
     email: string,
     purpose: string = 'SIGNUP',
-  ): Promise<{ success: boolean; message: string; devOtpCode?: string }> {
+  ): Promise<{ success: boolean; message: string }> {
     // Check for existing unused OTP within last minute (rate limiting)
     const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
     const recentOtp = await this.prisma.otp.findFirst({
@@ -67,7 +59,9 @@ export class OtpService {
     });
 
     if (recentOtp) {
-      throw new BadRequestException('Please wait before requesting a new OTP code');
+      throw new BadRequestException(
+        'Please wait before requesting a new OTP code',
+      );
     }
 
     // Generate OTP
@@ -86,11 +80,14 @@ export class OtpService {
       },
     });
 
-    // Save OTP to database
+    // Hash OTP before saving to database
+    const hashedCode = await bcrypt.hash(code, 10);
+
+    // Save hashed OTP to database
     await this.prisma.otp.create({
       data: {
         email,
-        code,
+        code: hashedCode,
         purpose,
         expiresAt,
       },
@@ -98,9 +95,24 @@ export class OtpService {
 
     // Send email via Resend
     try {
-      const subject = purpose === 'SIGNUP' 
-        ? 'Verify your email address - AutoRamp'
-        : 'Your verification code - AutoRamp';
+      let subject: string;
+      let title: string;
+      let body: string;
+
+      if (purpose === 'SIGNUP') {
+        subject = 'Verify your email address - AutoRamp';
+        title = 'Email Verification';
+        body = 'Your verification code is:';
+      } else if (purpose === 'BANK_ACCOUNT_VERIFICATION') {
+        subject = 'Verify your Bank Account addition - AutoRamp';
+        title = 'Bank Account Verification';
+        body =
+          'You are adding a new bank account to your profile. Your verification code is:';
+      } else {
+        subject = 'Your verification code - AutoRamp';
+        title = 'Verification Code';
+        body = 'Your verification code is:';
+      }
 
       const htmlContent = `
         <!DOCTYPE html>
@@ -108,15 +120,15 @@ export class OtpService {
           <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Email Verification</title>
+            <title>${title}</title>
           </head>
           <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="background-color: #000; color: #fff; padding: 20px; text-align: center;">
               <h1 style="margin: 0; font-size: 24px;">AutoRamp</h1>
             </div>
             <div style="background-color: #f9f9f9; padding: 30px; margin-top: 20px;">
-              <h2 style="color: #000; margin-top: 0;">Email Verification</h2>
-              <p>Your verification code is:</p>
+              <h2 style="color: #000; margin-top: 0;">${title}</h2>
+              <p>${body}</p>
               <div style="background-color: #000; color: #fff; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; margin: 20px 0;">
                 ${code}
               </div>
@@ -130,44 +142,21 @@ export class OtpService {
         </html>
       `;
 
-      const { error } = await this.resend.emails.send({
+      await this.resend.emails.send({
         from: this.fromEmail,
         to: email,
         subject,
         html: htmlContent,
       });
 
-      if (error) {
-        // Resend's SDK returns a { data, error } result object rather than
-        // throwing on API failures — this branch, not a catch block, is
-        // what actually observes delivery failures.
-        throw new Error(error.message || 'Resend API returned an error');
-      }
-
       return {
         success: true,
         message: 'OTP sent successfully to your email',
       };
     } catch (error: any) {
-      // Local/testnet work often has no real email provider configured
-      // (e.g. a placeholder RESEND_API_KEY). When a developer has
-      // explicitly opted in via OTP_DEV_RETURN_CODE=true (see the
-      // constructor), keep the OTP valid and hand the code back directly so
-      // the flow is still testable end-to-end.
-      if (this.returnCodeOnSendFailure) {
-        this.logger.warn(
-          `Resend send failed (${error.message || 'unknown error'}) — returning OTP directly since OTP_DEV_RETURN_CODE=true. email=${email}`,
-        );
-        return {
-          success: true,
-          message: 'Email delivery is not configured — returning the code directly (non-production only).',
-          devOtpCode: code,
-        };
-      }
-
-      // Delete the OTP if email sending fails
+      // Delete the OTP if email sending fails (match by hashed code)
       await this.prisma.otp.deleteMany({
-        where: { email, code, purpose },
+        where: { email, code: hashedCode, purpose },
       });
 
       throw new BadRequestException(
@@ -178,17 +167,20 @@ export class OtpService {
 
   /**
    * Verify OTP code
-   * 
+   *
    * @param email - Email address
    * @param code - OTP code to verify
    * @param purpose - Purpose of OTP (default: SIGNUP)
    * @returns true if valid, throws error if invalid
    */
-  async verifyOtp(email: string, code: string, purpose: string = 'SIGNUP'): Promise<boolean> {
-    const otp = await this.prisma.otp.findFirst({
+  async verifyOtp(
+    email: string,
+    code: string,
+    purpose: string = 'SIGNUP',
+  ): Promise<boolean> {
+    const otps = await this.prisma.otp.findMany({
       where: {
         email,
-        code,
         purpose,
         isUsed: false,
         expiresAt: { gt: new Date() },
@@ -196,15 +188,31 @@ export class OtpService {
       orderBy: {
         createdAt: 'desc',
       },
+      take: 5, // Just get the last few to reasonably check against
     });
 
-    if (!otp) {
+    if (!otps || otps.length === 0) {
+      throw new BadRequestException('Invalid or expired OTP code');
+    }
+
+    let validOtp: any = null;
+
+    // Compare the plain text code against the stored hashes
+    for (const otp of otps) {
+      const isMatch = await bcrypt.compare(code, otp.code);
+      if (isMatch) {
+        validOtp = otp;
+        break;
+      }
+    }
+
+    if (!validOtp) {
       throw new BadRequestException('Invalid or expired OTP code');
     }
 
     // Mark OTP as used
     await this.prisma.otp.update({
-      where: { id: otp.id },
+      where: { id: validOtp.id },
       data: { isUsed: true },
     });
 
@@ -224,4 +232,3 @@ export class OtpService {
     return result.count;
   }
 }
-

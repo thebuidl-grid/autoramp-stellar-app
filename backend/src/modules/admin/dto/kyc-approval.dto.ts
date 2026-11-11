@@ -3,7 +3,7 @@ import { IsEnum, IsOptional, IsString } from 'class-validator';
 
 /**
  * KYC Approval DTO
- * 
+ *
  * Validates KYC approval/rejection data.
  * Used by admins to approve or reject user KYC submissions.
  */
@@ -25,4 +25,3 @@ export class KycApprovalDto {
   @IsString()
   rejectionReason?: string;
 }
-

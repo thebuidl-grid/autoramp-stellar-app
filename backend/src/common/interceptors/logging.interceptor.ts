@@ -24,11 +24,6 @@ export class LoggingInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    // Log request
-    // this.logger.log(
-    //   `${method} ${url} - Body size: ${JSON.stringify(body).length} bytes`,
-    // );
-
     return next.handle().pipe(
       tap(() => {
         const duration = Date.now() - now;

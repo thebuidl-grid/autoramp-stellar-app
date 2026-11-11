@@ -3,7 +3,7 @@ import { IsEmail, IsString } from 'class-validator';
 
 /**
  * Admin Login DTO
- * 
+ *
  * Validates admin login credentials (email and password).
  */
 export class AdminLoginDto {
@@ -21,4 +21,3 @@ export class AdminLoginDto {
   @IsString()
   password: string;
 }
-

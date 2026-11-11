@@ -3,7 +3,7 @@
 import { useMerchantApiKeyStats } from "@/lib/hooks";
 import { useToast } from "@/components/ui/toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Key, Activity, BarChart3, Settings } from "lucide-react";
+import { Key, Activity, BarChart3, Settings, Landmark } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, TrendingUp } from "lucide-react";
@@ -63,6 +63,17 @@ export default function MerchantDashboardPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
+                <Link href="/merchant/dashboard/bank">
+                    <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
+                        <CardHeader className="flex flex-row items-center gap-4">
+                            <Landmark className="h-8 w-8 text-emerald-500" />
+                            <div>
+                                <CardTitle>Banking</CardTitle>
+                                <p className="text-sm text-muted-foreground">Manage accounts & transfers</p>
+                            </div>
+                        </CardHeader>
+                    </Card>
+                </Link>
                 <Link href="/merchant/dashboard/api-keys">
                     <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
                         <CardHeader className="flex flex-row items-center gap-4">

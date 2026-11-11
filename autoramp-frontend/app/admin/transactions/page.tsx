@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { format } from "date-fns";
 import {
   Search,
@@ -11,6 +11,13 @@ import {
   Clock,
   XCircle,
   Activity,
+  Handshake,
+  Building2,
+  Banknote,
+  Zap,
+  TrendingUp,
+  Wallet,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Select,
@@ -25,16 +32,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery } from "@tanstack/react-query";
-import { adminApi } from "@/lib/api";import { TransactionsOverview } from "@/components/admin/transactions/TransactionsOverview";
+import { adminApi, AdminPlatformTransactionsResponse } from "@/lib/api";
+import { TransactionsOverview } from "@/components/admin/transactions/TransactionsOverview";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 
-type TabType = "all" | "onramp" | "offramp" | "swap";
+type TabType = "all" | "onramp" | "offramp" | "swap" | "otc" | "bank_transfer" | "vas" | "merchant";
+type SummaryPeriod = "today" | "7d" | "30d" | "90d" | "all";
 
 export default function AdminTransactionsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState<TabType>("all");
+  const [summaryPeriod, setSummaryPeriod] = useState<SummaryPeriod>("all");
+  const txTableRef = useRef<HTMLDivElement>(null);
   const limit = 10;
 
   const debouncedSearch = useDebounce(searchTerm, 400);
@@ -54,9 +65,9 @@ export default function AdminTransactionsPage() {
   });
 
   const { data: summary } = useQuery({
-    queryKey: ["admin-transactions-summary"],
+    queryKey: ["admin-transactions-summary", summaryPeriod],
     queryFn: async () => {
-      const { data } = await adminApi.getTransactionsSummary();
+      const { data } = await adminApi.getTransactionsSummary(summaryPeriod);
       return data;
     },
   });
@@ -65,6 +76,14 @@ export default function AdminTransactionsPage() {
     setActiveTab(val as TabType);
     setPage(1);
   };
+
+  const handleTileClick = useCallback((tab: TabType) => {
+    setActiveTab(tab);
+    setPage(1);
+    setTimeout(() => {
+      txTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }, []);
 
   const getStatusBadge = (status: string) => {
     switch (status.toUpperCase()) {
@@ -84,6 +103,31 @@ export default function AdminTransactionsPage() {
         return (
           <Badge className="bg-red-100 text-red-700 hover:bg-red-100 flex items-center gap-1 w-fit">
             <XCircle className="h-3 w-3" /> Failed
+          </Badge>
+        );
+      case "REJECTED":
+      case "REVERSED":
+        return (
+          <Badge className="bg-red-100 text-red-700 hover:bg-red-100 flex items-center gap-1 w-fit">
+            <XCircle className="h-3 w-3" /> {status.toUpperCase() === "REVERSED" ? "Reversed" : "Rejected"}
+          </Badge>
+        );
+      case "EXPIRED":
+        return (
+          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 flex items-center gap-1 w-fit">
+            <Clock className="h-3 w-3" /> Expired
+          </Badge>
+        );
+      case "PARTIAL":
+        return (
+          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 flex items-center gap-1 w-fit">
+            <AlertTriangle className="h-3 w-3" /> Partial
+          </Badge>
+        );
+      case "REFUNDED":
+        return (
+          <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-100 flex items-center gap-1 w-fit">
+            <RefreshCcw className="h-3 w-3" /> Refunded
           </Badge>
         );
       default:
@@ -111,6 +155,30 @@ export default function AdminTransactionsPage() {
             <RefreshCcw className="h-3 w-3" /> Swap
           </Badge>
         );
+      case "otc":
+        return (
+          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 flex items-center gap-1 w-fit">
+            <Handshake className="h-3 w-3" /> OTC
+          </Badge>
+        );
+      case "merchant_onramp":
+        return (
+          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 flex items-center gap-1 w-fit">
+            <Building2 className="h-3 w-3" /> Merchant Onramp
+          </Badge>
+        );
+      case "merchant_offramp":
+        return (
+          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 flex items-center gap-1 w-fit">
+            <Building2 className="h-3 w-3" /> Merchant Offramp
+          </Badge>
+        );
+      case "merchant_swap":
+        return (
+          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 flex items-center gap-1 w-fit">
+            <Building2 className="h-3 w-3" /> Merchant Swap
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{type}</Badge>;
     }
@@ -118,97 +186,169 @@ export default function AdminTransactionsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Transactions Oversight</h1>
-        <p className="text-muted-foreground">
-          Monitor and manage all platform-wide onramp, offramp, and swap transactions.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Transactions Oversight</h1>
+          <p className="text-muted-foreground">
+            Monitor and manage all platform-wide onramp, offramp, and swap transactions.
+          </p>
+        </div>
+        <Select value={summaryPeriod} onValueChange={(v) => setSummaryPeriod(v as SummaryPeriod)}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="All time" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="today">Today</SelectItem>
+            <SelectItem value="7d">Last 7 Days</SelectItem>
+            <SelectItem value="30d">Last 30 Days</SelectItem>
+            <SelectItem value="90d">Last 90 Days</SelectItem>
+            <SelectItem value="all">All Time</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Platform Volume</CardTitle>
+            <CardTitle className="text-sm font-medium">Net Volume</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₦{(summary?.netVolume || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Onramp minus Offramp</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₦{summary?.totalVolume.toLocaleString() || "0"}</div>
-            <p className="text-xs text-muted-foreground">Processed across all time</p>
+            <div className="text-2xl font-bold">{(summary?.totalCount || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Success rate: {summary?.successRate || 0}%</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Requests</CardTitle>
-            <Clock className="h-4 w-4 text-amber-500" />
+            <CardTitle className="text-sm font-medium">Total Fees Collected</CardTitle>
+            <Wallet className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary?.totalCount || 0}</div>
-            <p className="text-xs text-muted-foreground">Total platform transactions</p>
+            <div className="text-2xl font-bold">₦{(summary?.fees?.total || 0).toLocaleString()}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summary?.successRate || 0}%</div>
-            <p className="text-xs text-muted-foreground">Aggregated across all types</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Value</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Volume</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₦{summary?.averageValue?.toLocaleString() || "0"}</div>
-            <p className="text-xs text-muted-foreground">Per completed transaction</p>
+            <div className="text-2xl font-bold">₦{(summary?.totalVolume || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Across all types</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-l-4 border-l-blue-500">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Card className="border-l-4 border-l-blue-500 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleTileClick("onramp")}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Onramp Volume</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Onramp</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold">₦{summary?.onrampCompletedVolume?.toLocaleString() || "0"}</div>
-            <p className="text-xs text-muted-foreground mt-1">{summary?.onrampCompletedCount || 0} completed</p>
+            <div className="text-xl font-bold">₦{(summary?.onramp?.totalAmount || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {summary?.onramp?.count || 0} txns · ₦{(summary?.onramp?.totalFees || 0).toLocaleString()} fees
+            </p>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-purple-500">
+        <Card className="border-l-4 border-l-purple-500 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleTileClick("offramp")}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Offramp Volume</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Offramp</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold">₦{summary?.offrampCompletedVolume?.toLocaleString() || "0"}</div>
-            <p className="text-xs text-muted-foreground mt-1">{summary?.offrampCompletedCount || 0} completed</p>
+            <div className="text-xl font-bold">₦{(summary?.offramp?.totalAmount || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {summary?.offramp?.count || 0} txns · ₦{(summary?.offramp?.totalFees || 0).toLocaleString()} fees
+            </p>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-indigo-500">
+        <Card className="border-l-4 border-l-indigo-500 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleTileClick("swap")}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Swap Volume</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Swap</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold">₦{summary?.swapCompletedVolume?.toLocaleString() || "0"}</div>
-            <p className="text-xs text-muted-foreground mt-1">{summary?.swapCompletedCount || 0} completed</p>
+            <div className="text-xl font-bold">₦{(summary?.swap?.totalFromAmount || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {summary?.swap?.count || 0} txns · ₦{(summary?.swap?.totalFees || 0).toLocaleString()} fees
+            </p>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-red-500">
+        <Card className="border-l-4 border-l-orange-500 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleTileClick("bank_transfer")}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider text-red-500">Unsuccessful</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Bank Transfer</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold text-red-600">₦{summary?.unsuccessfulVolume?.toLocaleString() || "0"}</div>
-            <p className="text-xs text-muted-foreground mt-1">{summary?.unsuccessfulCount || 0} not completed</p>
+            <div className="text-xl font-bold">₦{(summary?.bankTransfer?.totalAmount || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {summary?.bankTransfer?.count || 0} txns · ₦{(summary?.bankTransfer?.totalFees || 0).toLocaleString()} fees
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-amber-500 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleTileClick("otc")}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">OTC</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-bold">₦{(summary?.otc?.totalAmount || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {summary?.otc?.count || 0} txns · ₦{(summary?.otc?.totalFees || 0).toLocaleString()} fees
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-cyan-500 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleTileClick("vas")}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">VAS</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-bold">₦{(summary?.vas?.totalAmount || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {summary?.vas?.count || 0} txns · ₦{(summary?.vas?.totalFees || 0).toLocaleString()} fees
+            </p>
           </CardContent>
         </Card>
       </div>
+
+      {summary?.fees && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Fee Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Provider Fee</p>
+                <p className="text-lg font-bold">₦{(summary.fees.provider_fee || 0).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">VAT</p>
+                <p className="text-lg font-bold">₦{(summary.fees.vat || 0).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Stamp Duty</p>
+                <p className="text-lg font-bold">₦{(summary.fees.stamp_duty || 0).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total Fees</p>
+                <p className="text-lg font-bold text-green-600">₦{(summary.fees.total || 0).toLocaleString()}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <TransactionsOverview />
 
+      <div ref={txTableRef} className="scroll-mt-4">
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -247,6 +387,10 @@ export default function AdminTransactionsPage() {
               <TabsTrigger value="onramp">Onramp</TabsTrigger>
               <TabsTrigger value="offramp">Offramp</TabsTrigger>
               <TabsTrigger value="swap">Swap</TabsTrigger>
+              <TabsTrigger value="otc">OTC</TabsTrigger>
+              <TabsTrigger value="bank_transfer">Bank Transfer</TabsTrigger>
+              <TabsTrigger value="vas">VAS</TabsTrigger>
+              <TabsTrigger value="merchant">Merchant</TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -279,9 +423,9 @@ export default function AdminTransactionsPage() {
                   data.data.map((tx) => (
                     <tr key={tx.id} className="border-b hover:bg-muted/50 transition-colors">
                       <td className="p-4 font-mono text-xs">{tx.reference}</td>
-                      <td className="p-4">{tx.userEmail || "System"}</td>
-                      <td className="p-4">{getTypeBadge(tx._type)}</td>
-                      <td className="p-4 font-medium">₦{Number(tx.amount).toLocaleString()}</td>
+                      <td className="p-4">{tx.user ?? tx.merchant ?? "System"}</td>
+                      <td className="p-4">{getTypeBadge(tx.type)}</td>
+                      <td className="p-4 font-medium">₦{tx.amount.toLocaleString()}</td>
                       <td className="p-4">{getStatusBadge(tx.status)}</td>
                       <td className="p-4 text-muted-foreground">{format(new Date(tx.createdAt), "MMM d, HH:mm")}</td>
                     </tr>
@@ -291,19 +435,20 @@ export default function AdminTransactionsPage() {
             </table>
           </div>
 
-          {data && data.totalPages > 1 && (
+          {data?.pagination && data.pagination.totalPages > 1 && (
             <div className="flex items-center justify-end space-x-2 py-4">
               <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
                 Previous
               </Button>
-              <div className="text-sm font-medium">Page {page} of {data.totalPages}</div>
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))} disabled={page === data.totalPages}>
+              <div className="text-sm font-medium">Page {page} of {data.pagination.totalPages} ({data.pagination.total} total)</div>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(data.pagination.totalPages, p + 1))} disabled={page === data.pagination.totalPages}>
                 Next
               </Button>
             </div>
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

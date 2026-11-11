@@ -12,5 +12,5 @@ export interface AppConfig {
   jwt: { secret: string; expiresIn: string };
   wallet_private_key: string;
   rpc_url: string;
-  stablestack: { api_url: string; api_key: string };
+  ramp: { api_url: string; api_key: string };
 }
