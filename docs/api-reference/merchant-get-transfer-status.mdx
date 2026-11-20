@@ -1,0 +1,67 @@
+---
+title: "Get Transfer Status"
+description: "Get real-time transfer status directly from provider by reference"
+openapi: GET /merchants/api/transfers/status
+---
+
+## Query Parameters
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `reference` | string | Yes | Transfer reference (your internal reference or provider reference) |
+
+## Example
+
+```bash
+curl -X GET 	
+ https://api-autoramp.thebuidl.xyz/merchants/api/transfers/status?reference=TRF-20260830-ABC123 \
+  -H "x-api-key: YOUR_API_KEY"
+```
+
+## Response
+
+```json
+{
+  "reference": "TRF-20260830-ABC123",
+  "status": "COMPLETED",
+  "amount": 5000,
+  "currency": "NGN",
+  "beneficiaryAccountNumber": "0123456789",
+  "beneficiaryBankCode": "058",
+  "narration": "Payment for services",
+  "createdAt": "2026-08-30T10:00:00.000Z",
+  "updatedAt": "2026-08-30T10:02:00.000Z"
+}
+```
+
+## How It Works
+
+This endpoint fetches the **real-time status** of a transfer directly from the provider (SafeHaven or Pulse MFB) instead of relying on the local database. This is useful when:
+
+- You need to confirm the actual provider status
+- Webhooks are delayed or haven't been processed yet
+- You want to reconcile your records with the provider
+
+The endpoint:
+1. Looks up the transfer in your local database using the provided reference
+2. Retrieves the provider's reference (`safehavenReference`)
+3. Fetches the transfer status directly from the provider using their API
+4. Returns the current status and details from the provider
+
+## Status Values
+
+| Status | Description |
+|--------|-------------|
+| `PENDING` | Transfer is pending |
+| `PROCESSING` | Transfer is being processed |
+| `COMPLETED` | Transfer completed successfully |
+| `FAILED` | Transfer failed |
+
+## Errors
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `Reference is required` | No reference provided |
+| 404 | `Transfer not found` | Transfer not found in local database |
+| 404 | `Transfer has not been initiated with provider yet` | Transfer exists but has no provider reference |
+| 404 | `Transfer not found in provider records` | Provider doesn't have record of this transfer |

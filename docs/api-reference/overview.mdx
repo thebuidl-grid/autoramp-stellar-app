@@ -1,45 +1,36 @@
 ---
-title: API Overview
-description: "Everything you need to know to interact with the AutoRamp API"
+title: "API Reference"
+description: "Complete AutoRamp API endpoint reference with live testing"
 ---
 
-The AutoRamp API is organized around REST. Our API has predictable resource-oriented URLs, accepts form-encoded request bodies, returns JSON-encoded responses, and uses standard HTTP response codes, authentication, and verbs.
+All endpoints below include the **Try it** button. Enter your API key once and test any endpoint directly from the docs.
 
-## Base URL
+## Authentication
 
-All API requests should be made to:
-
-```bash
-https://api.autoramp.com/v1
+```
+x-api-key: your_api_key_here
 ```
 
-## Response Format
+## Endpoints
 
-All responses are returned in JSON format. A typical successful response looks like this:
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "...",
-    "status": "COMPLETED"
-  }
-}
-```
-
-## Error Handling
-
-AutoRamp uses standard HTTP response codes to indicate the success or failure of an API request. Codes in the `2xx` range indicate success. Codes in the `4xx` range indicate an error that failed given the information provided (e.g., a required parameter was omitted). Codes in the `5xx` range indicate an error with AutoRamp's servers.
-
-| Code | Description |
-| --- | --- |
-| 200 | OK - Everything worked as expected. |
-| 400 | Bad Request - The request was unacceptable, often due to missing a required parameter. |
-| 401 | Unauthorized - No valid API key provided. |
-| 403 | Forbidden - The API key doesn't have permissions to perform the request. |
-| 404 | Not Found - The requested resource doesn't exist. |
-| 500 | Server Errors - Something went wrong on AutoRamp's end. |
-
-## Rate Limits
-
-While we don't strictly enforce low rate limits for business partners, we recommend staggering requests to avoid temporary blocks. If you plan to make more than 100 requests per minute, please coordinate with your account manager.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | [Initialize On-Ramp](/api-reference/onramp) | Convert Naira → USDC |
+| `POST` | [Initialize Off-Ramp](/api-reference/offramp) | Convert USDC → Naira |
+| `POST` | [Initialize Swap](/api-reference/swap-init) | USDC → CNGN swap |
+| `POST` | [Complete Swap](/api-reference/swap-complete) | Confirm after on-chain |
+| `POST` | [Create Swap](/api-reference/swap-create) | Record swap |
+| `GET` | [Get Account](/api-reference/merchant-account) | Account balance |
+| `POST` | [Transfer](/api-reference/merchant-transfer) | Bank transfer |
+| `POST` | [Name Enquiry](/api-reference/merchant-name-enquiry) | Validate account |
+| `GET` | [Transactions](/api-reference/merchant-transactions) | Transaction history |
+| `GET` | [Sub-Accounts](/api-reference/merchant-sub-accounts) | List sub-accounts |
+| `GET` | [Get Sub-Account](/api-reference/merchant-get-sub-account) | Sub-account balance |
+| `POST` | [Create Sub-Account](/api-reference/merchant-create-sub-account) | Create sub-account |
+| `POST` | [Virtual Account](/api-reference/merchant-virtual-account) | Create virtual account |
+| `GET` | [Banks](/api-reference/merchant-banks) | Supported banks |
+| `POST` | [Initiate Identity Verification](/api-reference/merchant-verify-identity) | Start BVN/NIN verification |
+| `POST` | [Validate Identity Verification](/api-reference/merchant-validate-identity) | Complete verification with OTP |
+| `GET` | [USD/NGN Rate](/api-reference/rates) | Exchange rate |
+| `GET` | [Resolve Account](/api-reference/resolve-account) | Resolve account name |
+| `GET` | [All Banks](/api-reference/banks) | List all banks |

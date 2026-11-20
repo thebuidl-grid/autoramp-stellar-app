@@ -1,0 +1,38 @@
+---
+title: "List Banks"
+description: "Get list of supported banks"
+openapi: GET /merchants/api/banks
+---
+
+<Warning>
+This endpoint is only available for **SafeHaven** merchants. Pulse MFB merchants will receive a `400` error.
+</Warning>
+
+## Example
+
+```bash
+curl -X GET 	
+ https://api-autoramp.thebuidl.xyz/merchants/api/banks \
+  -H "x-api-key: YOUR_API_KEY"
+```
+
+## Response
+
+```json
+{
+  "data": [
+    {
+      "bankCode": "058",
+      "bankName": "Guaranty Trust Bank"
+    },
+    {
+      "bankCode": "033",
+      "bankName": "United Bank for Africa"
+    }
+  ]
+}
+```
+
+<Note>
+Use this list to get valid `bankCode` values for transfers and name enquiries.
+</Note>

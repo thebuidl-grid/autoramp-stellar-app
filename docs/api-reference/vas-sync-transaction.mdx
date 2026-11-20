@@ -1,0 +1,30 @@
+---
+title: "Sync VAS Transaction"
+description: "Sync VAS transaction status from SafeHaven"
+openapi: POST /vas/transactions/{transactionId}/sync
+---
+
+## Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `transactionId` | string | Yes | The VAS transaction ID |
+
+## Response
+
+Fetches the latest transaction status from SafeHaven and updates the local record.
+
+```json
+{
+  "id": "64f1a2b3c4d5e6f7a8b9c0f1",
+  "reference": "txn_ref_abc123def456",
+  "serviceType": "airtime",
+  "status": "COMPLETED",
+  "completedAt": "2026-01-20T10:31:15.000Z"
+}
+```
+
+## When to Use
+
+- After initiating a purchase, poll this endpoint to get the latest status.
+- For [prepaid electricity](/api-reference/vas-pay-utility), the response will include a `token` in the `providerResponse` field that the customer must enter into their meter.

@@ -1,56 +1,130 @@
 ---
-title: Quickstart
-description: "Start integrating AutoRamp in minutes"
+title: "Quickstart"
+description: "Get started with the AutoRamp API"
 ---
 
-This guide will help you perform your first transaction using the AutoRamp API.
+## Overview
 
-## 1. Prerequisites
+AutoRamp lets you convert between Naira and stablecoins (USDC) on Base, BSC, and Stellar networks. This guide walks you through the basics.
 
-Before you begin, ensure you have:
-- An active account on AutoRamp.
-- An API key (`x-api-key`).
+## 1. Get Your API Key
 
-## 2. Check Service Status
+1. Log in to the [AutoRamp Dashboard](https://autoramp.thebuidl.org/merchant/dashboard/settings)
+2. Navigate to **Settings → API Keys**
+3. Click **Generate New Key**
+4. Copy and store it securely
 
-First, verify that the API is up and running:
+<Warning>
+Your API key is shown only once. If lost, generate a new one.
+</Warning>
 
-```bash
-curl https://api.autoramp.com/health
+## 2. Authenticate
+
+All requests require your API key in the header:
+
+```
+x-api-key: YOUR_API_KEY
 ```
 
-## 3. Create an Onramp Transaction
+See [Authentication](/authentication) for details.
 
-To allow a user to buy CNGN, you can initiate an onramp transaction:
+## 3. Make Your First Call
 
-```bash
-curl -X POST https://api.autoramp.com/stablestack/onramp \
-     -H "x-api-key: your_api_key" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "amount": 1000,
-       "network": "stellar",
-       "destination": {
-         "address": "GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37"
-       }
-     }'
-```
+### On-Ramp (Fiat → Crypto)
 
-The response will contain a `reference` and payment details (bank account) for the user to transfer NGN.
-
-## 4. Monitor Transaction Status
-
-You can check the status of a transaction using its reference:
+Convert Naira to USDC:
 
 ```bash
-curl https://api.autoramp.com/stablestack/transaction/REFERENCE_ID \
-     -H "x-api-key: your_api_key"
+curl -X POST "https://api-autoramp.thebuidl.xyz/ramp/onramp" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "on",
+    "network": "base",
+    "amount": 50000,
+    "destination": {
+      "address": "0xYourWalletAddress"
+    }
+  }'
 ```
+
+### Off-Ramp (Crypto → Fiat)
+
+Convert USDC to Naira:
+
+```bash
+curl -X POST "https://api-autoramp.thebuidl.xyz/ramp/offramp" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "off",
+    "network": "base",
+    "amount": 50000,
+    "destination": {
+      "bankCode": "058",
+      "accountNumber": "0123456789"
+    }
+  }'
+```
+
+### Stellar On-Ramp / Off-Ramp
+
+For the Stellar network, the on-ramp returns a Bitnob NGN virtual account to fund, and the off-ramp returns a Stellar USDC funding address:
+
+```bash
+# Off-ramp: USDC (Stellar) → Naira
+curl -X POST "https://api-autoramp.thebuidl.xyz/ramp/offramp" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "off",
+    "network": "stellar",
+    "amount": 50000,
+    "sourceAddress": "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "destination": {
+      "bankCode": "058",
+      "accountNumber": "0123456789"
+    }
+  }'
+```
+
+The off-ramp response includes a `deposit` object with `receiveAddress`, `amount`, `memo`, and `validUntil` — send the exact USDC amount to that Stellar address to complete the payout.
+
+## 4. Check Transaction Status
+
+```bash
+curl -X GET "https://api-autoramp.thebuidl.xyz/ramp/transactions?reference=YOUR_REFERENCE" \
+  -H "x-api-key: YOUR_API_KEY"
+```
+
+## 5. Set Up Webhooks
+
+Configure your webhook URL in the dashboard to receive real-time transaction updates when statuses change.
+
+See [Webhooks Overview](/webhooks/overview) for payload details and [Verify Webhooks](/webhooks/verify) for signature verification.
 
 ## Next Steps
 
-Explore the full API reference to learn more about offramps, swaps, and account management.
+<CardGroup>
 
-<Card title="API Reference" icon="code" href="/api-reference/overview">
-  View all available endpoints
+<Card title="On-Ramp / Off-Ramp" icon="arrow-right-arrow-left" href="/api-reference/onramp">
+  Initialize fiat ↔ crypto conversions
 </Card>
+
+<Card title="Swap" icon="repeat" href="/api-reference/swap-init">
+  Token-to-token swaps
+</Card>
+
+<Card title="Merchant Banking" icon="building-columns" href="/api-reference/merchant-account">
+  Sub-accounts, transfers, virtual accounts
+</Card>
+
+<Card title="Identity Verification" icon="id-card" href="/identity-verification">
+  BVN/NIN verification flows
+</Card>
+
+<Card title="Webhook Events" icon="bell" href="/webhooks/events">
+  All event types and payloads
+</Card>
+
+</CardGroup>

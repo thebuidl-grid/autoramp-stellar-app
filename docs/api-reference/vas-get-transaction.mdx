@@ -1,0 +1,34 @@
+---
+title: "Get VAS Transaction"
+description: "Get a specific VAS transaction by ID"
+openapi: GET /vas/transactions/{transactionId}
+---
+
+## Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `transactionId` | string | Yes | The VAS transaction ID |
+
+## Response
+
+```json
+{
+  "id": "64f1a2b3c4d5e6f7a8b9c0f1",
+  "merchantId": "64f1a2b3c4d5e6f7a8b9c0a1",
+  "reference": "txn_ref_abc123def456",
+  "serviceType": "data",
+  "serviceCategoryId": "64f1a2b3c4d5e6f7a8b9c0e1",
+  "bundleCode": "MTN_2GB_30",
+  "amount": 1000,
+  "currency": "NGN",
+  "channel": "WEB",
+  "phoneNumber": "08012345678",
+  "debitAccountNumber": "0123456789",
+  "status": "COMPLETED",
+  "safehavenId": "sh_txn_789",
+  "providerResponse": { "..." },
+  "createdAt": "2026-01-20T10:30:00.000Z",
+  "completedAt": "2026-01-20T10:31:15.000Z"
+}
+```

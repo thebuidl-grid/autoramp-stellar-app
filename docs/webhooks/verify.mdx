@@ -1,0 +1,164 @@
+---
+title: "Verify Webhooks"
+description: "Verify webhook authenticity using HMAC signatures"
+---
+
+Every webhook sent by AutoRamp includes an `X-Webhook-Signature` header. You **must** verify this signature to ensure the request is authentic.
+
+## How It Works
+
+1. AutoRamp signs the raw request body using your webhook secret (`whsec_*`) and HMAC-SHA256
+2. The signature is sent in the `X-Webhook-Signature` header
+3. You recompute the signature on your end and compare
+
+## Verification Examples
+
+### Node.js (Express)
+
+```javascript
+const crypto = require('crypto');
+
+const WEBHOOK_SECRET = process.env.AUTORAMP_WEBHOOK_SECRET; // whsec_...
+
+app.post('/webhooks/autoramp', express.raw({ type: 'application/json' }), (req, res) => {
+  const signature = req.headers['x-webhook-signature'];
+  const event = req.headers['x-webhook-event'];
+
+  if (!signature) {
+    return res.status(401).json({ error: 'Missing signature' });
+  }
+
+  // Compute expected signature from raw body
+  const expectedSignature = crypto
+    .createHmac('sha256', WEBHOOK_SECRET)
+    .update(req.body) // raw buffer, NOT parsed JSON
+    .digest('hex');
+
+  // Constant-time comparison to prevent timing attacks
+  const isValid = crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSignature)
+  );
+
+  if (!isValid) {
+    console.error(`Invalid webhook signature for event: ${event}`);
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+
+  // Signature is valid — parse and process
+  const payload = JSON.parse(req.body);
+
+  // Process asynchronously...
+  processWebhook(event, payload);
+
+  // Always respond 200 quickly
+  res.status(200).json({ received: true });
+});
+```
+
+### Python (Flask)
+
+```python
+import hmac
+import hashlib
+import os
+from flask import Flask, request, jsonify
+
+WEBHOOK_SECRET = os.environ['AUTORAMP_WEBHOOK_SECRET']  # whsec_...
+
+@app.route('/webhooks/autoramp', methods=['POST'])
+def handle_webhook():
+    signature = request.headers.get('X-Webhook-Signature')
+    event = request.headers.get('X-Webhook-Event')
+
+    if not signature:
+        return jsonify({'error': 'Missing signature'}), 401
+
+    # Compute expected signature from raw body
+    expected = hmac.new(
+        WEBHOOK_SECRET.encode(),
+        request.data,  # raw bytes, NOT request.json
+        hashlib.sha256
+    ).hexdigest()
+
+    # Constant-time comparison
+    if not hmac.compare_digest(signature, expected):
+        print(f'Invalid signature for event: {event}')
+        return jsonify({'error': 'Invalid signature'}), 401
+
+    # Signature is valid — parse and process
+    payload = request.get_json()
+
+    # Process asynchronously...
+    process_webhook(event, payload)
+
+    return jsonify({'received': True}), 200
+```
+
+### Go
+
+```go
+package main
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
+	"net/http"
+	"os"
+)
+
+var webhookSecret = []byte(os.Getenv("AUTORAMP_WEBHOOK_SECRET")) // whsec_...
+
+func handleWebhook(w http.ResponseWriter, r *http.Request) {
+	signature := r.Header.Get("X-Webhook-Signature")
+	event := r.Header.Get("X-Webhook-Event")
+
+	if signature == "" {
+		http.Error(w, "Missing signature", http.StatusUnauthorized)
+		return
+	}
+
+	body, _ := io.ReadAll(r.Body)
+
+	// Compute expected signature
+	mac := hmac.New(sha256.New, webhookSecret)
+	mac.Write(body)
+	expected := hex.EncodeToString(mac.Sum(nil))
+
+	if !hmac.Equal([]byte(signature), []byte(expected)) {
+		http.Error(w, "Invalid signature", http.StatusUnauthorized)
+		return
+	}
+
+	// Signature is valid — process
+ProcessEvent(event, body)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"received": true}`))
+}
+```
+
+## Getting Your Webhook Secret
+
+Your webhook secret is shown when you first configure your webhook URL. If you've lost it, rotate via the API:
+
+```bash
+curl -X POST "https://api.autoramp.com/merchants/:merchantId/settings/webhooks/:webhookId/rotate-secret" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+<Warning>
+After rotating, update your verification code with the new secret immediately. The old secret is invalidated.
+</Warning>
+
+## Best Practices
+
+1. **Always verify the signature** — Never skip signature verification in production
+2. **Use constant-time comparison** — Prevents timing attacks (`crypto.timingSafeEqual` in Node, `hmac.compare_digest` in Python)
+3. **Sign the raw body** — Parse JSON *after* verification, not before
+4. **Respond with 200** — Acknowledge receipt quickly; process asynchronously
+5. **Implement idempotency** — Handle duplicate webhooks gracefully using the `reference` field
+6. **Log all webhooks** — Keep a record for debugging
+7. **Set up monitoring** — Alert on failed webhook deliveries

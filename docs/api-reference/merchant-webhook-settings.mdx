@@ -1,0 +1,182 @@
+---
+title: "Webhook Settings"
+description: "Manage webhook endpoints and signing secrets"
+---
+
+## List Webhooks
+
+Get all webhook endpoints for a merchant.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token
+</ParamField>
+
+<ParamField path="merchantId" type="string" required>
+  Merchant ID
+</ParamField>
+
+```bash
+curl -X GET "https://api.autoramp.com/merchants/:merchantId/settings/webhooks" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+<ResponseExample>
+```json
+[
+  {
+    "id": "wh_abc123",
+    "url": "https://yourapp.com/webhooks/autoramp",
+    "secret": "whsec_...",
+    "active": true,
+    "label": "Production",
+    "createdAt": "2026-07-13T10:00:00.000Z"
+  },
+  {
+    "id": "wh_def456",
+    "url": "https://staging.yourapp.com/webhooks/autoramp",
+    "secret": "whsec_...",
+    "active": false,
+    "label": "Staging",
+    "createdAt": "2026-07-10T08:00:00.000Z"
+  }
+]
+```
+</ResponseExample>
+
+---
+
+## Add Webhook
+
+Register a new webhook endpoint. A signing secret is auto-generated.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token
+</ParamField>
+
+<ParamField path="merchantId" type="string" required>
+  Merchant ID
+</ParamField>
+
+<ParamField body="url" type="string" required>
+  HTTPS URL to receive webhook POST requests
+</ParamField>
+
+<ParamField body="label" type="string">
+  Optional label (e.g. "Production", "Staging")
+</ParamField>
+
+```bash
+curl -X POST "https://api.autoramp.com/merchants/:merchantId/settings/webhooks" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://yourapp.com/webhooks/autoramp", "label": "Production"}'
+```
+
+<ResponseExample>
+```json
+{
+  "id": "wh_abc123",
+  "url": "https://yourapp.com/webhooks/autoramp",
+  "secret": "whsec_a1b2c3d4e5f6...",
+  "active": true,
+  "label": "Production",
+  "createdAt": "2026-07-13T10:00:00.000Z"
+}
+```
+</ResponseExample>
+
+---
+
+## Update Webhook
+
+Update a webhook's URL, label, or active status.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token
+</ParamField>
+
+<ParamField path="merchantId" type="string" required>
+  Merchant ID
+</ParamField>
+
+<ParamField path="webhookId" type="string" required>
+  Webhook ID
+</ParamField>
+
+<ParamField body="url" type="string">
+  New webhook URL
+</ParamField>
+
+<ParamField body="label" type="string">
+  New label
+</ParamField>
+
+<ParamField body="active" type="boolean">
+  Enable or disable this endpoint
+</ParamField>
+
+```bash
+curl -X PATCH "https://api.autoramp.com/merchants/:merchantId/settings/webhooks/:webhookId" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"active": false}'
+```
+
+---
+
+## Delete Webhook
+
+Remove a webhook endpoint permanently.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token
+</ParamField>
+
+<ParamField path="merchantId" type="string" required>
+  Merchant ID
+</ParamField>
+
+<ParamField path="webhookId" type="string" required>
+  Webhook ID
+</ParamField>
+
+```bash
+curl -X DELETE "https://api.autoramp.com/merchants/:merchantId/settings/webhooks/:webhookId" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+---
+
+## Rotate Secret
+
+Generate a new HMAC signing secret for a specific webhook. The old secret is immediately invalidated.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token
+</ParamField>
+
+<ParamField path="merchantId" type="string" required>
+  Merchant ID
+</ParamField>
+
+<ParamField path="webhookId" type="string" required>
+  Webhook ID
+</ParamField>
+
+<Warning>
+After rotating, update your verification code with the new secret immediately.
+</Warning>
+
+```bash
+curl -X POST "https://api.autoramp.com/merchants/:merchantId/settings/webhooks/:webhookId/rotate-secret" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+<ResponseExample>
+```json
+{
+  "webhookId": "wh_abc123",
+  "secret": "whsec_new_secret_here..."
+}
+```
+</ResponseExample>

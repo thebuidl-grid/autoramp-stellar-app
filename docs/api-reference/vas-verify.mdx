@@ -1,0 +1,70 @@
+---
+title: "Verify Entity"
+description: "Verify a power meter number or cable TV smartcard before purchase"
+openapi: POST /vas/verify
+---
+
+## Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `serviceCategoryId` | string | Yes | The `_id` of the category (disco or cable provider) |
+| `entityNumber` | string | Yes | Meter number (for utility) or smartcard/IUC number (for cable TV) |
+
+### Example: Verify Electricity Meter
+
+```json
+{
+  "serviceCategoryId": "64f1a2b3c4d5e6f7a8b9c0e1",
+  "entityNumber": "12345678901"
+}
+```
+
+### Example: Verify Cable TV Smartcard
+
+```json
+{
+  "serviceCategoryId": "64f1a2b3c4d5e6f7a8b9c0e2",
+  "entityNumber": "12345678901234"
+}
+```
+
+## Response
+
+### Power Verification
+
+```json
+{
+  "success": true,
+  "data": {
+    "meterNumber": "12345678901",
+    "meterType": "Prepaid",
+    "vendType": "prepaid",
+    "customerName": "John Doe",
+    "address": "123 Lagos Street",
+    "accountType": "Prepaid"
+  }
+}
+```
+
+<Note>
+The `vendType` from the response is required when making a utility payment via [POST /vas/pay/utility](/api-reference/vas-pay-utility).
+</Note>
+
+### Cable TV Verification
+
+```json
+{
+  "success": true,
+  "data": {
+    "cardNumber": "12345678901234",
+    "customerName": "Jane Doe",
+    "smartCardType": "DSTV",
+    "status": "Active"
+  }
+}
+```
+
+<Note>
+Always show the customer name to the user and ask them to confirm before proceeding with payment.
+</Note>

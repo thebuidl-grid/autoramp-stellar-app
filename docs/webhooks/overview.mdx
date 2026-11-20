@@ -1,0 +1,69 @@
+---
+title: "Webhooks Overview"
+description: "Receive real-time transaction updates"
+---
+
+AutoRamp sends signed webhooks to your configured URL when transaction statuses change and accounts are created.
+
+## How It Works
+
+1. You configure a webhook URL in the [AutoRamp Dashboard](https://autoramp.thebuidl.org/merchant/dashboard/settings)
+2. When a transaction status changes, AutoRamp sends an HTTP POST to your URL
+3. You verify the signature and process the event
+
+## Webhook Payload
+
+All webhooks are sent as HTTP POST requests with a JSON body.
+
+```json
+{
+  "event": "onramp.completed",
+  "data": {
+    "id": "uuid",
+    "reference": "REF-123456",
+    "amount": 50000,
+    "status": "COMPLETED",
+    "type": "onramp",
+    "createdAt": "2026-06-28T10:00:00.000Z",
+    "completedAt": "2026-06-28T10:05:00.000Z"
+  },
+  "timestamp": "2026-06-28T10:05:00.000Z"
+}
+```
+
+## Headers
+
+Every webhook request includes these headers:
+
+| Header | Description |
+|--------|-------------|
+| `Content-Type` | `application/json` |
+| `X-Webhook-Signature` | HMAC-SHA256 signature of the raw request body |
+| `X-Webhook-Event` | The event type (e.g. `onramp.completed`) |
+
+## Delivery
+
+- **Method:** HTTP POST
+- **Content-Type:** `application/json`
+- **Timeout:** 10 seconds per request
+- **Retries:** Up to 3 retries with exponential backoff (5s, 30s, 2min)
+- **Audit:** All delivery attempts are logged
+
+## Configuration
+
+1. Log in to the [AutoRamp Dashboard](https://autoramp.thebuidl.org/merchant/dashboard/settings)
+2. Navigate to **Settings → Webhooks**
+3. Enter your webhook URL
+4. Save — a signing secret is generated automatically
+
+<CardGroup>
+
+<Card title="Event Types" icon="list" href="/webhooks/events">
+  See all webhook event types
+</Card>
+
+<Card title="Verify Webhooks" icon="shield" href="/webhooks/verify">
+  Learn how to verify webhook authenticity
+</Card>
+
+</CardGroup>

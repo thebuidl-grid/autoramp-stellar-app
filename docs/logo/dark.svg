@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 40" fill="none">
+  <rect x="0" y="4" width="32" height="32" rx="8" fill="#0D6EFD"/>
+  <path d="M8 20L14 14L20 20L14 26L8 20Z" fill="white"/>
+  <path d="M14 20L20 14L26 20L20 26L14 20Z" fill="white" fill-opacity="0.7"/>
+  <text x="42" y="26" font-family="Inter, sans-serif" font-size="20" font-weight="700" fill="#ffffff">AutoRamp</text>
+</svg>

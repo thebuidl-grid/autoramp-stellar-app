@@ -1,0 +1,74 @@
+---
+title: "Create Sub-Account"
+description: "Create new sub-account"
+openapi: POST /merchants/api/sub-account
+---
+
+## Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `phoneNumber` | string | Yes | Account holder phone number |
+| `emailAddress` | string | Yes | Account holder email |
+| `externalReference` | string | Yes | Your unique reference |
+| `identityType` | string | SafeHaven only | `BVN`, `NIN`, `vNIN`, `BVNUSSD`, or `vID` |
+| `identityNumber` | string | SafeHaven only | The identity number (e.g. BVN) |
+| `identityId` | string | No | Identity ID from a prior verification |
+| `otp` | string | SafeHaven only | OTP sent to the account holder's phone. **Required** when `identityType` is set. |
+| `callbackUrl` | string | SafeHaven only | Webhook URL for account events |
+| `autoSweep` | boolean | SafeHaven only | Auto-sweep incoming funds |
+
+## SafeHaven Example (with identity)
+
+When creating a sub-account on SafeHaven with identity verification, you must provide the OTP that was sent to the account holder's phone.
+
+```bash
+curl -X POST 	
+ https://api-autoramp.thebuidl.xyz/merchants/api/sub-account \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phoneNumber": "08012345678",
+    "emailAddress": "user@example.com",
+    "externalReference": "ref-123456",
+    "identityType": "BVN",
+    "identityNumber": "22222222222",
+    "otp": "123456"
+  }'
+```
+
+## Pulse MFB Example (no identity)
+
+```bash
+curl -X POST 	
+ https://api-autoramp.thebuidl.xyz/merchants/api/sub-account \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phoneNumber": "08012345678",
+    "emailAddress": "user@example.com",
+    "externalReference": "ref-123456"
+  }'
+```
+
+## Provider Differences
+
+| Field | SafeHaven | Pulse MFB |
+|-------|-----------|-----------|
+| `phoneNumber` | Required | Required |
+| `emailAddress` | Required | Required |
+| `externalReference` | Required | Required |
+| `identityType` | **Required** | Ignored |
+| `identityNumber` | Required if `identityType` set | Ignored |
+| `otp` | Supported | Ignored |
+| `callbackUrl` | Supported | Ignored |
+| `autoSweep` | Supported | Ignored |
+
+## What Happens Under the Hood
+
+- **SafeHaven** — Calls SafeHaven's `/accounts/v2/subaccount` with identity fields. Sub-account is created with identity verification attached.
+- **Pulse MFB** — Calls Pulse MFB's `/api/v1/external-api/accounts/prefix`. Identity fields are stripped — only `customer_name`, `customer_phone`, `customer_email`, and `reference` are sent.
+
+<Note>
+You can verify a sub-account's identity separately after creation using the [Identity Verification (CAS OTT)](/identity-verification) flow — SafeHaven only.
+</Note>

@@ -1,0 +1,36 @@
+---
+title: "Name Enquiry"
+description: "Validate bank account and resolve name"
+openapi: POST /merchants/api/name-enquiry
+---
+
+## Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `bankCode` | string | Yes | Bank code |
+| `accountNumber` | string | Yes | Account number |
+
+## Example
+
+```bash
+curl -X POST 	
+ https://api-autoramp.thebuidl.xyz/merchants/api/name-enquiry \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bankCode": "058",
+    "accountNumber": "0123456789"
+  }'
+```
+
+## Response
+
+```json
+{
+  "accountName": "John Doe",
+  "accountNumber": "0123456789",
+  "bankCode": "058",
+  "bankName": "Guaranty Trust Bank"
+}
+```

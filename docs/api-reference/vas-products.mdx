@@ -1,0 +1,51 @@
+---
+title: "VAS Products"
+description: "Get available products/bundles for a category (data bundles, TV bouquets)"
+openapi: GET /vas/categories/{categoryId}/products
+---
+
+## Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `categoryId` | string | Yes | The `_id` of the category from [GET /vas/services/:id/categories](/api-reference/vas-categories) |
+
+## Response
+
+Returns all available products/bundles under the specified category.
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "64f1a2b3c4d5e6f7a8b9c0f1",
+      "bundleCode": "MTN_1GB_30",
+      "name": "1GB 30-Day Plan",
+      "amount": 500,
+      "validity": "30 days"
+    },
+    {
+      "_id": "64f1a2b3c4d5e6f7a8b9c0f2",
+      "bundleCode": "MTN_2GB_30",
+      "name": "2GB 30-Day Plan",
+      "amount": 1000,
+      "validity": "30 days"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `_id` | Product ID |
+| `bundleCode` | Use this code when purchasing a data bundle or cable TV subscription |
+| `name` | Product name |
+| `amount` | Price in NGN |
+| `validity` | How long the product lasts |
+
+## Usage
+
+Use the `bundleCode` in [POST /vas/pay/data](/api-reference/vas-pay-data) or [POST /vas/pay/cable-tv](/api-reference/vas-pay-cable-tv).
+
+For [airtime](/api-reference/vas-pay-airtime), you only need the category ID and a custom amount — no product selection required.
