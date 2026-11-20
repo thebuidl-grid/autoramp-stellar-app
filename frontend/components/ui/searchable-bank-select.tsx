@@ -43,8 +43,8 @@ export function SearchableBankSelect({
     const query = searchQuery.toLowerCase();
     return banks.filter(
       (bank) =>
-        bank.institutionName.toLowerCase().includes(query) ||
-        bank.institutionCode.toLowerCase().includes(query)
+        (bank.institutionName ?? "").toLowerCase().includes(query) ||
+        (bank.institutionCode ?? "").toLowerCase().includes(query)
     );
   }, [banks, searchQuery]);
 

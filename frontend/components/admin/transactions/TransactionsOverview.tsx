@@ -25,6 +25,7 @@ import { Loader2 } from "lucide-react";
 
 export function TransactionsOverview() {
     const [period, setPeriod] = useState<"daily" | "weekly" | "monthly">("daily");
+    const [chartMetric, setChartMetric] = useState<"volume" | "count">("volume");
 
     const { data, isLoading } = useQuery({
         queryKey: ["admin-transactions-analytics", period],
@@ -34,23 +35,51 @@ export function TransactionsOverview() {
         },
     });
 
+    const volumeKeys = [
+        { key: "onrampVolume", name: "Onramp", fill: "#3b82f6" },
+        { key: "offrampVolume", name: "Offramp", fill: "#a855f7" },
+        { key: "swapVolume", name: "Swap", fill: "#6366f1" },
+        { key: "bankTransferVolume", name: "Bank Transfer", fill: "#f97316" },
+        { key: "vasVolume", name: "VAS", fill: "#06b6d4" },
+        { key: "otcVolume", name: "OTC", fill: "#eab308" },
+    ];
+
+    const countKeys = [
+        { key: "onrampCount", name: "Onramp", fill: "#3b82f6" },
+        { key: "offrampCount", name: "Offramp", fill: "#a855f7" },
+        { key: "swapCount", name: "Swap", fill: "#6366f1" },
+        { key: "bankTransferCount", name: "Bank Transfer", fill: "#f97316" },
+        { key: "vasCount", name: "VAS", fill: "#06b6d4" },
+        { key: "otcCount", name: "OTC", fill: "#eab308" },
+    ];
+
+    const bars = chartMetric === "volume" ? volumeKeys : countKeys;
+
     return (
         <Card className="col-span-4">
             <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Transactions Volume</CardTitle>
-                <Select
-                    value={period}
-                    onValueChange={(value: any) => setPeriod(value)}
-                >
-                    <SelectTrigger className="w-[120px]">
-                        <SelectValue placeholder="Select period" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                    </SelectContent>
-                </Select>
+                <CardTitle>Transactions Overview</CardTitle>
+                <div className="flex items-center gap-2">
+                    <Select value={chartMetric} onValueChange={(value: any) => setChartMetric(value)}>
+                        <SelectTrigger className="w-[120px]">
+                            <SelectValue placeholder="Metric" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="volume">Volume</SelectItem>
+                            <SelectItem value="count">Count</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select value={period} onValueChange={(value: any) => setPeriod(value)}>
+                        <SelectTrigger className="w-[120px]">
+                            <SelectValue placeholder="Select period" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="daily">Daily</SelectItem>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
             </CardHeader>
             <CardContent>
                 <div className="h-[300px] w-full">
@@ -74,7 +103,15 @@ export function TransactionsOverview() {
                                     fontSize={12}
                                     tickLine={false}
                                     axisLine={false}
-                                    tickFormatter={(value) => `${value}`}
+                                    tickFormatter={(value) =>
+                                        chartMetric === "volume"
+                                            ? value >= 1000000
+                                                ? `${(value / 1000000).toFixed(1)}M`
+                                                : value >= 1000
+                                                  ? `${(value / 1000).toFixed(0)}K`
+                                                  : `${value}`
+                                            : `${value}`
+                                    }
                                 />
                                 <Tooltip
                                     contentStyle={{
@@ -83,29 +120,23 @@ export function TransactionsOverview() {
                                         borderRadius: "8px",
                                     }}
                                     itemStyle={{ fontSize: "12px" }}
+                                    formatter={(value: any) =>
+                                        chartMetric === "volume"
+                                            ? `₦${Number(value).toLocaleString()}`
+                                            : value
+                                    }
                                 />
                                 <Legend />
-                                <Bar
-                                    dataKey="onrampCount"
-                                    name="Onramp"
-                                    fill="#3b82f6"
-                                    radius={[4, 4, 0, 0]}
-                                    stackId="a"
-                                />
-                                <Bar
-                                    dataKey="offrampCount"
-                                    name="Offramp"
-                                    fill="#a855f7"
-                                    radius={[4, 4, 0, 0]}
-                                    stackId="a"
-                                />
-                                <Bar
-                                    dataKey="swapCount"
-                                    name="Swap"
-                                    fill="#6366f1"
-                                    radius={[4, 4, 0, 0]}
-                                    stackId="a"
-                                />
+                                {bars.map((bar) => (
+                                    <Bar
+                                        key={bar.key}
+                                        dataKey={bar.key}
+                                        name={bar.name}
+                                        fill={bar.fill}
+                                        radius={[4, 4, 0, 0]}
+                                        stackId="a"
+                                    />
+                                ))}
                             </BarChart>
                         </ResponsiveContainer>
                     ) : (

@@ -2,29 +2,31 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Key, BarChart3, Settings, Menu, X, LogOut } from "lucide-react";
+import { LayoutDashboard, Key, BarChart3, Settings, Menu, X, LogOut, Landmark, ScrollText, Smartphone } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/lib/store";
 
 const sidebarLinks = [
     { name: "Dashboard", href: "/merchant/dashboard", icon: LayoutDashboard },
+    { name: "Banking", href: "/merchant/dashboard/bank", icon: Landmark },
+    { name: "VAS", href: "/merchant/dashboard/vas", icon: Smartphone },
     { name: "API Keys", href: "/merchant/dashboard/api-keys", icon: Key },
-    { name: "Analytics", href: "/merchant/dashboard/analytics", icon: BarChart3 },
+    { name: "Transactions", href: "/merchant/dashboard/transactions", icon: BarChart3 },
+    { name: "Audit Logs", href: "/merchant/dashboard/audit-logs", icon: ScrollText },
     { name: "Settings", href: "/merchant/dashboard/settings", icon: Settings },
 ];
 
 export function MerchantSidebar() {
     const pathname = usePathname();
     const router = useRouter();
+    const { logout } = useAuthStore();
     const [isMobileOpen, setIsMobileOpen] = useState(false);
 
     const handleLogout = () => {
-        if (typeof window !== "undefined") {
-            localStorage.removeItem("token");
-            localStorage.removeItem("auth-storage");
-        }
+        logout();
         router.push("/merchant/login");
     };
 

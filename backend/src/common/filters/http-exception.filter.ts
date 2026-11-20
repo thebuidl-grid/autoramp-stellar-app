@@ -202,11 +202,23 @@ export class HttpExceptionFilter implements ExceptionFilter {
         `Rate limit exceeded: ${request.method} ${request.url} - retryAfter: ${retryAfter ?? 'unknown'}s`,
       );
     } else {
-      this.logger.error(
-        `${request.method} ${request.url} - Status: ${status}`,
-        `Detailed error: ${detailedMessage || (exception instanceof Error ? exception.message : 'Unknown error')}`,
-        exception instanceof Error ? exception.stack : '',
-      );
+      const detail =
+        detailedMessage ||
+        (exception instanceof Error ? exception.message : 'Unknown error');
+      const summary = `${request.method} ${request.url} - ${status}: ${detail}`;
+      if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+        // Real server faults: error level, with the stack.
+        this.logger.error(
+          summary,
+          exception instanceof Error ? exception.stack : undefined,
+        );
+      } else if (status === HttpStatus.UNAUTHORIZED) {
+        // Expected (logged-out/expired sessions); keep it out of error/warn.
+        this.logger.debug(summary);
+      } else {
+        // Other client errors: a single warn line, no stack trace.
+        this.logger.warn(summary);
+      }
     }
 
     // Send response with generic message

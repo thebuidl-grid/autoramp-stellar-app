@@ -58,12 +58,14 @@ export function AdminProtected({ children }: { children: React.ReactNode }) {
                     router.push("/auth/admin/login");
                 })
                 .finally(() => {
-                    setIsVerifying(false);
+                    // We don't set isVerifying to false immediately here to prevent
+                    // rapid re-runs before isAuthorized state propagates
+                    setTimeout(() => setIsVerifying(false), 500);
                 });
         }
     }, [_hasHydrated, user, token, router, setAuth, isAuthorized, isVerifying, logout]);
 
-    if (!_hasHydrated || isVerifying || (!isAuthorized && (token && user?.role === "ADMIN"))) {
+    if (!_hasHydrated || isVerifying || (!isAuthorized && token)) {
         return (
             <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />

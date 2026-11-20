@@ -1,0 +1,14 @@
+name: Deploy to Dokploy
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Trigger Dokploy deploy
+        run: |
+          curl -4 -v -X POST "http://localhost:3000/api/deploy/iJJpOmO59FLOtcBNvwvAJ" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: push" \
+            -d '{"ref": "refs/heads/main", "repository": {"full_name": "thebuidl-grid/autoramp-frontend"}}'

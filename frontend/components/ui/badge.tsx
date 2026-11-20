@@ -48,6 +48,11 @@ function getStatusVariant(status: string): "default" | "secondary" | "destructiv
     CANCELLED: "secondary",
     VERIFIED: "success",
     REJECTED: "destructive",
+    REVERSED: "destructive",
+    EXPIRED: "warning",
+    PARTIAL: "warning",
+    REFUNDED: "secondary",
+    DISPUTED: "secondary",
   };
   return statusMap[status] || "secondary";
 }

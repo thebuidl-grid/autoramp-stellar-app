@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
 import { NETWORK_COOKIE, parseNetwork } from "@/lib/network";
+import { limitQuotes } from "@/lib/server/quote-limiter";
 
 export async function GET(request: NextRequest) {
+  const limited = limitQuotes(request);
+  if (limited) return limited;
+
   const searchParams = request.nextUrl.searchParams;
   const isTestnet =
     parseNetwork(request.cookies.get(NETWORK_COOKIE)?.value) === "testnet";

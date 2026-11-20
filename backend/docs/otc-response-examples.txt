@@ -1,0 +1,251 @@
+=== OTC Offramp Initiate ===
+POST /otc/offramp/transaction
+
+Payload:
+{
+  "quantity": 10000,
+  "token": "USDC",
+  "network": "bsc",
+  "address": "0x...",
+  "bankCode": "000015",
+  "accountNumber": "2270121368"
+}
+
+Response:
+{
+  "type": "offramp",
+  "reference": "550e8400-e29b-41d4-a716-446655440000",
+  "quote": {
+    "rate": 1379.9715,
+    "flatFee": 0.5,
+    "sourceAmount": 7.246527,
+    "destinationAmount": 10000
+  },
+  "address": "0x...",
+  "depositAddress": {
+    "address": "0xae460A51A47D625D042415BD3b7D75F9B8BAFBe8",
+    "network": "BSC",
+    "token": "USDC",
+    "memo": null,
+    "expiresAt": "2026-07-10T20:07:28.000Z"
+  },
+  "destination": {
+    "bankCode": "000015",
+    "accountNumber": "2270121368"
+  }
+}
+
+
+=== OTC Offramp Execute ===
+POST /otc/offramp/execute
+
+Payload:
+{
+  "amount": 10000,
+  "reference": "550e8400-e29b-41d4-a716-446655440000",
+  "network": "bsc",
+  "destination": {
+    "bankCode": "000015",
+    "accountNumber": "2270121368"
+  }
+}
+
+Response:
+{
+  "type": "offramp",
+  "id": "txn-id-from-flint",
+  "address": "0xae460A51A47D625D042415BD3b7D75F9B8BAFBe8",
+  "quote": {
+    "rate": 1379.9715,
+    "expiry": "2026-07-10T20:37:28+01:00",
+    "source": {
+      "amount": 7.246527,
+      "network": "BSC",
+      "currency": "USDC"
+    },
+    "destination": {
+      "amount": 10000,
+      "network": "FIAT",
+      "currency": "NGN"
+    }
+  },
+  "deposit": {
+    "asset": "base:usdc",
+    "amount": 7.246527,
+    "address": "0xae460A51A47D625D042415BD3b7D75F9B8BAFBe8"
+  },
+  "destination": {
+    "bankCode": "000015",
+    "accountNumber": "2270121368"
+  }
+}
+
+
+=== OTC Offramp Status ===
+GET /otc/status/:reference
+
+Response:
+{
+  "id": "uuid",
+  "reference": "uuid",
+  "userId": "uuid",
+  "otcUserId": "uuid",
+  "amount": 10000,
+  "fiatAmountReceived": 10000,
+  "systemFee": 0.5,
+  "rate": 1379.9715,
+  "networkFee": 0,
+  "feeCollected": 0.5,
+  "quantity": 10000,
+  "tokenAmountSent": 7.246527,
+  "network": "bsc",
+  "chain": "bsc",
+  "token": "USDC",
+  "address": "0x...",
+  "status": "PENDING",
+  "issuance": null,
+  "deposit": {
+    "address": "0xae460A51A47D625D042415BD3b7D75F9B8BAFBe8",
+    "network": "BSC",
+    "token": "USDC",
+    "memo": null,
+    "expiresAt": "2026-07-10T20:07:28.000Z"
+  },
+  "expiresAt": "2026-07-10T20:07:28.000Z",
+  "providerResponse": {
+    "data": {
+      "deposit": {
+        "note": [
+          "Kindly send the exact amount to the wallet address to complete the transaction.",
+          "This wallet address is for one-time use only and has a 30 minutes expiry window."
+        ],
+        "asset": "base:usdc",
+        "amount": 7.246527,
+        "address": "0xae460A51A47D625D042415BD3b7D75F9B8BAFBe8"
+      }
+    },
+    "status": "success",
+    "message": "Quote fetched successfully"
+  }
+}
+
+
+=== OTC Onramp Initiate ===
+POST /otc/transaction
+
+Payload:
+{
+  "quantity": 100,
+  "token": "USDC",
+  "network": "bsc",
+  "address": "0x..."
+}
+
+Response:
+{
+  "type": "onramp",
+  "reference": "550e8400-e29b-41d4-a716-446655440000",
+  "quote": {
+    "rate": 1380.965,
+    "flatFee": 0.5,
+    "sourceAmount": 100,
+    "destinationAmount": 138096.5
+  },
+  "issuance": {
+    "bankCode": "090286",
+    "accountNumber": "1234567890",
+    "accountName": "John Doe",
+    "bankName": "MFB MFB"
+  },
+  "destination": {
+    "address": "0x..."
+  }
+}
+
+
+=== OTC Onramp Execute ===
+POST /otc/onramp/execute
+
+Payload:
+{
+  "amount": 100,
+  "reference": "550e8400-e29b-41d4-a716-446655440000",
+  "network": "bsc",
+  "destination": {
+    "address": "0x..."
+  }
+}
+
+Response:
+{
+  "type": "onramp",
+  "id": "txn-id-from-flint",
+  "address": "0xae460A51A47D625D042415BD3b7D75F9B8BAFBe8",
+  "quote": {
+    "rate": 1380.965,
+    "expiry": "2026-07-10T19:52:27+01:00",
+    "source": {
+      "amount": 100,
+      "network": "BSC",
+      "currency": "USDC"
+    },
+    "destination": {
+      "amount": 138096.5,
+      "network": "FIAT",
+      "currency": "NGN"
+    }
+  },
+  "deposit": {
+    "asset": "base:usdc",
+    "amount": 100,
+    "address": "0xae460A51A47D625D042415BD3b7D75F9B8BAFBe8"
+  },
+  "destination": {
+    "address": "0x..."
+  }
+}
+
+
+=== OTC Onramp Status ===
+GET /otc/status/:reference
+
+Response:
+{
+  "id": "uuid",
+  "reference": "uuid",
+  "userId": "uuid",
+  "otcUserId": "uuid",
+  "amount": 138097,
+  "fiatAmountReceived": 138097,
+  "systemFee": 0.5,
+  "rate": 1380.965,
+  "networkFee": 0,
+  "feeCollected": 0.5,
+  "quantity": 100,
+  "tokenAmountSent": 100,
+  "network": "bsc",
+  "chain": "bsc",
+  "token": "USDC",
+  "address": "0x...",
+  "status": "PENDING",
+  "issuance": {
+    "bankCode": "090286",
+    "accountNumber": "1234567890",
+    "accountName": "John Doe",
+    "bankName": "MFB MFB"
+  },
+  "deposit": null,
+  "expiresAt": null,
+  "providerResponse": {
+    "data": {
+      "deposit": {
+        "bank_code": "090286",
+        "account_number": "1234567890",
+        "account_name": "John Doe",
+        "bank_name": "MFB MFB"
+      }
+    },
+    "status": "success",
+    "message": "Transaction initialized"
+  }
+}

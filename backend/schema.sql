@@ -261,6 +261,291 @@ CREATE TABLE supported_tokens (
     INDEX idx_is_active (is_active)
 );
 
+-- Merchant Tables
+
+-- Add Merchant column to users table 
+ALTER TABLE users
+ADD COLUMN is_merchant BOOLEAN DEFAULT FALSE;
+
+CREATE INDEX idx_is_merchant ON users (is_merchant);
+
+-- Merchants Table
+CREATE TABLE merchants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    nature_of_business VARCHAR(255) UNIQUE NOT NULL,
+    description TEXT,
+    website_url VARCHAR(255) UNIQUE NOT NULL,
+
+    -- Address Information
+    address_line1 VARCHAR(255),
+    address_line2 VARCHAR(255),
+    city VARCHAR(100),
+    state VARCHAR(100),
+    country VARCHAR(100) DEFAULT 'Nigeria',
+    postal_code VARCHAR(20),
+
+    -- Merchant Status
+    status VARCHAR(20) DEFAULT 'pending', -- pending, verified, rejected
+    verified_at TIMESTAMP,
+    rejection_reason TEXT,
+    
+    -- Metadata
+    metadata JSONB,
+    
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Indexes
+    INDEX idx_name (name),
+    INDEX idx_website_url (website_url),
+    INDEX idx_status (status)
+);
+
+-- Merchant Bank Accounts Table
+CREATE TABLE merchant_bank_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id) ON DELETE CASCADE,
+
+    -- Merchant (Corporate Bank Account)
+    bank_code VARCHAR(200) NOT NULL,
+    account_number VARCHAR(20) NOT NULL,
+    account_name VARCHAR(255),
+    bank_name VARCHAR(100),
+    
+    -- Metadata
+    metadata JSONB,
+    
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Indexes
+    INDEX idx_account_number (account_number),
+);
+
+-- Merchant Documentations Table
+CREATE TABLE merchant_documentations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id) ON DELETE CASCADE,
+
+    -- Merchant documentations
+    cac_certificate TEXT,
+    cac_e_status TEXT,
+    memart TEXT,
+    memorandum TEXT,
+    proof_of_address TEXT,
+    capital_source TEXT,
+    trading_name TEXT,
+    tax_identification_number TEXT,
+    proof_of_funds TEXT,
+    
+    -- Metadata
+    metadata JSONB,
+    
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Indexes
+    INDEX idx_trading_name (trading_name),
+    INDEX idx_tax_identification_number (tax_identification_number)
+);
+
+-- Merchant Directors Table
+CREATE TABLE merchant_directors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id) ON DELETE CASCADE,
+
+    -- Merchant directors
+    first_name VARCHAR(255),
+    last_name VARCHAR(255),
+    nationality VARCHAR(255),
+    bvn VARCHAR(255),
+    proof_of_address TEXT,
+    id_type VARCHAR(255),
+    id_url TEXT,
+    
+    -- Metadata
+    metadata JSONB,
+    
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Indexes
+    INDEX idx_bvn (bvn),
+    INDEX idx_nationality (nationality)
+);
+
+-- Merchant Shareholders Table
+CREATE TABLE merchant_shareholders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id) ON DELETE CASCADE,
+
+    -- Merchant shareholders
+    first_name VARCHAR(255),
+    last_name VARCHAR(255),
+    nationality VARCHAR(255),
+    bvn VARCHAR(255),
+    proof_of_address TEXT,
+    id_type VARCHAR(255),
+    id_url TEXT,
+    
+    -- Metadata
+    metadata JSONB,
+    
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Indexes
+    INDEX idx_bvn (bvn),
+    INDEX idx_nationality (nationality),
+);
+
+-- Merchant Onramp Transactions Table (NGN to CNGN)
+CREATE TABLE merchant_onramp_transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id) ON DELETE CASCADE,
+    
+    -- Transaction Details
+    reference VARCHAR(100) UNIQUE NOT NULL,
+    amount DECIMAL(20, 2) NOT NULL,
+    currency VARCHAR(10) DEFAULT 'NGN',
+    token_amount DECIMAL(20, 8), -- CNGN amount to receive
+    token_type VARCHAR(20) DEFAULT 'CNGN', -- CNGN, USDC, USDT, etc.
+    
+    -- Status Tracking
+    status VARCHAR(20) DEFAULT 'pending', -- pending, processing, completed, failed, cancelled
+    payment_reference VARCHAR(100),
+    
+    -- Destination (User's wallet)
+    destination_address VARCHAR(100) NOT NULL,
+    
+    -- Flint API Response Data
+    network VARCHAR(20), -- base, bsc, ethereum, polygon, etc.
+    notify_url TEXT,
+    deposit_account JSONB, -- stores bank details from Flint response
+    
+    -- Metadata
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    metadata JSONB,
+    
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP,
+    
+    -- Indexes
+    INDEX idx_merchant_id (merchant_id),
+    INDEX idx_reference (reference),
+    INDEX idx_status (status),
+    INDEX idx_token_type (token_type),
+    INDEX idx_created_at (created_at)
+);
+
+-- Merchant Offramp Transactions Table (CNGN to NGN)
+CREATE TABLE merchant_offramp_transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id) ON DELETE CASCADE,
+    
+    -- Transaction Details
+    reference VARCHAR(100) UNIQUE NOT NULL,
+    amount DECIMAL(20, 2) NOT NULL, -- Token amount
+    fiat_amount DECIMAL(20, 2), -- NGN amount to receive
+    currency VARCHAR(10) DEFAULT 'NGN',
+    token_type VARCHAR(20) DEFAULT 'CNGN', -- CNGN, USDC, USDT, etc.
+    
+    -- Status Tracking
+    status VARCHAR(20) DEFAULT 'pending', -- pending, processing, completed, failed, cancelled
+    payment_reference VARCHAR(100),
+    
+    -- Destination (Bank Account)
+    bank_code VARCHAR(10) NOT NULL,
+    account_number VARCHAR(20) NOT NULL,
+    account_name VARCHAR(255),
+    bank_name VARCHAR(100),
+    
+    -- Flint API Response Data
+    network VARCHAR(20), -- base, bsc, ethereum, polygon, etc.
+    notify_url TEXT,
+    
+    -- Metadata
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    metadata JSONB,
+    
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP,
+    
+    -- Indexes
+    INDEX idx_merchant_id (merchant_id),
+    INDEX idx_reference (reference),
+    INDEX idx_status (status),
+    INDEX idx_token_type (token_type),
+    INDEX idx_account_number (account_number),
+    INDEX idx_created_at (created_at)
+);
+
+-- Merchant Swap Transactions Table (Token to Token swaps)
+CREATE TABLE merchant_swap_transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id) ON DELETE CASCADE,
+    
+    -- Transaction Details
+    reference VARCHAR(100) UNIQUE NOT NULL,
+    
+    -- From Token
+    from_token_type VARCHAR(20) NOT NULL, -- CNGN, USDC, USDT, etc.
+    from_amount DECIMAL(20, 8) NOT NULL,
+    from_network VARCHAR(20), -- base, bsc, ethereum, polygon, etc.
+    
+    -- To Token
+    to_token_type VARCHAR(20) NOT NULL, -- CNGN, USDC, USDT, etc.
+    to_amount DECIMAL(20, 8) NOT NULL,
+    to_network VARCHAR(20), -- base, bsc, ethereum, polygon, etc.
+    
+    -- Exchange Rate
+    exchange_rate DECIMAL(20, 8) NOT NULL,
+    
+    -- Wallet Addresses
+    source_address VARCHAR(100) NOT NULL,
+    destination_address VARCHAR(100) NOT NULL,
+    
+    -- Status Tracking
+    status VARCHAR(20) DEFAULT 'pending', -- pending, processing, completed, failed, cancelled
+    transaction_hash VARCHAR(100), -- blockchain transaction hash
+    
+    -- Fees
+    fee_amount DECIMAL(20, 8),
+    fee_currency VARCHAR(20),
+    
+    -- Metadata
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    metadata JSONB,
+    
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP,
+    
+    -- Indexes
+    INDEX idx_merchant_id (merchant_id),
+    INDEX idx_reference (reference),
+    INDEX idx_status (status),
+    INDEX idx_from_token (from_token_type),
+    INDEX idx_to_token (to_token_type),
+    INDEX idx_created_at (created_at)
+);
+
+
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$

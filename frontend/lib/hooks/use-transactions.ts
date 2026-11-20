@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { stablestackApi, OnRampDto, OffRampDto, getErrorMessage } from "@/lib/api";
-import { useAuthStore } from "@/lib/store";
+import { useAuthStore, useIsAuthenticated } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
 
 /**
@@ -15,22 +15,33 @@ export function useTransactions(id?: string, reference?: string) {
       const response = await stablestackApi.getTransactions(id, reference);
       return response.data;
     },
+    staleTime: 30 * 1000, // 30 seconds
   });
 }
 
 /**
  * Fetch Banks Hook
- *
- * currency (ISO 4217) selects the corridor's bank list — omit for the
- * app-wide default (NGN).
  */
-export function useBanks(currency?: string) {
+export function useBanks() {
+  const isAuthenticated = useIsAuthenticated();
   return useQuery({
-    queryKey: ["banks", currency],
+    queryKey: ["banks"],
     queryFn: async () => {
-      const response = await stablestackApi.getBanks(currency);
-      return response.data.data || [];
+      const response = await stablestackApi.getBanks();
+      const raw = response.data.data || [];
+      const seen = new Set<string>();
+      return raw
+        .map((b: any) => ({
+          institutionCode: b.bankCode || b.institutionCode || b.code,
+          institutionName: b.name || b.institutionName,
+        }))
+        .filter((b: { institutionCode: string; institutionName: string }) => {
+          if (seen.has(b.institutionCode)) return false;
+          seen.add(b.institutionCode);
+          return true;
+        });
     },
+    enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
@@ -94,15 +105,8 @@ export function useOffRamp() {
  */
 export function useResolveAccount() {
   return useMutation({
-    mutationFn: ({
-      bankCode,
-      accountNumber,
-      currency,
-    }: {
-      bankCode: string;
-      accountNumber: string;
-      currency?: string;
-    }) => stablestackApi.resolveAccount(bankCode, accountNumber, currency),
+    mutationFn: ({ bankCode, accountNumber }: { bankCode: string; accountNumber: string }) =>
+      stablestackApi.resolveAccount(bankCode, accountNumber),
   });
 }
 

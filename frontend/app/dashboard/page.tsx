@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import axios from "axios";
+import Link from "next/link";
+import { useAuthStore } from "@/lib/store";
 import {
   Users,
   ArrowUpDown,
@@ -37,7 +39,6 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useDataStats } from "@/lib/hooks/use-data";
-const DATA_EMAIL_KEY = "autoramp-data-email";
 const RATE_REFRESH_INTERVAL = 30_000; // 30 seconds
 
 async function fetchPublicUsdNgnRate(): Promise<number | null> {
@@ -114,20 +115,7 @@ function StatSkeleton() {
   );
 }
 
-function EmailGate({ onSubmit }: { onSubmit: (email: string) => void }) {
-  const [email, setEmail] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isValidEmail(email.trim())) {
-      setError("Please enter a valid email address");
-      return;
-    }
-    setError(null);
-    onSubmit(email.trim());
-  };
-
+function AdminRequired() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 pt-24 pb-16">
       <Card className="w-full max-w-md bg-white/5 border-white/10 backdrop-blur-xl">
@@ -137,32 +125,13 @@ function EmailGate({ onSubmit }: { onSubmit: (email: string) => void }) {
           </div>
           <CardTitle className="text-2xl">AutoRamp Dashboard</CardTitle>
           <p className="text-sm text-white/50">
-            Analytics dashboard — enter your authorized admin email to continue.
+            This dashboard is for administrators. Sign in with your admin account to continue.
           </p>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="relative">
-              <Mail
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30"
-                size={18}
-              />
-              <Input
-                type="email"
-                placeholder="admin@autoramp.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="pl-10 h-12"
-              />
-            </div>
-            {error && <p className="text-sm text-red-400">{error}</p>}
-            <Button
-              type="submit"
-              className="w-full h-12 bg-secondary text-black hover:bg-secondary/90 font-semibold"
-            >
-              Continue to dashboard
-            </Button>
-          </form>
+          <Button asChild className="w-full">
+            <Link href="/auth/admin/login">Admin sign in</Link>
+          </Button>
         </CardContent>
       </Card>
     </div>
@@ -170,11 +139,12 @@ function EmailGate({ onSubmit }: { onSubmit: (email: string) => void }) {
 }
 
 export default function DataPage() {
-  const [gateEmail, setGateEmail] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem(DATA_EMAIL_KEY);
-  });
-  const [loaded, setLoaded] = useState(false);
+  const token = useAuthStore((s) => s.token);
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+  const loaded = useAuthStore((s) => s._hasHydrated);
+  // Only a real admin session sees this dashboard; the backend enforces it again on /data.
+  const isAdmin = !!token && user?.role === "ADMIN";
   const [currency, setCurrency] = useState<"NGN" | "USDC">("USDC");
   const [clientRate, setClientRate] = useState<number | null>(null);
   const [clientRateLoading, setClientRateLoading] = useState(false);
@@ -210,35 +180,22 @@ export default function DataPage() {
     };
   }, []);
 
-  // Email-only gate (no OTP / token) — persisted locally, sent as x-admin-email.
-  useEffect(() => {
-    setLoaded(true);
-  }, []);
-
   const {
     data: stats,
     error: statsError,
     isLoading: statsLoading,
     refetch: refetchStats,
     isFetching: statsFetching,
-  } = useDataStats(gateEmail, !!gateEmail && loaded);
+  } = useDataStats(token, isAdmin && loaded);
 
-  const handleEmailSubmit = (email: string) => {
-    localStorage.setItem(DATA_EMAIL_KEY, email);
-    setGateEmail(email);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem(DATA_EMAIL_KEY);
-    setGateEmail(null);
-  };
+  const handleLogout = () => logout();
 
   if (!loaded) return null;
 
   const effectiveRate = clientRate ?? stats?.usdNgnRate ?? null;
 
   const isUnauthorized =
-    axios.isAxiosError(statsError) && statsError.response?.status === 401;
+    axios.isAxiosError(statsError) && [401, 403].includes(statsError.response?.status ?? 0);
   const backendMessage =
     axios.isAxiosError(statsError) &&
     typeof statsError.response?.data?.message === "string"
@@ -258,8 +215,8 @@ export default function DataPage() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      {!gateEmail ? (
-        <EmailGate onSubmit={handleEmailSubmit} />
+      {!isAdmin ? (
+        <AdminRequired />
       ) : (
         <main className="max-w-6xl mx-auto px-4 pt-32 pb-20 space-y-8">
           {/* Header */}
@@ -279,7 +236,7 @@ export default function DataPage() {
                   </Badge>
                 ) : isUnauthorized ? (
                   <Badge className="text-[10px] bg-red-500/10 text-red-400 border-red-500/20">
-                    401 · Email not authorized
+                    Not authorized
                   </Badge>
                 ) : (
                   <Badge className="text-[10px] bg-red-500/10 text-red-400 border-red-500/20">
@@ -297,7 +254,7 @@ export default function DataPage() {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-white/50 flex items-center gap-1.5">
-                <Mail size={14} /> {gateEmail}
+                <Mail size={14} /> {user?.email}
               </span>
               <div className="flex items-center gap-2 text-sm">
                 <span className={cn("text-white/50", currency === "NGN" && "text-white font-medium")}>NGN</span>
@@ -322,7 +279,7 @@ export default function DataPage() {
                 onClick={handleLogout}
                 className="border-white/10"
               >
-                <LogOut size={14} /> Change email
+                <LogOut size={14} /> Sign out
               </Button>
             </div>
           </div>
@@ -330,11 +287,10 @@ export default function DataPage() {
           {isUnauthorized ? (
             <Card className="bg-red-500/5 border-red-500/20">
               <CardContent className="py-8 text-center space-y-3">
-                <p className="text-red-300 font-semibold">Email not authorized</p>
+                <p className="text-red-300 font-semibold">Not authorized</p>
                 <p className="text-sm text-white/60">
-                  <span className="font-mono">{gateEmail}</span> is not on the
-                  admin list for <span className="font-mono">GET /dashboard</span>.
-                  Try a different email.
+                  This session is not an administrator session for{" "}
+                  <span className="font-mono">GET /dashboard</span>. Sign in again with an admin account.
                 </p>
                 {backendMessage && (
                   <p className="text-xs font-mono text-white/40 border border-white/10 rounded-lg px-3 py-2">
@@ -347,7 +303,7 @@ export default function DataPage() {
                   onClick={handleLogout}
                   className="border-white/10"
                 >
-                  <LogOut size={14} /> Use a different email
+                  <LogOut size={14} /> Sign out
                 </Button>
               </CardContent>
             </Card>

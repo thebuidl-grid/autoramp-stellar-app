@@ -10,8 +10,13 @@ import { PrismaService } from '../../../database/prisma.service';
  * Validates JWT tokens and extracts user information from the token payload.
  * Used to protect routes that require authentication.
  */
+/** Write lastActiveAt at most this often per user (per process). */
+const ACTIVITY_WRITE_INTERVAL_MS = 10 * 60 * 1000;
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
+  private readonly lastActivityWrite = new Map<string, number>();
+
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
@@ -72,6 +77,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         throw new UnauthorizedException('Your account has been suspended');
       }
 
+      this.touchActivity(user.id);
+
       return {
         id: user.id,
         email: user.email,
@@ -81,5 +88,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     throw new UnauthorizedException('User not found');
+  }
+
+  /**
+   * Record that a user is active (powers DAU/WAU/MAU in admin analytics).
+   * Throttled per user and fire-and-forget: it must never slow down or fail a request.
+   */
+  private touchActivity(userId: string): void {
+    const now = Date.now();
+    const last = this.lastActivityWrite.get(userId) ?? 0;
+    if (now - last < ACTIVITY_WRITE_INTERVAL_MS) return;
+    this.lastActivityWrite.set(userId, now);
+    this.prisma.user
+      .update({ where: { id: userId }, data: { lastActiveAt: new Date(now) } })
+      .catch(() => this.lastActivityWrite.delete(userId));
   }
 }

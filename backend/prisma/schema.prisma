@@ -1,76 +1,98 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
-  provider        = "prisma-client-js"
-  // Enables passing a custom `adapter` (e.g. PGlite, for tests) into
-  // `new PrismaClient({ adapter })`. Purely additive — production code
-  // keeps using `new PrismaClient()` with DATABASE_URL, unaffected.
-  previewFeatures = ["driverAdapters"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
 }
 
-// User model for authentication
 model User {
-  id            String   @id @default(uuid()) @db.Uuid
-  email         String   @unique
-  password      String? // Optional password (for email-only auth)
-  phoneNumber   String?  @map("phone_number")
-  walletAddress String?  @map("wallet_address")
-  role          UserRole @default(USER)
-  businessName  String?  @map("business_name")
-  websiteUrl    String?  @map("website_url")
-  contactName   String?  @map("contact_name")
-  isApiAccessApproved Boolean @default(false) @map("is_api_access_approved")
-
-  // Timestamps
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
-
-  // Relations
+  id                  String               @id @default(uuid()) @db.Uuid
+  email               String               @unique
+  password            String?
+  phoneNumber         String?              @map("phone_number")
+  walletAddress       String?              @map("wallet_address")
+  role                UserRole             @default(USER)
+  isMerchant          Boolean              @default(false) @map("is_merchant")
+  businessName        String?              @map("business_name")
+  websiteUrl          String?              @map("website_url")
+  contactName         String?              @map("contact_name")
+  isApiAccessApproved Boolean              @default(false) @map("is_api_access_approved")
+  isOTCEnabled        Boolean              @default(false) @map("is_otc_enabled")
+  suspended           Boolean              @default(false)
+  suspendedAt         DateTime?            @map("suspended_at") @db.Timestamp(6)
+  bitnobCustomerId  String?              @map("bitnob_customer_id")
+  bitnobVirtualAccount Json?               @map("bitnob_virtual_account")
+  lastActiveAt        DateTime?            @map("last_active_at") @db.Timestamp(6)
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamp(6)
+  merchant            Merchant?
   onrampTransactions  OnrampTransaction[]
   offrampTransactions OfframpTransaction[]
   swapTransactions    SwapTransaction[]
   transactionLogs     TransactionLog[]
   apiKeys             ApiKey[]
   apiRequestLogs      ApiRequestLog[]
+  wallets             UserWallet[]
+  bankAccounts        UserBankAccount[]
+  virtualAccounts     VirtualAccount[]
+  bridgeTransactions   BridgeTransaction[]
+  otcUser             OtcUser?
+  otcTransactions     OtcTransaction[]
 
   @@index([email])
+  @@index([isMerchant])
+  @@index([lastActiveAt])
   @@map("users")
 }
 
-// Admin model for admin authentication
 model Admin {
-  id        String  @id @default(uuid()) @db.Uuid
-  email     String  @unique
-  password  String // Hashed password
-  firstName String? @map("first_name")
-  lastName  String? @map("last_name")
-  isActive  Boolean @default(true) @map("is_active")
-
-  // Timestamps
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  password  String
+  firstName String?  @map("first_name")
+  lastName  String?  @map("last_name")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
 
   @@index([email])
   @@map("admins")
 }
 
-// OTP model for email verification
+model WaitlistEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  name      String?
+  phoneNumber String? @map("phone_number")
+  /// What the person does: crypto_native | freelancer | cross_border | fintech (see waitlist.constants.ts)
+  userType  String?  @map("user_type")
+  /// ISO 3166-1 alpha-2 country picked in the phone-number selector
+  phoneCountry String? @map("phone_country")
+  /// ISO 3166-1 alpha-2 country the request came from (edge header; analytics only, not verified)
+  country   String?
+  /// Hostname of the page that sent the visitor (null = direct / unknown)
+  referrer  String?
+  utmSource   String? @map("utm_source")
+  utmMedium   String? @map("utm_medium")
+  utmCampaign String? @map("utm_campaign")
+  source    String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([createdAt])
+  @@map("waitlist_entries")
+}
+
 model Otp {
   id        String   @id @default(uuid()) @db.Uuid
   email     String
-  code      String // 6-digit OTP code
-  purpose   String   @default("SIGNUP") // SIGNUP, RESET_PASSWORD, etc.
+  code      String
+  purpose   String   @default("SIGNUP")
   isUsed    Boolean  @default(false) @map("is_used")
-  expiresAt DateTime @map("expires_at") @db.Timestamp
-
-  // Timestamps
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  expiresAt DateTime @map("expires_at") @db.Timestamp(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
 
   @@index([email])
   @@index([code])
@@ -79,51 +101,31 @@ model Otp {
   @@map("otps")
 }
 
-// Onramp Transactions Table (NGN to CNGN)
 model OnrampTransaction {
-  id     String @id @default(uuid()) @db.Uuid
-  userId String @map("user_id") @db.Uuid
-
-  // Transaction Details
-  reference   String   @unique
-  amount      Decimal  @db.Decimal(20, 2)
-  currency    String   @default("NGN")
-  tokenAmount Decimal? @map("token_amount") @db.Decimal(20, 8) // CNGN amount to receive
-  tokenType   String   @default("CNGN") @map("token_type") // CNGN, USDC, USDT, etc.
-
-  // Status Tracking
+  id                 String            @id @default(uuid()) @db.Uuid
+  userId             String            @map("user_id") @db.Uuid
+  reference          String            @unique
+  amount             Decimal           @db.Decimal(20, 2)
+  currency           String            @default("NGN")
+  tokenAmount        Decimal?          @map("token_amount") @db.Decimal(20, 8)
+  tokenType          String            @default("CNGN") @map("token_type")
   status             TransactionStatus @default(PENDING)
   flintTransactionId String?           @map("flint_transaction_id")
-
-  // Destination (User's wallet)
-  destinationAddress String @map("destination_address")
-
-  // Cross-chain delivery: when set to something other than the corridor's
-  // own stablecoin on Stellar (payoutChain default / payoutTokenCode null),
-  // completeOnrampTransaction routes through CustodialDeliveryService.deliverOnramp
-  // instead of a plain sendFromDistribution — see that service for the
-  // swap/bridge orchestration. Null payoutTokenCode + default payoutChain
-  // is today's only behavior, unchanged.
-  payoutChain     String  @default("stellar") @map("payout_chain")
-  payoutTokenCode String? @map("payout_token_code")
-
-  // Flint API Response Data
-  network        String? // base, bsc, ethereum, polygon, etc.
-  notifyUrl      String? @map("notify_url") @db.Text
-  depositAccount Json?   @map("deposit_account") @db.JsonB // stores bank details from Flint response
-
-  // Metadata
-  ipAddress String? @map("ip_address")
-  userAgent String? @map("user_agent") @db.Text
-  metadata  Json?   @db.JsonB
-
-  // Timestamps
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamp
-  completedAt DateTime? @map("completed_at") @db.Timestamp
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  destinationAddress String            @map("destination_address")
+  network            String?
+  notifyUrl          String?           @map("notify_url")
+  depositAccount     Json?             @map("deposit_account")
+  safehavenAccount   Json?             @map("safehaven_account")
+  pulseMfbAccount    Json?             @map("pulse_mfb_account")
+  ipAddress          String?           @map("ip_address")
+  userAgent          String?           @map("user_agent")
+  transactionLocation String?          @map("transaction_location")
+  webhookPayload     Json?             @map("webhook_payload")
+  metadata           Json?
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamp(6)
+  completedAt        DateTime?         @map("completed_at") @db.Timestamp(6)
+  user               User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([reference])
@@ -133,50 +135,40 @@ model OnrampTransaction {
   @@map("onramp_transactions")
 }
 
-// Offramp Transactions Table (CNGN to NGN)
 model OfframpTransaction {
-  id     String @id @default(uuid()) @db.Uuid
-  userId String @map("user_id") @db.Uuid
-
-  // Transaction Details
-  reference  String   @unique
-  amount     Decimal  @db.Decimal(20, 2) // Token amount
-  fiatAmount Decimal? @map("fiat_amount") @db.Decimal(20, 2) // NGN amount to receive
-  currency   String   @default("NGN")
-  tokenType  String   @default("CNGN") @map("token_type") // CNGN, USDC, USDT, etc.
-
-  // Status Tracking
+  id                 String            @id @default(uuid()) @db.Uuid
+  userId             String            @map("user_id") @db.Uuid
+  reference          String            @unique
+  amount             Decimal           @db.Decimal(20, 2)
+  fiatAmount         Decimal?          @map("fiat_amount") @db.Decimal(20, 2)
+  currency           String            @default("NGN")
+  tokenType          String            @default("CNGN") @map("token_type")
   status             TransactionStatus @default(PENDING)
   flintTransactionId String?           @map("flint_transaction_id")
-  swapId             String?           @unique @map("swap_id") @db.Uuid // Reference to swap transaction (one-to-one relation)
-
-  // Stellar deposits land on a shared AutoRamp-controlled account,
-  // disambiguated by this memo (unlike Base's unique-address-per-tx model).
-  memo String? @db.VarChar(28)
-
-  // Destination (Bank Account)
-  bankCode      String  @map("bank_code")
-  accountNumber String  @map("account_number")
-  accountName   String? @map("account_name")
-  bankName      String? @map("bank_name")
-
-  // Flint API Response Data
-  network   String? // base, bsc, ethereum, polygon, etc.
-  notifyUrl String? @map("notify_url") @db.Text
-
-  // Metadata
-  ipAddress String? @map("ip_address")
-  userAgent String? @map("user_agent") @db.Text
-  metadata  Json?   @db.JsonB
-
-  // Timestamps
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamp
-  completedAt DateTime? @map("completed_at") @db.Timestamp
-
-  // Relations
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  swapTransaction SwapTransaction? @relation("SwapToOfframp", fields: [swapId], references: [id], onDelete: SetNull)
+  // Provider-specific details (Bitnob) — one row, null for legacy Flint orders
+  providerOrder      OfframpProviderOrder?
+  swapId             String?           @unique @map("swap_id") @db.Uuid
+  bankCode           String            @map("bank_code")
+  accountNumber      String            @map("account_number")
+  accountName        String?           @map("account_name")
+  bankName           String?           @map("bank_name")
+  network            String?
+  notifyUrl          String?           @map("notify_url")
+  safehavenAccount   Json?             @map("safehaven_account")
+  pulseMfbAccount    Json?             @map("pulse_mfb_account")
+  ipAddress          String?           @map("ip_address")
+  userAgent          String?           @map("user_agent")
+  metadata           Json?
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamp(6)
+  completedAt        DateTime?         @map("completed_at") @db.Timestamp(6)
+  /// NGN actually paid out (expected payout is fiatAmount). Null until a payout settles.
+  settledFiatAmount  Decimal?          @map("settled_fiat_amount") @db.Decimal(20, 2)
+  user               User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  swapTransaction    SwapTransaction?  @relation("SwapToOfframp", fields: [swapId], references: [id], onDelete: SetNull)
+  reconciliation     OfframpReconciliation?
+  reversal           OfframpReversal?
+  events             OfframpEvent[]
 
   @@index([userId])
   @@index([reference])
@@ -187,55 +179,30 @@ model OfframpTransaction {
   @@map("offramp_transactions")
 }
 
-// Swap Transactions Table (Token to Token swaps)
 model SwapTransaction {
-  id     String @id @default(uuid()) @db.Uuid
-  userId String @map("user_id") @db.Uuid
-
-  // Transaction Details
-  reference String @unique
-
-  // From Token
-  fromTokenType String  @map("from_token_type") // CNGN, USDC, USDT, etc.
-  fromAmount    Decimal @map("from_amount") @db.Decimal(20, 8)
-  fromNetwork   String? @map("from_network") // base, bsc, ethereum, polygon, etc.
-
-  // To Token
-  toTokenType String  @map("to_token_type") // CNGN, USDC, USDT, etc.
-  toAmount    Decimal @map("to_amount") @db.Decimal(20, 8)
-  toNetwork   String? @map("to_network") // base, bsc, ethereum, polygon, etc.
-
-  // Exchange Rate
-  exchangeRate Decimal @map("exchange_rate") @db.Decimal(20, 8)
-
-  // Wallet Addresses
-  sourceAddress      String @map("source_address")
-  destinationAddress String @map("destination_address")
-
-  // Status Tracking
-  status          TransactionStatus @default(PENDING)
-  transactionHash String?           @map("transaction_hash") // blockchain transaction hash
-
-  // Memo used when destination is a shared AutoRamp-controlled account
-  // (e.g. swap output feeding directly into an offramp collection).
-  memo String? @db.VarChar(28)
-
-  // Fees
-  feeAmount   Decimal? @map("fee_amount") @db.Decimal(20, 8)
-  feeCurrency String?  @map("fee_currency")
-
-  // Metadata
-  ipAddress String? @map("ip_address")
-  userAgent String? @map("user_agent") @db.Text
-  metadata  Json?   @db.JsonB
-
-  // Timestamps
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamp
-  completedAt DateTime? @map("completed_at") @db.Timestamp
-
-  // Relations
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 String              @id @default(uuid()) @db.Uuid
+  userId             String              @map("user_id") @db.Uuid
+  reference          String              @unique
+  fromTokenType      String              @map("from_token_type")
+  fromAmount         Decimal             @map("from_amount") @db.Decimal(20, 8)
+  fromNetwork        String?             @map("from_network")
+  toTokenType        String              @map("to_token_type")
+  toAmount           Decimal             @map("to_amount") @db.Decimal(20, 8)
+  toNetwork          String?             @map("to_network")
+  exchangeRate       Decimal             @map("exchange_rate") @db.Decimal(20, 8)
+  sourceAddress      String              @map("source_address")
+  destinationAddress String              @map("destination_address")
+  status             TransactionStatus   @default(PENDING)
+  transactionHash    String?             @map("transaction_hash")
+  feeAmount          Decimal?            @map("fee_amount") @db.Decimal(20, 8)
+  feeCurrency        String?             @map("fee_currency")
+  ipAddress          String?             @map("ip_address")
+  userAgent          String?             @map("user_agent")
+  metadata           Json?
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamp(6)
+  completedAt        DateTime?           @map("completed_at") @db.Timestamp(6)
+  user               User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
   offrampTransaction OfframpTransaction? @relation("SwapToOfframp")
 
   @@index([userId])
@@ -247,60 +214,41 @@ model SwapTransaction {
   @@map("swap_transactions")
 }
 
-// Webhook Events Table (for onramp, offramp, and swap)
 model WebhookEvent {
   id              String          @id @default(uuid()) @db.Uuid
-  transactionType TransactionType @map("transaction_type") // 'onramp', 'offramp', 'swap'
-  transactionId   String          @map("transaction_id") @db.Uuid // references onramp, offramp, or swap transaction
+  transactionType TransactionType @map("transaction_type")
+  transactionId   String          @map("transaction_id") @db.Uuid
   reference       String
-
-  // Event Details
-  eventType String? @map("event_type") // status_update, completion, failure, etc.
-  status    String?
-
-  // Raw Payload
-  payload Json @db.JsonB
-
-  // Processing
-  processed    Boolean   @default(false)
-  processedAt  DateTime? @map("processed_at") @db.Timestamp
-  errorMessage String?   @map("error_message") @db.Text
-
-  // Timestamps
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
-
-  // Note: Relations to specific transaction types are handled via transactionId and transactionType
-  // No direct foreign key constraints due to polymorphic relationship
+  eventType       String?         @map("event_type")
+  status          String?
+  provider        String?
+  payload         Json
+  processed       Boolean         @default(false)
+  processedAt     DateTime?       @map("processed_at") @db.Timestamp(6)
+  errorMessage    String?         @map("error_message")
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamp(6)
 
   @@index([transactionId])
   @@index([reference])
   @@index([transactionType])
+  @@index([provider])
   @@index([processed])
   @@index([createdAt])
   @@map("webhook_events")
 }
 
-// Transaction Logs Table (for audit trail)
 model TransactionLog {
   id              String          @id @default(uuid()) @db.Uuid
-  transactionType TransactionType @map("transaction_type") // 'onramp', 'offramp', 'swap'
+  transactionType TransactionType @map("transaction_type")
   transactionId   String          @map("transaction_id") @db.Uuid
-  userId          String?         @map("user_id") @db.Uuid // Optional user reference for easier querying
-
-  // Log Details
-  action      String // created, status_changed, completed, failed, etc.
-  oldStatus   String? @map("old_status")
-  newStatus   String? @map("new_status")
-  description String? @db.Text
-
-  // Additional Data
-  metadata Json? @db.JsonB
-
-  // Timestamps
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
-
-  // Relations
-  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String?         @map("user_id") @db.Uuid
+  action          String
+  oldStatus       String?         @map("old_status")
+  newStatus       String?         @map("new_status")
+  description     String?
+  metadata        Json?
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamp(6)
+  user            User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([transactionId])
   @@index([transactionType])
@@ -310,18 +258,34 @@ model TransactionLog {
   @@map("transaction_logs")
 }
 
-// Supported Tokens Table (for tracking available tokens)
+model TransactionFee {
+  id            String   @id @default(uuid()) @db.Uuid
+  transactionId String   @map("transaction_id") @db.Uuid
+  transactionType String @map("transaction_type")
+  feeAmount     Decimal  @map("fee_amount") @db.Decimal(20, 2)
+  feeType       String   @map("fee_type") // provider_fee, vat, stamp_duty, platform_fee
+  feeCurrency   String   @map("fee_currency") @default("NGN")
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([transactionId])
+  @@index([transactionType])
+  @@index([feeType])
+  @@index([createdAt])
+  @@map("transaction_fees")
+}
+
 model SupportedToken {
   id           String   @id @default(uuid()) @db.Uuid
-  tokenSymbol  String   @unique @map("token_symbol") // CNGN, USDC, USDT, etc.
-  tokenName    String   @map("token_name") // Canza Finance NGN, USD Coin, etc.
-  tokenAddress String?  @map("token_address") // smart contract address
-  network      String // base, bsc, ethereum, polygon, etc.
+  tokenSymbol  String   @unique @map("token_symbol")
+  tokenName    String   @map("token_name")
+  tokenAddress String?  @map("token_address")
+  network      String
   decimals     Int      @default(18)
   isActive     Boolean  @default(true) @map("is_active")
-  logoUrl      String?  @map("logo_url") @db.Text
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamp
+  logoUrl      String?  @map("logo_url")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
 
   @@index([tokenSymbol])
   @@index([network])
@@ -329,25 +293,18 @@ model SupportedToken {
   @@map("supported_tokens")
 }
 
-// API Keys Table (for public API access)
 model ApiKey {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  key        String    @unique // The actual API key (hashed)
-  keyPrefix  String    @map("key_prefix") // First 8 chars for display (e.g., "sk_live_")
-  name       String? // Optional name for the API key
-  isActive   Boolean   @default(true) @map("is_active")
-  lastUsedAt DateTime? @map("last_used_at") @db.Timestamp
-
-  // Timestamps
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp
-  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamp
-  expiresAt DateTime? @map("expires_at") @db.Timestamp
-
-  // Additional Data
-  metadata Json? @db.JsonB
-
-  // Relations
+  id             String          @id @default(uuid()) @db.Uuid
+  userId         String          @map("user_id") @db.Uuid
+  key            String          @unique
+  keyPrefix      String          @map("key_prefix")
+  name           String?
+  isActive       Boolean         @default(true) @map("is_active")
+  lastUsedAt     DateTime?       @map("last_used_at") @db.Timestamp(6)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamp(6)
+  expiresAt      DateTime?       @map("expires_at") @db.Timestamp(6)
+  metadata       Json?
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   apiRequestLogs ApiRequestLog[]
 
@@ -357,30 +314,21 @@ model ApiKey {
   @@map("api_keys")
 }
 
-// API Request Logs Table (for tracking public API usage)
 model ApiRequestLog {
-  id       String  @id @default(uuid()) @db.Uuid
-  apiKeyId String? @map("api_key_id") @db.Uuid
-  userId   String? @map("user_id") @db.Uuid
-
-  // Request Details
-  method     String // GET, POST, etc.
-  path       String // Request path
-  statusCode Int     @map("status_code") // HTTP status code
-  ipAddress  String? @map("ip_address")
-  userAgent  String? @map("user_agent") @db.Text
-
-  // Request/Response
-  requestBody  Json?   @map("request_body") @db.JsonB
-  responseBody Json?   @map("response_body") @db.JsonB
-  errorMessage String? @map("error_message") @db.Text
-
-  // Timestamps
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
-
-  // Relations
-  apiKey ApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id           String   @id @default(uuid()) @db.Uuid
+  apiKeyId     String?  @map("api_key_id") @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  method       String
+  path         String
+  statusCode   Int      @map("status_code")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  requestBody  Json?    @map("request_body")
+  responseBody Json?    @map("response_body")
+  errorMessage String?  @map("error_message")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  apiKey       ApiKey?  @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([apiKeyId])
   @@index([userId])
@@ -389,189 +337,657 @@ model ApiRequestLog {
   @@map("api_request_logs")
 }
 
-// Corridor: registry of which country/fiat pairs AutoRamp can actually serve,
-// and how — which local stablecoin represents that fiat on Stellar, which
-// RampProcessor provider handles the bank rail, and whether AutoRamp is
-// licensed to operate there yet. Drives corridor-aware routing instead of
-// the single hardcoded NGN/CNGN path.
-model Corridor {
-  id                     String  @id @default(uuid()) @db.Uuid
-  countryCode            String  @map("country_code") @db.VarChar(2)
-  fiatCurrency           String  @map("fiat_currency") @db.VarChar(3)
-  stablecoinCode         String  @map("stablecoin_code") @db.VarChar(12)
-  stablecoinIssuer       String  @map("stablecoin_issuer")
-  rampProcessorProvider  String  @map("ramp_processor_provider")
-  licensingStatus        LicensingStatus @default(UNLICENSED) @map("licensing_status")
-  isActive               Boolean @default(true) @map("is_active")
-  notes                  String? @db.Text
+model Merchant {
+  id               String                       @id @default(uuid()) @db.Uuid
+  userId           String                       @unique @map("user_id") @db.Uuid
+  name             String                       @unique
+  natureOfBusiness String                       @unique @map("nature_of_business")
+  description      String?
+  websiteUrl       String                       @unique @map("website_url")
+  addressLine1     String?                      @map("address_line1")
+  addressLine2     String?                      @map("address_line2")
+  city             String?
+  state            String?
+  country          String                       @default("Nigeria")
+  postalCode       String?                      @map("postal_code")
+  status           MerchantStatus               @default(PENDING)
+  verifiedAt       DateTime?                    @map("verified_at") @db.Timestamp(6)
+  rejectionReason  String?                      @map("rejection_reason")
+  bitnobCustomerId  String?                     @map("bitnob_customer_id")
+  bitnobVirtualAccount Json?                     @map("bitnob_virtual_account")
+  metadata         Json?
+  createdAt        DateTime                     @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime                     @updatedAt @map("updated_at") @db.Timestamp(6)
+  user             User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documentations   MerchantDocumentation[]
+  directors        MerchantDirector[]
+  shareholders     MerchantShareholder[]
+  onramps          MerchantOnrampTransaction[]
+  offramps         MerchantOfframpTransaction[]
+  swaps            MerchantSwapTransaction[]
+  bankTransfers    MerchantBankTransfer[]
+  apiKeys          MerchantApiKey[]
+  apiRequestLogs   MerchantApiRequestLog[]
+  bridgeTransactions   BridgeTransaction[]
+  vasTransactions     VasTransaction[]
+  bankAccount      MerchantBankAccount?
+  settlementAccount MerchantSettlementAccount?
+  subAccounts      MerchantSubAccount[]
+  virtualAccounts  VirtualAccount[]
+  webhooks         MerchantWebhook[]
 
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
-
-  @@unique([countryCode, fiatCurrency])
-  @@index([isActive])
-  @@map("corridors")
+  @@index([name])
+  @@index([websiteUrl])
+  @@index([status])
+  @@map("merchants")
 }
 
-// Chain: registry of blockchains AutoRamp's USDC bridge infra can move
-// value between — both as a CCTP source and destination (Phase 2: any
-// registered chain to any registered chain, not just inbound-to-Stellar).
-// The registry itself is chain-agnostic so adding a new chain later is a
-// row, not a code change — same pattern as Corridor.
-model Chain {
-  id                        String    @id @default(uuid()) @db.Uuid
-  name                      String    @unique @db.VarChar(32) // 'stellar', 'base', 'ethereum'
-  chainType                 ChainType @map("chain_type")
-  cctpDomain                Int       @unique @map("cctp_domain") // Circle's CCTP domain id (Stellar = 27)
-  usdcAddress               String    @map("usdc_address") // ERC-20 address (EVM) or Stellar asset issuer
-  tokenMessengerAddress     String?   @map("token_messenger_address")
-  messageTransmitterAddress String?   @map("message_transmitter_address")
-  cctpForwarderAddress      String?   @map("cctp_forwarder_address") // Stellar only
-  isActive                  Boolean   @default(true) @map("is_active")
+model MerchantWebhook {
+  id          String   @id @default(uuid()) @db.Uuid
+  merchantId  String   @map("merchant_id") @db.Uuid
+  url         String
+  secret      String
+  active      Boolean  @default(true)
+  label       String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  merchant    Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
-
-  chainTokens ChainToken[]
-
-  @@index([isActive])
-  @@map("chains")
+  @@index([merchantId])
+  @@index([active])
+  @@map("merchant_webhooks")
 }
 
-enum ChainType {
-  EVM
-  STELLAR
+model MerchantDocumentation {
+  id                      String   @id @default(uuid()) @db.Uuid
+  merchantId              String   @map("merchant_id") @db.Uuid
+  cacCertificate          String?  @map("cac_certificate")
+  cacEStatus              String?  @map("cac_e_status")
+  memart                  String?
+  memorandum              String?
+  proofOfAddress          String?  @map("proof_of_address")
+  capitalSource           String?  @map("capital_source")
+  tradingName             String?  @map("trading_name")
+  taxIdentificationNumber String?  @map("tax_identification_number")
+  proofOfFunds            String?  @map("proof_of_funds")
+  metadata                Json?
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt               DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  merchant                Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([tradingName])
+  @@index([taxIdentificationNumber])
+  @@map("merchant_documentations")
 }
 
-// Bridgeable-in stablecoins per EVM chain, beyond the chain's own USDC
-// (Chain.usdcAddress) — a chain can hold several (USDC, USDT, DAI, ...).
-// createTransferIntent swaps sourceTokenCode -> USDC via ZeroXSwapQuoteService
-// before the existing CCTP approve+burn when this isn't plain USDC. Stellar
-// doesn't need this table — its non-USDC "source token" case (a corridor
-// stablecoin or XLM) is resolved via the corridor registry / hardcoded
-// native asset instead, same as SwapService.resolveAsset.
-model ChainToken {
-  id        String  @id @default(uuid()) @db.Uuid
-  chainId   String  @map("chain_id") @db.Uuid
-  chain     Chain   @relation(fields: [chainId], references: [id])
-  tokenCode String  @map("token_code") // 'USDC', 'USDT', 'DAI'
-  address   String // ERC-20 address on this chain
-  decimals  Int     @default(6)
-  isActive  Boolean @default(true) @map("is_active")
-  // This token's own natural fiat currency (ISO 4217) — 'EUR' for EURC,
-  // 'BRL' for BRZ, 'NGN' for CNGNX, etc. Drives Buy/Sell's auto-populated
-  // fiat side once a named regional stablecoin is picked; a corridor for
-  // this currency may or may not exist yet (Buy/Sell disable submission
-  // when it doesn't, rather than hiding the token — see CorridorService).
-  // Generic 'USDC' isn't a ChainToken row at all (see the model comment
-  // above), so it has no fixed fiatCurrency here — the frontend treats it
-  // like XLM/BRIDGE_USDC, a hub asset with a freely user-chosen payout.
-  fiatCurrency String @map("fiat_currency") @db.VarChar(3)
+model MerchantDirector {
+  id             String   @id @default(uuid()) @db.Uuid
+  merchantId     String   @map("merchant_id") @db.Uuid
+  firstName      String?
+  lastName       String?
+  nationality    String?
+  bvn            String?
+  proofOfAddress String?  @map("proof_of_address")
+  idType         String?  @map("id_type")
+  idUrl          String?  @map("id_url")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  merchant       Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
-
-  @@unique([chainId, tokenCode])
-  @@map("chain_tokens")
+  @@index([bvn])
+  @@index([nationality])
+  @@map("merchant_directors")
 }
 
-// BridgeTransfer: tracks one CCTP burn->attest->mint cycle, in any
-// registered-chain-to-registered-chain direction. Created as PENDING_BURN
-// when a caller registers transfer intent; moves to BURNED once the
-// source-chain burn tx is known (self-reported for a Stellar source via
-// POST /bridge/transfers/:reference/register-burn, or auto-detected by
-// EvmDepositWatcherService for an EVM source), then ATTESTED/COMPLETED as
-// BridgeRelayerService (a scheduled watcher, same @Interval pattern as
-// OfframpDepositWatcherService) polls Circle's attestation service and
-// completes the destination-chain mint.
-model BridgeTransfer {
-  id                 String   @id @default(uuid()) @db.Uuid
-  reference          String   @unique
-  userId             String?  @map("user_id") @db.Uuid
-  sourceChain        String   @map("source_chain") // Chain.name
-  destinationChain   String   @default("stellar") @map("destination_chain") // Chain.name
-  destinationAddress String   @map("destination_address") // Stellar strkey or EVM 0x address, per destinationChain
-  expectedAmount     Decimal? @map("expected_amount") @db.Decimal(20, 7)
-  // The wallet expected to sign the source-chain burn. For custodial payout
-  // modes (payoutStablecoinCode/payoutFiat) the attested CCTP message's
-  // messageSender must match this, so a burn can only be claimed by the
-  // transfer it was built for — see BridgeService.verifyPayoutBurn.
-  sourceAddress      String?  @map("source_address")
+model MerchantShareholder {
+  id             String   @id @default(uuid()) @db.Uuid
+  merchantId     String   @map("merchant_id") @db.Uuid
+  firstName      String?
+  lastName       String?
+  nationality    String?
+  bvn            String?
+  proofOfAddress String?  @map("proof_of_address")
+  idType         String?  @map("id_type")
+  idUrl          String?  @map("id_url")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  merchant       Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
-  // EVM-source custodial collection leg — historical only. The EVM-source
-  // burn is now self-custodial too (the user's own connected wallet signs
-  // approve + depositForBurnWithHook directly, same as the Stellar leg), so
-  // these are permanently unpopulated for new rows; kept nullable for old data.
-  collectionAddress            String? @map("collection_address")
-  collectionAddressEncryptedKey String? @map("collection_address_encrypted_key") @db.Text
-  gasFundingTxHash              String? @map("gas_funding_tx_hash")
+  @@index([bvn])
+  @@index([nationality])
+  @@map("merchant_shareholders")
+}
 
-  // Multi-stablecoin bridge-in: when set and not USDC, the source-chain leg
-  // swaps this token to USDC (via ZeroXSwapQuoteService, on an EVM source)
-  // before the existing approve+burn — see createTransferIntent. Null/USDC
-  // means "skip the swap step," today's behavior. sourceSwapMinUsdc is the
-  // slippage-floor-guaranteed USDC amount the swap quote promised; that
-  // (not the higher point-estimate) is what actually gets burned, so the
-  // burn amount can never exceed what the wallet is guaranteed to hold
-  // post-swap — any better-than-quoted execution just leaves USDC dust.
-  sourceTokenCode  String?  @map("source_token_code")
-  sourceSwapQuote  Decimal? @map("source_swap_quote") @db.Decimal(30, 6)
-  sourceSwapMinUsdc Decimal? @map("source_swap_min_usdc") @db.Decimal(20, 6)
+model MerchantOnrampTransaction {
+  id                 String            @id @default(uuid()) @db.Uuid
+  merchantId         String            @map("merchant_id") @db.Uuid
+  reference          String            @unique
+  amount             Decimal           @db.Decimal(20, 2)
+  currency           String            @default("NGN")
+  tokenAmount        Decimal?          @map("token_amount") @db.Decimal(20, 8)
+  tokenType          String            @default("CNGN") @map("token_type")
+  status             TransactionStatus @default(PENDING)
+  paymentReference   String?           @map("payment_reference")
+  destinationAddress String            @map("destination_address")
+  network            String?
+  notifyUrl          String?           @map("notify_url")
+  depositAccount     Json?             @map("deposit_account")
+  ipAddress          String?           @map("ip_address")
+  userAgent          String?           @map("user_agent")
+  transactionLocation String?          @map("transaction_location")
+  webhookPayload     Json?             @map("webhook_payload")
+  metadata           Json?
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamp(6)
+  completedAt        DateTime?         @map("completed_at") @db.Timestamp(6)
+  merchant           Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
-  // Swap tab: when set, the destination-chain mint is followed by minting
-  // this corridor stablecoin to the user instead of leaving raw USDC with
-  // them (see StablestackService/StellarService.sendFromDistribution and
-  // BridgeService.completeIfAttested). quotedPayoutAmount/minPayoutAmount
-  // are captured from a live quote at intent-creation time (not completion
-  // time, which can be minutes later post-attestation) — completeIfAttested
-  // refuses to pay out below minPayoutAmount, moving to PAYOUT_HELD instead
-  // of silently shortchanging the user if the rate moved against them.
-  payoutStablecoinCode String?  @map("payout_stablecoin_code")
-  payoutSlippage       Decimal  @default(0.05) @map("payout_slippage") @db.Decimal(5, 4)
-  quotedPayoutAmount   Decimal? @map("quoted_payout_amount") @db.Decimal(20, 7)
-  minPayoutAmount      Decimal? @map("min_payout_amount") @db.Decimal(20, 7)
-  payoutAmount         Decimal? @map("payout_amount") @db.Decimal(20, 7)
-  payoutTxHash         String?  @map("payout_tx_hash")
+  @@index([merchantId])
+  @@index([reference])
+  @@index([status])
+  @@index([tokenType])
+  @@index([createdAt])
+  @@map("merchant_onramp_transactions")
+}
 
-  // EVM destination follow-up swap: when set, the mint (which always lands
-  // directly in destinationAddress, self-custodially — see
-  // buildDestinationEncoding) can be followed by a self-custodial swap into
-  // this ChainToken via POST /bridge/transfers/:reference/build-destination-swap,
-  // signed by the user's own connected wallet on destinationChain. Mutually
-  // exclusive with payoutStablecoinCode (that one is the Stellar-only,
-  // custodial equivalent).
-  payoutTokenCode String? @map("payout_token_code")
+model MerchantOfframpTransaction {
+  id               String            @id @default(uuid()) @db.Uuid
+  merchantId       String            @map("merchant_id") @db.Uuid
+  reference        String            @unique
+  amount           Decimal           @db.Decimal(20, 2)
+  fiatAmount       Decimal?          @map("fiat_amount") @db.Decimal(20, 2)
+  currency         String            @default("NGN")
+  tokenType        String            @default("CNGN") @map("token_type")
+  status           TransactionStatus @default(PENDING)
+  paymentReference String?           @map("payment_reference")
+  // Provider-specific details (Bitnob) — one row, null for legacy Flint orders
+  providerOrder    OfframpProviderOrder?
+  bankCode         String            @map("bank_code")
+  accountNumber    String            @map("account_number")
+  accountName      String?           @map("account_name")
+  bankName         String?           @map("bank_name")
+  network          String?
+  notifyUrl        String?           @map("notify_url")
+  ipAddress        String?           @map("ip_address")
+  userAgent        String?           @map("user_agent")
+  metadata         Json?
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamp(6)
+  completedAt      DateTime?         @map("completed_at") @db.Timestamp(6)
+  merchant         Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
-  // Sell-any-chain fiat terminal: when set, a completed mint (redirected to
-  // AutoRamp's own distribution account, same trick payoutStablecoinCode
-  // uses) triggers a fiat payout instead of a stablecoin one — see
-  // BridgeService.deliverOfframp. Mutually exclusive with
-  // payoutStablecoinCode/payoutTokenCode.
-  payoutFiat          Boolean @default(false) @map("payout_fiat")
-  payoutBankCode      String? @map("payout_bank_code")
-  payoutAccountNumber String? @map("payout_account_number")
-  payoutFiatCurrency  String? @map("payout_fiat_currency")
+  @@index([merchantId])
+  @@index([reference])
+  @@index([status])
+  @@index([tokenType])
+  @@index([accountNumber])
+  @@index([createdAt])
+  @@map("merchant_offramp_transactions")
+}
 
-  burnTxHash     String? @unique @map("burn_tx_hash")
-  status         String  @default("PENDING_BURN") // PENDING_BURN, BURNED, ATTESTED, MINTED, COMPLETED, FAILED, PAYOUT_HELD (rate moved beyond payoutSlippage at completion; needs manual payout)
-  rawMessage     String? @map("raw_message") @db.Text
-  rawAttestation String? @map("raw_attestation") @db.Text
-  mintTxHash     String? @map("mint_tx_hash")
-  errorMessage   String? @map("error_message") @db.Text
+/// Provider-specific details for an offramp (Bitnob payout order),
+/// normalized out of the user/merchant offramp tables.
+/// Exactly one of the two foreign keys is set (1:1, emulated by relationMode = "prisma").
+model OfframpProviderOrder {
+  id                           String    @id @default(uuid()) @db.Uuid
+  offrampTransactionId         String?   @unique @map("offramp_transaction_id") @db.Uuid
+  merchantOfframpTransactionId String?   @unique @map("merchant_offramp_transaction_id") @db.Uuid
+  /// Our own off_ reference — also sent to Bitnob as the payout `reference`
+  reference                    String    @unique
+  /// e.g. "bitnob"
+  provider                     String    @default("bitnob")
+  /// Bitnob payout quote/order id
+  providerOrderId              String?   @map("provider_order_id")
+  /// Bank payout receipt / narration returned by Bitnob at settlement
+  paymentReference             String?   @map("payment_reference")
+  /// User's Stellar wallet that funds the payout
+  sourceAddress                String?   @map("source_address")
+  /// Raw provider lifecycle event (payout.settled, ...)
+  providerStatus               String?   @map("provider_status")
+  /// Funding address the user sends USDC to (payment_address from Bitnob)
+  fundingAddress               String?   @map("funding_address")
+  /// USDC the user must deposit to settle the payout (amount_to_pay)
+  expectedAmount               Decimal?  @map("expected_amount") @db.Decimal(20, 7)
+  /// USDC actually detected as deposited (partial settlement = received < expected)
+  receivedAmount               Decimal?  @map("received_amount") @db.Decimal(20, 7)
+  /// Stellar memo/tag required on the deposit
+  memo                         String?
+  /// Payout funding window expiry (order expires if USDC not deposited by then)
+  expiresAt                    DateTime? @map("expires_at") @db.Timestamp(6)
+  /// Normalized failure reason (timeout, partial_settlement, rejected, reversal, insufficient_liquidity, ...)
+  failureReason                String?   @map("failure_reason")
+  /// Stellar transaction hash of the funding deposit (deposit_for_burn)
+  depositTxHash                String?   @map("deposit_tx_hash")
+  /// Bridge leg that delivered the funding USDC (cross-chain deposit route)
+  bridgeReference              String?   @map("bridge_reference")
+  /// Bridge delivery state (PENDING, PROCESSING, SUCCESS, FAILED, DELAYED, STUCK, ...)
+  bridgeStatus                 String?   @map("bridge_status") @default("PENDING")
+  /// expected - received when under-funded (partial settlement), else 0
+  outstandingAmount            Decimal?  @map("outstanding_amount") @db.Decimal(20, 7)
+  /// Structured detail behind failureReason: rejection response, liquidity shortfall, timeout window, ...
+  failureDetail                Json?     @map("failure_detail")
+  createdAt                    DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt                    DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
 
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamp
-  completedAt DateTime? @map("completed_at") @db.Timestamp
+  offrampTransaction           OfframpTransaction?      @relation(fields: [offrampTransactionId], references: [id])
+  merchantOfframpTransaction   MerchantOfframpTransaction? @relation(fields: [merchantOfframpTransactionId], references: [id])
+
+  @@index([providerOrderId])
+  @@index([bridgeReference])
+  @@map("offramp_provider_orders")
+}
+
+/// One structured reconciliation record per cash-out attempt (created at INITIATED, updated on every transition).
+model OfframpReconciliation {
+  id                   String   @id @default(uuid()) @db.Uuid
+  /// Internal transaction id (offramp_transactions.id)
+  offrampTransactionId String   @unique @map("offramp_transaction_id") @db.Uuid
+  /// Our off_ reference
+  reference            String   @unique
+  /// Provider's order/payout id, when one exists
+  externalReference    String?  @map("external_reference")
+  /// Stellar transaction hash of the USDC deposit, when one exists
+  stellarTxHash        String?  @map("stellar_tx_hash")
+  asset                String   @default("USDC")
+  /// Deposit amount the user was asked to send (asset units)
+  amount               Decimal  @db.Decimal(20, 7)
+  expectedSettlement   Decimal  @map("expected_settlement") @db.Decimal(20, 7)
+  actualSettlement     Decimal  @default(0) @map("actual_settlement") @db.Decimal(20, 7)
+  outstandingAmount    Decimal  @default(0) @map("outstanding_amount") @db.Decimal(20, 7)
+  /// Off-ramp state (see offramp-state-machine.ts)
+  status               String
+  failureReason        String?  @map("failure_reason")
+  failureDetail        Json?    @map("failure_detail")
+  /// IN_PROGRESS | MATCHED | UNDERPAID | OVERPAID | PAYOUT_REJECTED | FUNDS_REVERSED | LIQUIDITY_SHORTFALL | TIMED_OUT | FAILED
+  result               String   @default("IN_PROGRESS")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  settledAt            DateTime? @map("settled_at") @db.Timestamp(6)
+
+  offrampTransaction   OfframpTransaction @relation(fields: [offrampTransactionId], references: [id], onDelete: Cascade)
 
   @@index([status])
-  @@map("bridge_transfers")
+  @@index([result])
+  @@index([createdAt])
+  @@map("offramp_reconciliations")
 }
 
-// Enums
-enum LicensingStatus {
-  UNLICENSED
-  PENDING
-  LICENSED
-  PARTNERED // operating under a licensed partner/anchor, not directly licensed
+/// A payout reversal linked to its original transaction. One per transaction => duplicate reversals are impossible.
+model OfframpReversal {
+  id                   String   @id @default(uuid()) @db.Uuid
+  offrampTransactionId String   @unique @map("offramp_transaction_id") @db.Uuid
+  /// Provider event that triggered the reversal (idempotency key)
+  providerEventId      String?  @unique @map("provider_event_id")
+  amount               Decimal  @db.Decimal(20, 7)
+  reason               String?
+  /// State the transaction was in when it was reversed (COMPLETED / PARTIALLY_SETTLED)
+  originalStatus       String   @map("original_status")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  offrampTransaction   OfframpTransaction @relation(fields: [offrampTransactionId], references: [id], onDelete: Cascade)
+
+  @@map("offramp_reversals")
+}
+
+/// Provider/settlement events already applied to a transaction. The unique eventKey makes event handling idempotent.
+model OfframpEvent {
+  id                   String   @id @default(uuid()) @db.Uuid
+  offrampTransactionId String   @map("offramp_transaction_id") @db.Uuid
+  eventKey             String   @unique @map("event_key")
+  type                 String
+  payload              Json?
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  offrampTransaction   OfframpTransaction @relation(fields: [offrampTransactionId], references: [id], onDelete: Cascade)
+
+  @@index([offrampTransactionId])
+  @@map("offramp_events")
+}
+
+
+model MerchantSwapTransaction {
+  id                 String            @id @default(uuid()) @db.Uuid
+  merchantId         String            @map("merchant_id") @db.Uuid
+  reference          String            @unique
+  fromTokenType      String            @map("from_token_type")
+  fromAmount         Decimal           @map("from_amount") @db.Decimal(20, 8)
+  fromNetwork        String?           @map("from_network")
+  toTokenType        String            @map("to_token_type")
+  toAmount           Decimal           @map("to_amount") @db.Decimal(20, 8)
+  toNetwork          String?           @map("to_network")
+  exchangeRate       Decimal           @map("exchange_rate") @db.Decimal(20, 8)
+  sourceAddress      String            @map("source_address")
+  destinationAddress String            @map("destination_address")
+  status             TransactionStatus @default(PENDING)
+  transactionHash    String?           @map("transaction_hash")
+  feeAmount          Decimal?          @map("fee_amount") @db.Decimal(20, 8)
+  feeCurrency        String?           @map("fee_currency")
+  ipAddress          String?           @map("ip_address")
+  userAgent          String?           @map("user_agent")
+  metadata           Json?
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamp(6)
+  completedAt        DateTime?         @map("completed_at") @db.Timestamp(6)
+  merchant           Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([reference])
+  @@index([status])
+  @@index([fromTokenType])
+  @@index([toTokenType])
+  @@index([createdAt])
+  @@map("merchant_swap_transactions")
+}
+
+model MerchantBankTransfer {
+  id                     String            @id @default(uuid()) @db.Uuid
+  merchantId             String            @map("merchant_id") @db.Uuid
+  reference              String            @unique
+  amount                 Decimal           @db.Decimal(20, 2)
+  currency               String            @default("NGN")
+  beneficiaryBankCode    String            @map("beneficiary_bank_code")
+  beneficiaryAccountNumber String          @map("beneficiary_account_number")
+  beneficiaryAccountName String?           @map("beneficiary_account_name")
+  narration              String?
+  debitAccountNumber     String?           @map("debit_account_number")
+  status                 TransactionStatus @default(PENDING)
+  safehavenReference     String?           @map("safehaven_reference")
+  ipAddress              String?           @map("ip_address")
+  userAgent              String?           @map("user_agent")
+  metadata               Json?
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt              DateTime          @updatedAt @map("updated_at") @db.Timestamp(6)
+  completedAt            DateTime?         @map("completed_at") @db.Timestamp(6)
+  merchant               Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([reference])
+  @@index([status])
+  @@index([createdAt])
+  @@map("merchant_bank_transfers")
+}
+
+model MerchantApiKey {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  merchantId             String                  @map("merchant_id") @db.Uuid
+  key                    String                  @unique
+  keyPrefix              String                  @map("key_prefix")
+  name                   String?
+  isActive               Boolean                 @default(true) @map("is_active")
+  lastUsedAt             DateTime?               @map("last_used_at") @db.Timestamp(6)
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt              DateTime                @updatedAt @map("updated_at") @db.Timestamp(6)
+  expiresAt              DateTime?               @map("expires_at") @db.Timestamp(6)
+  metadata               Json?
+  merchant               Merchant                @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  merchantApiRequestLogs MerchantApiRequestLog[]
+
+  @@index([merchantId])
+  @@index([key])
+  @@index([isActive])
+  @@map("merchant_api_keys")
+}
+
+model MerchantApiRequestLog {
+  id               String          @id @default(uuid()) @db.Uuid
+  merchantApiKeyId String?         @map("merchant_api_key_id") @db.Uuid
+  merchantId       String?         @map("merchant_id") @db.Uuid
+  method           String
+  path             String
+  statusCode       Int             @map("status_code")
+  ipAddress        String?         @map("ip_address")
+  userAgent        String?         @map("user_agent")
+  requestBody      Json?           @map("request_body")
+  responseBody     Json?           @map("response_body")
+  errorMessage     String?         @map("error_message")
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamp(6)
+  merchantApiKey   MerchantApiKey? @relation(fields: [merchantApiKeyId], references: [id], onDelete: SetNull)
+  merchant         Merchant?       @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+
+  @@index([merchantApiKeyId])
+  @@index([merchantId])
+  @@index([createdAt])
+  @@index([statusCode])
+  @@map("merchant_api_request_logs")
+}
+
+model MerchantBankAccount {
+  id            String   @id @default(uuid()) @db.Uuid
+  merchantId    String   @unique @map("merchant_id") @db.Uuid
+  fiatProvider  FiatProvider @default(PULSE_MFB) @map("fiat_provider")
+  bankCode      String   @map("bank_code")
+  accountNumber String   @map("account_number")
+  accountName   String?  @map("account_name")
+  bankName      String?  @map("bank_name")
+  pulseMfbDetails Json?  @map("pulse_mfb_details")
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  merchant      Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([accountNumber])
+  @@map("merchant_bank_accounts")
+}
+
+model MerchantSettlementAccount {
+  id            String   @id @default(uuid()) @db.Uuid
+  merchantId    String   @unique @map("merchant_id") @db.Uuid
+  bankCode      String   @map("bank_code")
+  accountNumber String   @map("account_number")
+  accountName   String?  @map("account_name")
+  bankName      String?  @map("bank_name")
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  merchant      Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([accountNumber])
+  @@map("merchant_settlement_accounts")
+}
+
+model MerchantSubAccount {
+  id            String   @id @default(uuid()) @db.Uuid
+  merchantId    String   @map("merchant_id") @db.Uuid
+  safehavenId   String   @map("safehaven_id")
+  bankCode      String   @map("bank_code")
+  accountNumber String   @map("account_number")
+  accountName   String?  @map("account_name")
+  bankName      String?  @map("bank_name")
+  autoSweep     Boolean  @default(true) @map("auto_sweep")
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  merchant      Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, accountNumber])
+  @@index([merchantId])
+  @@index([safehavenId])
+  @@map("merchant_sub_accounts")
+}
+
+model VirtualAccount {
+  id                 String           @id @default(uuid()) @db.Uuid
+  merchantId         String?          @map("merchant_id") @db.Uuid
+  userId             String?          @map("user_id") @db.Uuid
+  reference          String           @unique @map("reference")
+  externalReference  String?          @map("external_reference")
+  amount             Decimal?         @db.Decimal(20, 2)
+  amountControl      String?          @map("amount_control")
+  validFor           Int?             @map("valid_for")
+  status             VirtualAccountStatus @default(ACTIVE)
+  
+  // SafeHaven virtual account details
+  accountNumber      String           @map("account_number")
+  accountName        String           @map("account_name")
+  bankCode           String           @map("bank_code")
+  bankName           String           @map("bank_name")
+  
+  // SafeHaven raw response for debugging
+  safehavenResponse  Json?            @map("safehaven_response")
+  
+  // Expiry
+  expiresAt          DateTime?        @map("expires_at")
+  
+  // Linked transaction
+  transactionId      String?          @map("transaction_id") @db.Uuid
+  transactionType    String?          @map("transaction_type") // onramp, offramp, etc.
+  
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamp(6)
+  closedAt           DateTime?        @map("closed_at") @db.Timestamp(6)
+  
+  merchant           Merchant?        @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  user               User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([merchantId])
+  @@index([userId])
+  @@index([reference])
+  @@index([accountNumber])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("virtual_accounts")
+}
+
+enum VirtualAccountStatus {
+  ACTIVE
+  EXPIRED
+  CLOSED
+  FAILED
+}
+
+model UserWallet {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  address   String
+  network   String
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([address])
+  @@map("user_wallets")
+}
+
+model UserBankAccount {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  bankCode      String   @map("bank_code")
+  accountNumber String   @map("account_number")
+  accountName   String?  @map("account_name")
+  bankName      String?  @map("bank_name")
+  pulseMfbDetails Json?  @map("pulse_mfb_details")
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([accountNumber])
+  @@map("user_bank_accounts")
+}
+
+model BridgeTransaction {
+  id                 String            @id @default(uuid()) @db.Uuid
+  reference          String            @unique
+  userId             String?           @map("user_id") @db.Uuid
+  merchantId         String?           @map("merchant_id") @db.Uuid
+  apiKeyId           String?           @map("api_key_id") @db.Uuid
+  fromChain          String            @map("from_chain")
+  toChain            String            @map("to_chain")
+  amount             String
+  sourceAddress      String            @map("source_address")
+  destinationAddress String            @map("destination_address")
+  transactionHash    String?           @map("transaction_hash")
+  status             String            @default("PENDING")
+  metadata           Json?
+  /// Offramp (payout) funding reference this bridge leg delivers USDC for
+  offrampReference   String?           @map("offramp_reference")
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  user               User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  merchant           Merchant?         @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([merchantId])
+  @@index([reference])
+  @@index([offrampReference])
+  @@map("bridge_transactions")
+}
+
+model SafeHavenStablestackLog {
+  id                 String   @id @default(uuid()) @db.Uuid
+  transactionId      String   @map("transaction_id") @db.Uuid
+  type               String   // ONRAMP or OFFRAMP
+  safehavenPayload   Json?    @map("safehaven_payload")
+  stablestackPayload Json?    @map("stablestack_payload")
+  status             String   @default("PENDING")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@index([transactionId])
+  @@map("safehaven_stablestack_logs")
+}
+
+model OtcUser {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @unique @map("user_id") @db.Uuid
+  bvn              String?
+  nin              String?
+  bvnVerifiedAt    DateTime?        @map("bvn_verified_at") @db.Timestamp(6)
+  ninVerifiedAt    DateTime?        @map("nin_verified_at") @db.Timestamp(6)
+  bvnData          Json?            @map("bvn_data")
+  ninData          Json?            @map("nin_data")
+  bankCode         String?          @map("bank_code")
+  bankName         String?          @map("bank_name")
+  accountName      String?          @map("account_name")
+  accountNumber    String?  @map("account_number")
+  safehavenDetails Json?    @map("safehaven_details")
+  pulseMfbDetails  Json?    @map("pulse_mfb_details")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions     OtcTransaction[]
+
+  @@index([userId])
+  @@map("otc_users")
+}
+
+model OtcTransaction {
+  id          String             @id @default(uuid()) @db.Uuid
+  reference   String             @unique
+  userId      String             @map("user_id") @db.Uuid
+  otcUserId   String             @map("otc_user_id") @db.Uuid
+  amount      Decimal            @db.Decimal(20, 2)
+  fiatAmountReceived Decimal?    @map("fiat_amount_received") @db.Decimal(20, 2)
+  systemFee   Decimal            @map("system_fee") @db.Decimal(20, 2)
+  rate        Decimal            @db.Decimal(20, 2)
+  networkFee  Decimal            @map("network_fee") @db.Decimal(20, 2)
+  feeCollected Decimal?          @map("fee_collected") @db.Decimal(20, 2)
+  quantity    Decimal            @db.Decimal(20, 8)
+  tokenAmountSent Decimal?       @map("token_amount_sent") @db.Decimal(20, 8)
+  network     String
+  chain       String?
+  token       String
+  address     String
+  memo        String?
+  status      TransactionStatus          @default(PENDING)
+  meta        Json?
+  comments    String?            @db.Text
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime           @updatedAt @map("updated_at") @db.Timestamp(6)
+  completedAt DateTime?          @map("completed_at") @db.Timestamp(6)
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  otcUser     OtcUser            @relation(fields: [otcUserId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([reference])
+  @@index([otcUserId])
+  @@index([status])
+  @@map("otc_transactions")
 }
 
 enum UserRole {
@@ -585,11 +1001,137 @@ enum TransactionStatus {
   COMPLETED
   FAILED
   CANCELLED
+  REFUNDED
+  DISPUTED
+  REJECTED
+  EXPIRED
+  PARTIAL
+  REVERSED
+  // Off-ramp state machine (D1) — see src/modules/ramp/offramp-state-machine.ts
+  INITIATED
+  AWAITING_DEPOSIT
+  DEPOSIT_DETECTED
+  CONVERSION_PENDING
+  PAYOUT_PENDING
+  PARTIALLY_SETTLED
+  INSUFFICIENT_LIQUIDITY
 }
 
 enum TransactionType {
   onramp
   offramp
   swap
-  bridge
+  otc
+  vas
+}
+
+enum FiatProvider {
+  SAFEHAVEN
+  PULSE_MFB
+}
+
+enum MerchantStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model MerchantWebhookLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  merchantId  String   @map("merchant_id") @db.Uuid
+  event       String
+  url         String?
+  payload     Json
+  statusCode  Int?     @map("status_code")
+  response    Json?
+  success     Boolean  @default(false)
+  errorMessage String? @map("error_message")
+  retryCount  Int      @default(0) @map("retry_count")
+  maxRetries  Int      @default(3) @map("max_retries")
+  nextRetryAt DateTime? @map("next_retry_at") @db.Timestamp(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([merchantId])
+  @@index([event])
+  @@index([success])
+  @@index([nextRetryAt])
+  @@index([createdAt])
+  @@map("merchant_webhook_logs")
+}
+
+model MerchantAuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  merchantId  String   @map("merchant_id") @db.Uuid
+  action      String
+  provider    String?
+  endpoint    String
+  method      String
+  request     Json?
+  response    Json?
+  statusCode  Int?     @map("status_code")
+  duration    Int?
+  success     Boolean  @default(true)
+  errorMessage String? @map("error_message")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([merchantId])
+  @@index([action])
+  @@index([provider])
+  @@index([success])
+  @@index([createdAt])
+  @@map("merchant_audit_logs")
+}
+
+model VasTransaction {
+  id                  String            @id @default(uuid()) @db.Uuid
+  merchantId          String            @map("merchant_id") @db.Uuid
+  reference           String            @unique
+  serviceType         String            @map("service_type")
+  serviceCategoryId   String            @map("service_category_id")
+  bundleCode          String?           @map("bundle_code")
+  amount              Decimal           @db.Decimal(20, 2)
+  currency            String            @default("NGN")
+  channel             String            @default("WEB")
+  phoneNumber         String?           @map("phone_number")
+  cardNumber          String?           @map("card_number")
+  meterNumber         String?           @map("meter_number")
+  vendType            String?           @map("vend_type")
+  debitAccountNumber  String            @map("debit_account_number")
+  status              TransactionStatus @default(PENDING)
+  safehavenId         String?           @map("safehaven_id")
+  providerResponse    Json?             @map("provider_response")
+  webhookPayload      Json?             @map("webhook_payload")
+  ipAddress           String?           @map("ip_address")
+  userAgent           String?           @map("user_agent")
+  metadata            Json?
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamp(6)
+  completedAt         DateTime?         @map("completed_at") @db.Timestamp(6)
+  merchant            Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([reference])
+  @@index([serviceType])
+  @@index([status])
+  @@index([createdAt])
+  @@map("vas_transactions")
+}
+
+model InboundWebhook {
+  id               String   @id @default(uuid()) @db.Uuid
+  provider         String
+  endpoint         String
+  payload          Json
+  signature        String?
+  providerWebhookId String?  // Provider's unique webhook ID for idempotency
+  status           String   @default("pending") // pending, processing, completed, failed
+  error            String? // Reason for failure / processing note
+  receivedAt       DateTime @default(now()) @map("received_at") @db.Timestamp(6)
+  processedAt      DateTime? @map("processed_at") @db.Timestamp(6)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([provider])
+  @@index([status])
+  @@index([receivedAt])
+  @@map("inbound_webhooks")
 }

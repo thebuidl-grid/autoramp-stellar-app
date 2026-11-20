@@ -8,6 +8,10 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import { STELLAR_CCTP_DOMAIN, STELLAR_CCTP_FORWARDER } from "@/lib/cctp-stellar";
+import { RateLimiter, callerKey } from "@/lib/server/rate-limit";
+
+// Each relay can spend up to 1 XLM of the relayer's balance in fees, so anonymous callers are limited.
+const relayLimiter = new RateLimiter(10, 60_000);
 
 /**
  * Relays a CCTP burn to Stellar: waits for Circle's attestation, then submits
@@ -93,6 +97,14 @@ async function mintAndForward(
 }
 
 export async function POST(req: NextRequest) {
+  const caller = callerKey(req.headers);
+  if (!relayLimiter.allow(caller)) {
+    return NextResponse.json(
+      { error: "Too many relay requests. Please wait a minute." },
+      { status: 429, headers: { "Retry-After": String(relayLimiter.retryAfterSeconds(caller)) } },
+    );
+  }
+
   const body = await req.json().catch(() => null);
   const burnTxHash: unknown = body?.burnTxHash;
   const sourceDomain: unknown = body?.sourceDomain;
@@ -101,7 +113,7 @@ export async function POST(req: NextRequest) {
   if (typeof burnTxHash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(burnTxHash)) {
     return NextResponse.json({ error: "Invalid burnTxHash" }, { status: 400 });
   }
-  if (!Number.isInteger(sourceDomain) || (sourceDomain as number) < 0) {
+  if (!Number.isInteger(sourceDomain) || (sourceDomain as number) < 0 || (sourceDomain as number) > 1000) {
     return NextResponse.json({ error: "Invalid sourceDomain" }, { status: 400 });
   }
   if (network !== "testnet" && network !== "mainnet") {

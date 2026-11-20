@@ -12,7 +12,10 @@ export function cn(...inputs: ClassValue[]) {
 /**
  * Format currency with symbol
  */
-export function formatCurrency(amount: number, currency: string = "NGN"): string {
+export function formatCurrency(
+  amount: number,
+  currency: string = "NGN",
+): string {
   const formatter = new Intl.NumberFormat("en-NG", {
     style: "currency",
     currency,
@@ -92,20 +95,31 @@ export function getStatusBadge(status: string): string {
   return `${baseClasses} ${statusClasses[status] || "bg-muted text-muted-foreground"}`;
 }
 
-
 export function formatNumber(value: string): string {
   const numericValue = value.replace(/[^\d.]/g, "");
-  
+
   const parts = numericValue.split(".");
   const integerPart = parts[0];
   const decimalPart = parts[1];
-  
+
   const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  
-  return decimalPart !== undefined ? `${formattedInteger}.${decimalPart}` : formattedInteger;
+
+  return decimalPart !== undefined
+    ? `${formattedInteger}.${decimalPart}`
+    : formattedInteger;
 }
 
 export function parseFormattedNumber(value: string): number {
   const numericValue = value.replace(/,/g, "");
   return parseFloat(numericValue) || 0;
+}
+
+/**
+ * Safe BigInt conversion: handles decimal strings by truncating them.
+ * Useful for 0x API responses which may return gas or amounts as decimals.
+ */
+export function safeBigInt(val: string | number | undefined | null): bigint {
+  if (val === undefined || val === null || val === "") return 0n;
+  const str = val.toString();
+  return BigInt(str.includes(".") ? str.split(".")[0] : str);
 }

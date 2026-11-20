@@ -34,6 +34,18 @@ export class NotificationsService implements OnModuleInit {
   }
 
   /**
+   * When to retry after a failed attempt, given how many retries have now been made.
+   * Returns null once the retries are used up. (The delays are durations: they used to be
+   * passed straight to `new Date(ms)`, a date in 1970, so every retry was due immediately.)
+   */
+  private nextRetryAt(retriesMade: number): Date | null {
+    if (retriesMade >= NotificationsService.MAX_RETRIES) return null;
+    const delays = NotificationsService.RETRY_DELAYS_MS;
+    const delay = delays[retriesMade] ?? delays[delays.length - 1];
+    return new Date(Date.now() + delay);
+  }
+
+  /**
    * Sign a webhook payload using HMAC-SHA256.
    */
   private signPayload(payload: string, secret: string): string {
@@ -107,7 +119,9 @@ export class NotificationsService implements OnModuleInit {
           errorMessage: error.message,
           retryCount: 0,
           maxRetries: NotificationsService.MAX_RETRIES,
-          nextRetryAt: new Date(Date.now() + NotificationsService.RETRY_DELAYS_MS[0]),
+          nextRetryAt: new Date(
+            Date.now() + NotificationsService.RETRY_DELAYS_MS[0],
+          ),
         },
       });
     }
@@ -230,31 +244,50 @@ export class NotificationsService implements OnModuleInit {
 
     this.logger.log(`Retrying ${failedLogs.length} failed webhook deliveries`);
 
-    // Batch-fetch all active webhook secrets upfront (avoid N+1)
-    const uniqueKeys = [
-      ...new Set(failedLogs.map((l) => `${l.merchantId}:${l.url}`)),
-    ];
-    const webhookConditions = uniqueKeys.map((key) => {
-      const [merchantId, url] = key.split(':');
-      return { merchantId, url, active: true };
-    });
+    // Batch-fetch all active webhook secrets upfront (avoid N+1). Build the lookup from the
+    // log fields directly: the old `"merchantId:url".split(':')` cut every URL at "https:",
+    // so no webhook ever matched and no retry was ever delivered.
+    const pairs = new Map<string, { merchantId: string; url: string }>();
+    for (const l of failedLogs) {
+      if (l.url) {
+        pairs.set(`${l.merchantId}\n${l.url}`, {
+          merchantId: l.merchantId,
+          url: l.url,
+        });
+      }
+    }
+    const webhookConditions = [...pairs.values()].map((p) => ({
+      ...p,
+      active: true,
+    }));
     const activeWebhooks = await this.prisma.merchantWebhook.findMany({
       where: { OR: webhookConditions },
       select: { merchantId: true, url: true, secret: true },
     });
     const secretMap = new Map(
-      activeWebhooks.map((w) => [`${w.merchantId}:${w.url}`, w.secret]),
+      activeWebhooks.map((w) => [`${w.merchantId}\n${w.url}`, w.secret]),
     );
 
     for (const log of failedLogs) {
       if (!log.url) continue;
 
-      const secret = secretMap.get(`${log.merchantId}:${log.url}`);
+      const secret = secretMap.get(`${log.merchantId}\n${log.url}`);
 
       if (!secret) {
+        // The merchant deleted or disabled this webhook (or changed its URL). Retrying can never
+        // succeed, so stop: clearing nextRetryAt drops the log from the sweep query. Previously it
+        // was left due, so it was re-warned every 30s forever and could crowd out real retries.
         this.logger.warn(
-          `No active webhook found for ${log.url}, skipping retry`,
+          `No active webhook found for ${log.url}, giving up on log ${log.id}`,
         );
+        await this.prisma.merchantWebhookLog.update({
+          where: { id: log.id },
+          data: {
+            nextRetryAt: null,
+            errorMessage:
+              'No active webhook for this endpoint; automatic retries stopped',
+          },
+        });
         continue;
       }
 
@@ -293,10 +326,7 @@ export class NotificationsService implements OnModuleInit {
           },
         });
       } catch (error) {
-        const nextRetry =
-          log.retryCount + 1 < NotificationsService.MAX_RETRIES
-            ? NotificationsService.RETRY_DELAYS_MS[log.retryCount + 1]
-            : null;
+        const nextRetryAt = this.nextRetryAt(log.retryCount + 1);
 
         await this.prisma.merchantWebhookLog.update({
           where: { id: log.id },
@@ -305,7 +335,7 @@ export class NotificationsService implements OnModuleInit {
             response: error.response?.data ?? null,
             errorMessage: error.message,
             retryCount: log.retryCount + 1,
-            nextRetryAt: nextRetry ? new Date(nextRetry) : null,
+            nextRetryAt,
           },
         });
 
@@ -367,16 +397,7 @@ export class NotificationsService implements OnModuleInit {
 
       return { success: true, statusCode: response.status };
     } catch (error) {
-      const nextRetryCount = log.retryCount + 1;
-      const nextRetry =
-        nextRetryCount < NotificationsService.MAX_RETRIES
-          ? new Date(
-              NotificationsService.RETRY_DELAYS_MS[nextRetryCount] ??
-                NotificationsService.RETRY_DELAYS_MS[
-                  NotificationsService.RETRY_DELAYS_MS.length - 1
-                ],
-            )
-          : null;
+      const nextRetry = this.nextRetryAt(log.retryCount + 1);
 
       await this.prisma.merchantWebhookLog.update({
         where: { id: log.id },

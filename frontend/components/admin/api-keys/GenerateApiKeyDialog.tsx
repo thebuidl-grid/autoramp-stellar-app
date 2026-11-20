@@ -22,18 +22,19 @@ export function ApproveAccessDialog() {
     const [isLoading, setIsLoading] = useState(false);
 
     // Merchant fields
-    const [email, setEmail] = useState("");
-    const [merchantName, setMerchantName] = useState("");
-    const [businessName, setBusinessName] = useState("");
+    const [userId, setUserId] = useState("");
+    const [name, setName] = useState("");
+    const [natureOfBusiness, setNatureOfBusiness] = useState("");
+    const [description, setDescription] = useState("");
     const [websiteUrl, setWebsiteUrl] = useState("");
     const [success, setSuccess] = useState(false);
     const { toast } = useToast();
 
     const handleApprove = async () => {
-        if (!email || !merchantName || !businessName || !websiteUrl) {
+        if (!userId || !name || !natureOfBusiness || !websiteUrl) {
             toast({
                 title: "Error",
-                description: "All fields are required",
+                description: "User ID, Name, Nature of Business, and Website are required.",
                 variant: "destructive",
             });
             return;
@@ -42,15 +43,16 @@ export function ApproveAccessDialog() {
         setIsLoading(true);
         try {
             await adminApi.approveMerchantAccess({
-                email,
-                name: merchantName,
-                businessName,
+                userId,
+                name,
+                natureOfBusiness,
+                description,
                 websiteUrl,
             });
             setSuccess(true);
             toast({
                 title: "Success",
-                description: "API access approved. Email sent to merchant.",
+                description: "Merchant API access approved.",
                 variant: "success",
             });
         } catch (error) {
@@ -65,9 +67,10 @@ export function ApproveAccessDialog() {
     };
 
     const resetForm = () => {
-        setEmail("");
-        setMerchantName("");
-        setBusinessName("");
+        setUserId("");
+        setName("");
+        setNatureOfBusiness("");
+        setDescription("");
         setWebsiteUrl("");
         setSuccess(false);
         setOpen(false);
@@ -95,31 +98,39 @@ export function ApproveAccessDialog() {
                 {!success ? (
                     <div className="grid gap-4 py-4">
                         <div className="grid gap-2">
-                            <Label htmlFor="email">Merchant Email</Label>
+                            <Label htmlFor="userId">User ID</Label>
                             <Input
-                                id="email"
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="merchant@company.com"
+                                id="userId"
+                                value={userId}
+                                onChange={(e) => setUserId(e.target.value)}
+                                placeholder="550e8400-e29b-41d4-a716-446655440000"
                             />
                         </div>
                         <div className="grid gap-2">
-                            <Label htmlFor="merchantName">Contact Name</Label>
+                            <Label htmlFor="name">Business Name (Unique)</Label>
                             <Input
-                                id="merchantName"
-                                value={merchantName}
-                                onChange={(e) => setMerchantName(e.target.value)}
-                                placeholder="John Doe"
+                                id="name"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="John Doe Enterprise"
                             />
                         </div>
                         <div className="grid gap-2">
-                            <Label htmlFor="businessName">Business Name</Label>
+                            <Label htmlFor="natureOfBusiness">Nature of Business</Label>
                             <Input
-                                id="businessName"
-                                value={businessName}
-                                onChange={(e) => setBusinessName(e.target.value)}
-                                placeholder="Acme Corp"
+                                id="natureOfBusiness"
+                                value={natureOfBusiness}
+                                onChange={(e) => setNatureOfBusiness(e.target.value)}
+                                placeholder="Retail / Tech"
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="description">Business Description</Label>
+                            <Input
+                                id="description"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                placeholder="Optional description"
                             />
                         </div>
                         <div className="grid gap-2">
@@ -140,7 +151,7 @@ export function ApproveAccessDialog() {
                         <div>
                             <p className="font-medium">Access Approved!</p>
                             <p className="text-sm text-muted-foreground">
-                                An email has been sent to {email} with instructions to create their API keys.
+                                Merchant access has been granted for user {userId}.
                             </p>
                         </div>
                     </div>
