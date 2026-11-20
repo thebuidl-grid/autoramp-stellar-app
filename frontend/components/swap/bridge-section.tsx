@@ -2,8 +2,7 @@
 
 import { AmountInput } from "./amount-input";
 import { ChainSelector } from "./chain-selector";
-import { cn } from "@/lib/utils";
-import Image from "next/image";
+import { CurrencySelector } from "./currency-selector";
 
 interface BridgeSectionProps {
   label: string;
@@ -32,90 +31,65 @@ export function BridgeSection({
 }: BridgeSectionProps) {
   const handlePercent = (percent: number) => {
     if (userBalance === undefined || !onPercentageClick) return;
-
     const value = parseFloat(userBalance) * percent;
-    const formatted = parseFloat(value.toFixed(6)).toString();
-
-    onPercentageClick(formatted);
+    onPercentageClick(parseFloat(value.toFixed(6)).toString());
   };
 
   return (
-    <div className="space-y-3 bg-black/50 rounded-xl border border-white/10 shadow-2xl p-4 lg:p-6">
-      <div className="flex justify-between items-center">
-        <label className="text-xs text-white/50">{label}</label>
+    <div className="ramp-field space-y-3 p-4 lg:p-5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="ramp-label">{label}</span>
 
         {userBalance !== undefined && onPercentageClick && !disabled && direction === "from" && (
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             {[0.25, 0.5, 1].map((percent) => (
               <button
                 key={percent}
                 type="button"
                 onClick={() => handlePercent(percent)}
-                className={cn(
-                  "text-[10px] font-medium px-2 py-1 rounded-md transition-colors",
-                  "bg-white/5 hover:bg-white/10 text-white/70 hover:text-white",
-                )}
+                className="rounded-md bg-(--r-raised) px-2 py-1 text-xs font-medium text-(--r-muted) transition-colors hover:text-(--r-text)"
               >
-                {percent === 1 ? "100%" : `${percent * 100}%`}
+                {percent === 1 ? "Max" : `${percent * 100}%`}
               </button>
             ))}
           </div>
         )}
       </div>
 
-      <div className="space-y-4">
-        <div className="flex flex-col md:flex-row items-stretch justify-between gap-4">
-          <div className="flex-1 flex items-center justify-between h-[64px] px-4 bg-white/5 rounded-xl border border-white/10 group transition-all focus-within:border-secondary/50 hover:bg-white/10">
-            <div className="flex-1">
-              {direction === "from" ? (
-                <AmountInput
-                  value={amount}
-                  onChange={onAmountChange}
-                  disabled={disabled}
-                  isLoading={isLoading}
-                />
-              ) : (
-                <div className="text-2xl md:text-4xl font-light text-white/50 truncate">
-                  {amount || "0.00"}
-                </div>
-              )}
-            </div>
-            
-            <div className="flex items-center gap-2 px-2 py-1.5 bg-blue-500/10 rounded-lg border border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.1)]">
-              <div className="w-5 h-5 relative">
-                <Image 
-                  src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png?v=040" 
-                  alt="USDC" 
-                  fill
-                  className="object-contain"
-                />
-              </div>
-              <span className="text-[10px] font-bold text-blue-400 tracking-wider">USDC</span>
-            </div>
-          </div>
-
-          <div className="md:w-auto shrink-0">
-            <ChainSelector 
-              chain={chain} 
-              onClick={onChainClick} 
-              label={direction === "from" ? "From Network" : "To Network"} 
-            />
-          </div>
-        </div>
-        
-        {userBalance !== undefined && direction === "from" && (
-          <div className="flex items-center justify-end gap-1.5 text-[10px] text-white/30 px-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500/50 animate-pulse" />
-            Balance:{" "}
-            <span className="text-white/60">
-              {parseFloat(userBalance).toLocaleString(undefined, {
-                maximumFractionDigits: 6,
-              })}
-            </span>
-            <span className="text-white/30 tracking-widest ml-1">USDC</span>
+      <div className="flex items-center justify-between gap-3">
+        {direction === "from" ? (
+          <AmountInput
+            value={amount}
+            onChange={onAmountChange}
+            disabled={disabled}
+            isLoading={isLoading}
+            label={label}
+          />
+        ) : (
+          <div className="ramp-amount min-w-0 flex-1 truncate text-4xl text-(--r-text) md:text-5xl">
+            {amount || <span className="text-(--r-muted)/50">0</span>}
           </div>
         )}
+        <CurrencySelector type="USDC" />
       </div>
+
+      <ChainSelector
+        chain={chain}
+        onClick={onChainClick}
+        label={direction === "from" ? "From network" : "To network"}
+      />
+
+      {userBalance !== undefined && direction === "from" && (
+        <div className="text-right text-xs text-(--r-muted)">
+          Balance{" "}
+          <span className="ramp-amount text-(--r-text)">
+            {parseFloat(userBalance).toLocaleString(undefined, {
+              maximumFractionDigits: 6,
+            })}
+          </span>{" "}
+          USDC
+        </div>
+      )}
     </div>
   );
 }

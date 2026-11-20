@@ -7,7 +7,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000';
+// No localhost fallback in production: an unset var used to make every visitor's browser retry ws://localhost:3000.
+const WS_URL =
+  process.env.NEXT_PUBLIC_WS_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000');
 
 interface TransactionUpdate {
   reference: string;
@@ -47,7 +51,7 @@ export function useSwapWebSocket({
   }, [onUpdate]);
 
   useEffect(() => {
-    if (!enabled || !token) {
+    if (!enabled || !token || !WS_URL) {
       return;
     }
 

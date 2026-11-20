@@ -10,7 +10,7 @@ Blockscout / Stellar Expert pages. Stubbed: only the hosted AutoRamp API (down),
 bridge bookkeeping/history - the History tab shows what the app builds from /bridge/history.
 
 Prereqs: demo wallet server on :8787 (scripts/demo-wallet-server.mjs), dev server on :3000 with
-NEXT_PUBLIC_NETWORK=testnet and STELLAR_RELAYER_SECRET (inbound mint relay).
+NEXT_PUBLIC_NETWORK=testnet; the backend must have STELLAR_RELAYER_SECRET (inbound mint relay).
 Usage: DEMO_WALLET_FILE=~/.config/autoramp-demo/wallet.json python3 scripts/record_d2_real.py \
          [--dry] [--legs in|out|both] [--amount-in 2] [--amount-out 1]
 Outputs (demo_assets_d2/): raw_<legs>.webm, marks_<legs>.json (scene start times), run_<legs>.json (all hashes)

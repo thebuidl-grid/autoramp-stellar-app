@@ -11,6 +11,7 @@ describe('WebhookController — inbound webhook routes', () => {
   let webhookQueue: { enqueue: jest.Mock };
 
   const bitnobSecret = 'test-bitnob-secret';
+  let skipVerify: string | undefined;
 
   beforeEach(async () => {
     prisma = {
@@ -31,7 +32,11 @@ describe('WebhookController — inbound webhook routes', () => {
           provide: ConfigService,
           useValue: {
             get: (key: string) =>
-              key === 'BITNOB_WEBHOOK_SECRET' ? bitnobSecret : undefined,
+              key === 'BITNOB_WEBHOOK_SECRET'
+                ? bitnobSecret
+                : key === 'BITNOB_WEBHOOK_SKIP_VERIFY'
+                  ? skipVerify
+                  : undefined,
           },
         },
       ],
@@ -140,6 +145,19 @@ describe('WebhookController — inbound webhook routes', () => {
       ).rejects.toThrow('Invalid Bitnob webhook signature');
       expect(prisma.inboundWebhook.create).not.toHaveBeenCalled();
       expect(webhookQueue.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('accepts an unverifiable webhook only when BITNOB_WEBHOOK_SKIP_VERIFY=true', async () => {
+      const payload = { event: 'deposit.completed', data: { amount: 10 } };
+      const rawBody = Buffer.from(JSON.stringify(payload));
+      skipVerify = 'true';
+      try {
+        const result = await controller.handleBitNobWebhook(payload, { rawBody }, 'deadbeef');
+        expect(result).toEqual({ status: 'accepted', id: 'wh-123' });
+        expect(webhookQueue.enqueue).toHaveBeenCalled();
+      } finally {
+        skipVerify = undefined;
+      }
     });
 
     it('rejects a webhook signed with the wrong secret', async () => {

@@ -1,3 +1,4 @@
+import { currentChainNetwork } from '../../common/request-context';
 import {
   Injectable,
   Logger,
@@ -135,6 +136,7 @@ export class OtcService {
       // 3. Create Transaction Record
       const transaction = await this.prisma.otcTransaction.create({
         data: {
+          chainNetwork: currentChainNetwork(),
           userId,
           otcUserId: otcUser.id,
           reference: trxReference as any,
@@ -397,6 +399,7 @@ export class OtcService {
       // 3. Create Transaction Record
       const transaction = await this.prisma.otcTransaction.create({
         data: {
+          chainNetwork: currentChainNetwork(),
           userId,
           otcUserId: otcUser.id,
           reference: trxReference as any,

@@ -1,0 +1,1 @@
+This is the burn on Stellar Expert. It is successful, and it called deposit for burn on Circle's token messenger contract on Stellar.

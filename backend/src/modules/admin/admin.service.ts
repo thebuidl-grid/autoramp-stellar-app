@@ -671,19 +671,13 @@ export class AdminService {
 
   /**
    * Suspend or unsuspend a user account
-   * - when suspending: revoke API keys and disable API access and merchant flag
+   * - when suspending: disable API access and the merchant flag
    */
   async suspendUser(userId: string, suspend: boolean) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
     if (suspend) {
-      // revoke api keys
-      await this.prisma.apiKey.updateMany({
-        where: { userId },
-        data: { isActive: false },
-      });
-
       const updated = await this.prisma.user.update({
         where: { id: userId },
         data: {
@@ -707,135 +701,6 @@ export class AdminService {
         message: 'User unsuspended',
       };
     }
-  }
-
-  /**
-   * Get all API keys (admin only)
-   *
-   * @param page - Page number (default: 1)
-   * @param limit - Items per page (default: 10)
-   * @returns Paginated list of all API keys
-   */
-  async getAllApiKeys(page: number = 1, limit: number = 10) {
-    const skip = (page - 1) * limit;
-
-    const [apiKeys, total] = await Promise.all([
-      this.prisma.apiKey.findMany({
-        skip,
-        take: limit,
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-      }),
-      this.prisma.apiKey.count(),
-    ]);
-
-    return {
-      apiKeys,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
-
-  /**
-   * Get API keys summary statistics (admin only)
-   *
-   * @returns Summary statistics for all API keys
-   */
-  async getApiKeysSummary() {
-    const [totalKeys, activeKeys, totalRequests] = await Promise.all([
-      this.prisma.apiKey.count(),
-      this.prisma.apiKey.count({
-        where: { isActive: true },
-      }),
-      this.prisma.apiRequestLog.count(),
-    ]);
-
-    const averageRequestsPerKey = totalKeys > 0 ? totalRequests / totalKeys : 0;
-
-    return {
-      totalKeys,
-      activeKeys,
-      totalRequests,
-      averageRequestsPerKey: Math.round(averageRequestsPerKey),
-    };
-  }
-
-  /**
-   * Get API keys analytics over time (admin only)
-   *
-   * @param period - Time period for grouping (daily, weekly, monthly)
-   * @returns Time-series analytics data
-   */
-  async getApiKeysAnalytics(period: 'daily' | 'weekly' | 'monthly' = 'daily') {
-    // Determine date range based on period
-    const now = new Date();
-    let startDate: Date;
-    let dateFormat: string;
-
-    switch (period) {
-      case 'weekly':
-        startDate = new Date(now.getTime() - 12 * 7 * 24 * 60 * 60 * 1000); // 12 weeks
-        dateFormat = 'YYYY-"W"IW'; // ISO week format
-        break;
-      case 'monthly':
-        startDate = new Date(now.getTime() - 12 * 30 * 24 * 60 * 60 * 1000); // 12 months
-        dateFormat = 'YYYY-MM';
-        break;
-      case 'daily':
-      default:
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days
-        dateFormat = 'YYYY-MM-DD';
-        break;
-    }
-
-    // Query API request logs grouped by date
-    const requestLogs = await this.prisma.$queryRaw<
-      Array<{
-        date: string;
-        request_count: bigint;
-        unique_keys: bigint;
-        success_count: bigint;
-        error_count: bigint;
-      }>
-    >`
-      SELECT 
-        TO_CHAR(created_at, ${dateFormat}) as date,
-        COUNT(*)::bigint as request_count,
-        COUNT(DISTINCT api_key_id)::bigint as unique_keys,
-        COUNT(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 END)::bigint as success_count,
-        COUNT(CASE WHEN status_code >= 400 THEN 1 END)::bigint as error_count
-      FROM api_request_logs
-      WHERE created_at >= ${startDate}
-      GROUP BY 1
-      ORDER BY date ASC
-    `;
-
-    return requestLogs.map((log) => ({
-      date: log.date,
-      requestCount: Number(log.request_count),
-      uniqueKeys: Number(log.unique_keys),
-      successCount: Number(log.success_count),
-      errorCount: Number(log.error_count),
-      successRate:
-        Number(log.request_count) > 0
-          ? Math.round(
-              (Number(log.success_count) / Number(log.request_count)) * 100,
-            )
-          : 0,
-    }));
   }
 
   /**
@@ -931,6 +796,7 @@ export class AdminService {
     status?: string,
     type?: string,
     search?: string,
+    currency?: string,
   ) {
     return this.transactionsService.getAllTransactions(
       page,
@@ -938,6 +804,7 @@ export class AdminService {
       status,
       type,
       search,
+      currency,
     );
   }
 

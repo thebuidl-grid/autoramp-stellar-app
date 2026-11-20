@@ -1,0 +1,1 @@
+The history tab now lists both transfers as Bridge transactions: Base Sepolia to Stellar Testnet, and Stellar Testnet back to Base Sepolia, each with its own source and destination transaction hashes.

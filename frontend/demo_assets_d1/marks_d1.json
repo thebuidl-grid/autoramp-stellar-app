@@ -1,0 +1,101 @@
+{
+  "lead": 4.49,
+  "marks": [
+    {
+      "scene": "intro",
+      "t": 0.0
+    },
+    {
+      "scene": "intro__end",
+      "t": 8.29
+    },
+    {
+      "scene": "real_success",
+      "t": 14.1
+    },
+    {
+      "scene": "real_success__end",
+      "t": 29.89
+    },
+    {
+      "scene": "real_explorer",
+      "t": 38.63
+    },
+    {
+      "scene": "real_explorer__end",
+      "t": 46.09
+    },
+    {
+      "scene": "sim_timeout",
+      "t": 48.93
+    },
+    {
+      "scene": "sim_timeout__end",
+      "t": 66.76
+    },
+    {
+      "scene": "sim_partial",
+      "t": 69.23
+    },
+    {
+      "scene": "sim_partial__end",
+      "t": 87.41
+    },
+    {
+      "scene": "partial_explorer",
+      "t": 94.33
+    },
+    {
+      "scene": "partial_explorer__end",
+      "t": 101.85
+    },
+    {
+      "scene": "sim_rejected",
+      "t": 104.73
+    },
+    {
+      "scene": "sim_rejected__end",
+      "t": 123.63
+    },
+    {
+      "scene": "sim_reversal",
+      "t": 125.97
+    },
+    {
+      "scene": "sim_reversal__end",
+      "t": 144.66
+    },
+    {
+      "scene": "sim_liquidity",
+      "t": 147.34
+    },
+    {
+      "scene": "sim_liquidity__end",
+      "t": 165.75
+    },
+    {
+      "scene": "persist",
+      "t": 169.49
+    },
+    {
+      "scene": "persist__end",
+      "t": 181.85
+    },
+    {
+      "scene": "history",
+      "t": 187.63
+    },
+    {
+      "scene": "history__end",
+      "t": 200.94
+    },
+    {
+      "scene": "outro",
+      "t": 200.95
+    },
+    {
+      "scene": "end",
+      "t": 206.45
+    }
+  ]
+}

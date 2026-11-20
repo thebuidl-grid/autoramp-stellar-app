@@ -1,114 +1,209 @@
-import { describe, expect, it } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
+import { server } from "@/test/mocks/server";
 import { renderWithClient } from "@/test/test-utils";
+import { useAuthStore } from "@/lib/store";
 import AdminTransactionsPage from "./page";
 
-// Card titles and their card body are siblings two levels up from the title
-// element, so this scopes assertions to one card and avoids matching
-// duplicate text across cards.
-function cardFor(title: string) {
-  const heading = screen.getByText(title);
-  return within(heading.parentElement!.parentElement as HTMLElement);
-}
+let search = "";
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(search), useRouter: () => ({ push: vi.fn() }) }));
+
+beforeEach(() => {
+  search = "";
+  useAuthStore.setState({ token: "admin-jwt" });
+});
+
+const tableOf = async () => screen.findByRole("table", { name: "Transactions" });
 
 describe("AdminTransactionsPage", () => {
-  it("renders the summary stat cards from the API", async () => {
+  it("shows the period's headline numbers in one panel", async () => {
     renderWithClient(<AdminTransactionsPage />);
-
-    // Top summary cards
-    expect(await screen.findByText("₦3,105,000")).toBeInTheDocument(); // Total Volume
-    expect(screen.getByText("₦1,730,000")).toBeInTheDocument(); // Net Volume
-    expect(screen.getByText("15")).toBeInTheDocument(); // Total Requests
-    expect(cardFor("Total Fees Collected").getByText("₦10,600")).toBeInTheDocument();
-
-    // Per-type tiles
-    expect(screen.getByText("₦1,370,000")).toBeInTheDocument(); // Onramp
-    expect(screen.getByText("₦700,000")).toBeInTheDocument(); // Offramp
-    expect(screen.getByText("₦760,000")).toBeInTheDocument(); // Swap
-    expect(screen.getByText("₦275,000")).toBeInTheDocument(); // OTC
-
-    // Fee breakdown
-    expect(screen.getByText("₦10,000")).toBeInTheDocument(); // provider fee
-    expect(screen.getByText("₦500")).toBeInTheDocument(); // VAT
-    expect(screen.getByText("₦100")).toBeInTheDocument(); // stamp duty
+    const summary = await screen.findByRole("region", { name: /^Summary,/ });
+    expect(await within(summary).findByText("₦3,105,000")).toBeInTheDocument(); // volume
+    expect(within(summary).getByText("₦1,730,000")).toBeInTheDocument(); // net volume
+    expect(within(summary).getByText("15")).toBeInTheDocument(); // transactions
+    expect(within(summary).getByText("₦10,600")).toBeInTheDocument(); // fees collected
+    expect(summary).toHaveTextContent("Provider ₦10,000 · VAT ₦500 · Stamp duty ₦100");
   });
 
-  it("shows the 'all' tab offset-paginated and pages forward/backward by page number", async () => {
+  it("shows Unavailable, not zeros, when the summary fails", async () => {
+    server.use(http.get("http://localhost/api/admin/transactions/summary", () => HttpResponse.json({ message: "boom" }, { status: 500 })));
     renderWithClient(<AdminTransactionsPage />);
-
-    expect(await screen.findByText("ALL-001")).toBeInTheDocument();
-    expect(screen.getByText(/Page 1 of 2/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
-
-    await userEvent.click(screen.getByRole("button", { name: "Next" }));
-
-    expect(await screen.findByText("ALL-002")).toBeInTheDocument();
-    expect(screen.getByText(/Page 2 of 2/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Previous" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    const summary = await screen.findByRole("region", { name: /^Summary,/ });
+    expect((await within(summary).findAllByText("Unavailable")).length).toBeGreaterThan(0);
+    expect(within(summary).queryByText("₦0")).not.toBeInTheDocument();
   });
 
-  it("switches the onramp tab into offset pagination and steps forward/backward by page number", async () => {
-    renderWithClient(<AdminTransactionsPage />);
-    await screen.findByText("ALL-001");
+  describe("the list and its pagination", () => {
+    it("pages by number: jump to a page, and Previous / Next follow", async () => {
+      renderWithClient(<AdminTransactionsPage />);
+      const first = await tableOf();
+      expect(await within(first).findByText("ALL-001")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("tab", { name: "Onramp" }));
+      const nav = screen.getByRole("navigation", { name: "Pagination" });
+      expect(within(nav).getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
+      expect(within(nav).getByRole("button", { name: "Previous page" })).toBeDisabled();
 
-    expect(await screen.findByText("ONR-001")).toBeInTheDocument();
-    expect(screen.getByText(/Page 1 of 2/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+      await userEvent.click(within(nav).getByRole("button", { name: "Page 2" }));
+      expect(await screen.findByText("ALL-002")).toBeInTheDocument();
+      expect(within(nav).getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+      expect(within(nav).getByRole("button", { name: "Next page" })).toBeDisabled();
 
-    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+      await userEvent.click(within(nav).getByRole("button", { name: "Previous page" }));
+      expect(await screen.findByText("ALL-001")).toBeInTheDocument();
+    });
 
-    expect(await screen.findByText("ONR-002")).toBeInTheDocument();
-    expect(screen.getByText(/Page 2 of 2/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Previous" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    it("asks the server for the page size you choose, from the first page", async () => {
+      const seen: URLSearchParams[] = [];
+      server.use(
+        http.get("http://localhost/api/admin/platform-transactions", ({ request }) => {
+          seen.push(new URL(request.url).searchParams);
+          return HttpResponse.json({ data: [], pagination: { total: 0, page: 1, limit: 10, totalPages: 1 } });
+        }),
+      );
+      renderWithClient(<AdminTransactionsPage />);
+      await screen.findByText("No transactions yet");
+      expect(seen.at(-1)!.get("limit")).toBe("10");
+      await userEvent.selectOptions(screen.getByRole("combobox", { name: "Rows per page" }), "50");
+      await vi.waitFor(() => expect(seen.at(-1)!.get("limit")).toBe("50"));
+      expect(seen.at(-1)!.get("page")).toBe("1");
+    });
 
-    await userEvent.click(screen.getByRole("button", { name: "Previous" }));
+    it("shows one page of results without page buttons, but still says how many", async () => {
+      renderWithClient(<AdminTransactionsPage />);
+      await tableOf();
+      await userEvent.click(screen.getByRole("tab", { name: "Onramp" }));
+      expect(await screen.findByText("ONR-001")).toBeInTheDocument();
+      expect(screen.getByText("1–2 of 2")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Next page" })).not.toBeInTheDocument();
+    });
 
-    expect(await screen.findByText("ONR-001")).toBeInTheDocument();
-    expect(screen.getByText(/Page 1 of 2/)).toBeInTheDocument();
+    it("goes back to page 1 when you search", async () => {
+      renderWithClient(<AdminTransactionsPage />);
+      await tableOf();
+      const nav = screen.getByRole("navigation", { name: "Pagination" });
+      await userEvent.click(within(nav).getByRole("button", { name: "Page 2" }));
+      await screen.findByText("ALL-002");
+
+      await userEvent.type(screen.getByRole("textbox", { name: "Find by reference or user" }), "acme{Enter}");
+      expect(await screen.findByText("ALL-001")).toBeInTheDocument();
+      expect(within(nav).getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
+    });
   });
 
-  it("renders the OTC badge and row for the otc tab", async () => {
-    renderWithClient(<AdminTransactionsPage />);
-    await screen.findByText("ALL-001");
+  describe("type tabs", () => {
+    it("shows the OTC rows with who and how much", async () => {
+      renderWithClient(<AdminTransactionsPage />);
+      await tableOf();
+      await userEvent.click(screen.getByRole("tab", { name: "OTC" }));
+      const row = (await screen.findByText("OTC-REF-001")).closest("tr") as HTMLElement;
+      expect(within(row).getByText("trader@example.com")).toBeInTheDocument();
+      expect(within(row).getByText("OTC")).toBeInTheDocument();
+      expect(within(row).getByText("₦275,000.00")).toBeInTheDocument();
+    });
 
-    await userEvent.click(screen.getByRole("tab", { name: "OTC" }));
+    it("shows merchant rows by merchant name with a plain type name", async () => {
+      renderWithClient(<AdminTransactionsPage />);
+      await tableOf();
+      await userEvent.click(screen.getByRole("tab", { name: "Merchant" }));
+      const row = (await screen.findByText("M-REF-1")).closest("tr") as HTMLElement;
+      expect(within(row).getByText("Acme Ltd")).toBeInTheDocument();
+      expect(within(row).getByText("Merchant on-ramp")).toBeInTheDocument();
+    });
 
-    const referenceCell = await screen.findByText("OTC-REF-001");
-    const row = referenceCell.closest("tr") as HTMLElement;
-    expect(within(row).getByText("trader@example.com")).toBeInTheDocument();
-    expect(within(row).getByText("OTC")).toBeInTheDocument();
-    // A single, non-hasMore page shouldn't render pagination controls at all.
-    expect(screen.queryByRole("button", { name: "Next" })).not.toBeInTheDocument();
+    it("shows a user off-ramp amount in naira (it is what the customer asked to receive)", async () => {
+      renderWithClient(<AdminTransactionsPage />);
+      await tableOf();
+      await userEvent.click(screen.getByRole("tab", { name: "Offramp" }));
+      const row = (await screen.findByText("OFR-001")).closest("tr") as HTMLElement;
+      expect(within(row).getByText("₦120,000.00")).toBeInTheDocument();
+    });
+
+    it("draws each row's progress as step nodes", async () => {
+      renderWithClient(<AdminTransactionsPage />);
+      await tableOf();
+      await userEvent.click(screen.getByRole("tab", { name: "Offramp" }));
+      const row = (await screen.findByText("OFR-001")).closest("tr") as HTMLElement;
+      expect(within(row).getByRole("list", { name: "Done: Paid" })).toBeInTheDocument();
+    });
   });
 
-  it("renders merchant rows with merchantName instead of userEmail, and the merchant type badges", async () => {
-    renderWithClient(<AdminTransactionsPage />);
-    await screen.findByText("ALL-001");
+  describe("pull-out panel", () => {
+    it("opens a transaction from the keyboard and shows its details", async () => {
+      renderWithClient(<AdminTransactionsPage />);
+      await tableOf();
+      await userEvent.click(screen.getByRole("tab", { name: "Offramp" }));
+      const row = (await screen.findByText("OFR-001")).closest("tr") as HTMLElement;
+      row.focus();
+      await userEvent.keyboard("{Enter}");
 
-    await userEvent.click(screen.getByRole("tab", { name: "Merchant" }));
-
-    expect(await screen.findByText("M-REF-1")).toBeInTheDocument();
-    expect(screen.getByText("Acme Ltd")).toBeInTheDocument();
-    expect(screen.getByText("Merchant Onramp")).toBeInTheDocument();
+      const panel = await screen.findByRole("dialog", { name: "Off-ramp" });
+      expect(within(panel).getByText("user3@example.com")).toBeInTheDocument();
+      expect(within(panel).getByText("Completed")).toBeInTheDocument();
+      expect(within(panel).getByRole("list", { name: "Done: Paid" })).toBeInTheDocument();
+      expect(within(panel).getByRole("link", { name: /Trace this transaction/ })).toHaveAttribute("href", "/admin/transactions/OFR-001");
+      await userEvent.keyboard("{Escape}");
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
   });
 
-  it("resets pagination back to the first page when the search term changes", async () => {
-    renderWithClient(<AdminTransactionsPage />);
-    await screen.findByText("ALL-001");
+  describe("opened from a link (?q=, ?status=, ?tab=)", () => {
+    it("starts with the reference in the search box, so the list is already filtered", async () => {
+      search = "q=off_4uby6wYnBpq0b4B0";
+      let sent: string | null = null;
+      server.use(
+        http.get("http://localhost/api/admin/platform-transactions", ({ request }) => {
+          sent = new URL(request.url).searchParams.get("search");
+          return HttpResponse.json({ data: [], pagination: { total: 0, page: 1, limit: 10, totalPages: 1 } });
+        }),
+      );
+      renderWithClient(<AdminTransactionsPage />);
+      expect(await screen.findByDisplayValue("off_4uby6wYnBpq0b4B0")).toBeInTheDocument();
+      await screen.findByText("No transactions match these filters");
+      expect(sent).toBe("off_4uby6wYnBpq0b4B0");
+    });
 
-    await userEvent.click(screen.getByRole("button", { name: "Next" }));
-    await screen.findByText("ALL-002");
+    it("applies a status from the link, and ignores one the filter does not offer", async () => {
+      search = "status=failed";
+      const { unmount } = renderWithClient(<AdminTransactionsPage />);
+      expect(await screen.findByRole("combobox", { name: "Status" })).toHaveValue("FAILED");
+      unmount();
 
-    await userEvent.type(screen.getByPlaceholderText("Search ref or user..."), "acme");
+      search = "status=NONSENSE";
+      renderWithClient(<AdminTransactionsPage />);
+      expect(await screen.findByRole("combobox", { name: "Status" })).toHaveValue("all");
+    });
 
-    await waitFor(() => expect(screen.getByText(/Page 1 of 2/)).toBeInTheDocument());
-    await screen.findByText("ALL-001");
+    it("opens on the Transfer logs tab when asked (old Transfer Logs links)", async () => {
+      search = "tab=transfer-logs";
+      renderWithClient(<AdminTransactionsPage />);
+      expect(await screen.findByRole("tab", { name: "Transfer logs" })).toHaveAttribute("aria-selected", "true");
+      expect(await screen.findByRole("table", { name: "Transfer logs" })).toBeInTheDocument();
+      expect(screen.queryByRole("table", { name: "Transactions" })).not.toBeInTheDocument();
+    });
+
+    it("opens on the Stuck or Failed tab from a needs-attention link", async () => {
+      server.use(
+        http.get("http://localhost/api/admin/transactions/stuck", () => HttpResponse.json({ total: 0, limit: 10, offset: 0, items: [] })),
+        http.get("http://localhost/api/admin/transactions/failed", () => HttpResponse.json({ total: 0, limit: 10, offset: 0, items: [] })),
+      );
+      search = "tab=stuck";
+      const { unmount } = renderWithClient(<AdminTransactionsPage />);
+      expect(await screen.findByRole("tab", { name: "Stuck" })).toHaveAttribute("aria-selected", "true");
+      expect(await screen.findByText("Nothing is stuck")).toBeInTheDocument();
+      unmount();
+      search = "tab=failed";
+      renderWithClient(<AdminTransactionsPage />);
+      expect(await screen.findByRole("tab", { name: "Failed" })).toHaveAttribute("aria-selected", "true");
+      expect(await screen.findByText("Nothing has failed")).toBeInTheDocument();
+    });
+
+    it("ignores a tab it does not know", async () => {
+      search = "tab=nonsense";
+      renderWithClient(<AdminTransactionsPage />);
+      expect(await screen.findByRole("tab", { name: "All" })).toHaveAttribute("aria-selected", "true");
+    });
   });
 });

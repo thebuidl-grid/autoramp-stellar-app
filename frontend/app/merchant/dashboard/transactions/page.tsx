@@ -71,11 +71,11 @@ export default function MerchantTransactionsPage() {
 
   if (!merchantId && !isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 bg-white/5 border border-white/10 rounded-xl">
-        <AlertCircle className="h-12 w-12 text-zinc-500" />
+      <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 bg-(--c-field) border border-(--c-line) rounded-xl">
+        <AlertCircle className="h-12 w-12 text-(--c-muted)" />
         <div className="space-y-2">
-          <h1 className="text-xl font-bold text-white">Merchant Record Not Found</h1>
-          <p className="text-zinc-500 max-w-sm">
+          <h1 className="text-xl font-bold text-(--c-text)">Merchant Record Not Found</h1>
+          <p className="text-(--c-muted) max-w-sm">
             We couldn't retrieve your merchant details. Please make sure your onboarding is complete.
           </p>
         </div>
@@ -88,50 +88,50 @@ export default function MerchantTransactionsPage() {
       case "COMPLETED":
       case "SUCCESSFUL":
         return (
-          <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20 flex items-center gap-1 w-fit">
+          <Badge className="bg-emerald-500/10 text-(--c-ok) border-emerald-500/20 hover:bg-emerald-500/20 flex items-center gap-1 w-fit">
             <CheckCircle2 className="h-3 w-3" /> Completed
           </Badge>
         );
       case "PENDING":
         return (
-          <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20 flex items-center gap-1 w-fit">
+          <Badge className="bg-amber-500/10 text-(--c-warn) border-amber-500/20 hover:bg-amber-500/20 flex items-center gap-1 w-fit">
             <Clock className="h-3 w-3" /> Pending
           </Badge>
         );
       case "FAILED":
         return (
-          <Badge className="bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20 flex items-center gap-1 w-fit">
+          <Badge className="bg-rose-500/10 text-(--c-danger) border-rose-500/20 hover:bg-rose-500/20 flex items-center gap-1 w-fit">
             <XCircle className="h-3 w-3" /> Failed
           </Badge>
         );
       case "REJECTED":
       case "REVERSED":
         return (
-          <Badge className="bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500/20 flex items-center gap-1 w-fit">
+          <Badge className="bg-rose-500/10 text-(--c-danger) border-rose-500/20 hover:bg-rose-500/20 flex items-center gap-1 w-fit">
             <XCircle className="h-3 w-3" /> {status?.toUpperCase() === "REVERSED" ? "Reversed" : "Rejected"}
           </Badge>
         );
       case "EXPIRED":
         return (
-          <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20 flex items-center gap-1 w-fit">
+          <Badge className="bg-amber-500/10 text-(--c-warn) border-amber-500/20 hover:bg-amber-500/20 flex items-center gap-1 w-fit">
             <Clock className="h-3 w-3" /> Expired
           </Badge>
         );
       case "PARTIAL":
         return (
-          <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20 flex items-center gap-1 w-fit">
+          <Badge className="bg-amber-500/10 text-(--c-warn) border-amber-500/20 hover:bg-amber-500/20 flex items-center gap-1 w-fit">
             <AlertCircle className="h-3 w-3" /> Partial
           </Badge>
         );
       case "REFUNDED":
         return (
-          <Badge className="bg-gray-500/10 text-gray-400 border-gray-500/20 hover:bg-gray-500/20 flex items-center gap-1 w-fit">
+          <Badge className="bg-gray-500/10 text-(--c-muted) border-gray-500/20 hover:bg-gray-500/20 flex items-center gap-1 w-fit">
             <RefreshCcw className="h-3 w-3" /> Refunded
           </Badge>
         );
       default:
         return (
-          <Badge variant="outline" className="border-white/10 text-white flex items-center gap-1 w-fit">
+          <Badge variant="outline" className="border-(--c-line) text-(--c-text) flex items-center gap-1 w-fit">
             {status}
           </Badge>
         );
@@ -165,7 +165,7 @@ export default function MerchantTransactionsPage() {
           </Badge>
         );
       default:
-        return <Badge variant="outline" className="border-white/10 text-white text-[10px]">{type}</Badge>;
+        return <Badge variant="outline" className="border-(--c-line) text-(--c-text) text-[10px]">{type}</Badge>;
     }
   };
 
@@ -175,28 +175,28 @@ export default function MerchantTransactionsPage() {
       case "swap":
         return (
           <div className="flex flex-col gap-0.5">
-            <span className="text-zinc-200">{d.fromTokenType} → {d.toTokenType}</span>
+            <span className="text-(--c-text)">{d.fromTokenType} → {d.toTokenType}</span>
             <span className="text-[10px] opacity-60">Rate: {d.exchangeRate}</span>
           </div>
         );
       case "offramp":
         return (
           <div className="flex flex-col gap-0.5">
-            <span className="text-zinc-200">{d.bankCode}</span>
+            <span className="text-(--c-text)">{d.bankCode}</span>
             <span className="opacity-60">{d.accountNumber}</span>
           </div>
         );
       case "bank_transfer":
         return (
           <div className="flex flex-col gap-0.5">
-            <span className="text-zinc-200">{d.beneficiaryBankCode}</span>
+            <span className="text-(--c-text)">{d.beneficiaryBankCode}</span>
             <span className="truncate max-w-[150px] opacity-60">{d.narration}</span>
           </div>
         );
       default:
         return (
           <div className="flex flex-col gap-0.5">
-            <span className="text-zinc-200">{d.network}</span>
+            <span className="text-(--c-text)">{d.network}</span>
             <span className="truncate max-w-[150px] opacity-60">{d.destinationAddress}</span>
           </div>
         );
@@ -207,14 +207,14 @@ export default function MerchantTransactionsPage() {
     if (tx.type === "swap") {
       return (
         <div className="flex flex-col">
-          <span className="text-sm font-semibold text-white">₦{tx.amount?.toLocaleString()}</span>
-          <span className="text-[10px] text-emerald-400/80">→ {tx.details?.toAmount} {tx.details?.toTokenType}</span>
+          <span className="text-sm font-semibold text-(--c-text)">₦{tx.amount?.toLocaleString()}</span>
+          <span className="text-[10px] text-(--c-ok)/80">→ {tx.details?.toAmount} {tx.details?.toTokenType}</span>
         </div>
       );
     }
     return (
       <div className="flex flex-col">
-        <span className="text-sm font-semibold text-white">₦{tx.amount?.toLocaleString()}</span>
+        <span className="text-sm font-semibold text-(--c-text)">₦{tx.amount?.toLocaleString()}</span>
       </div>
     );
   };
@@ -223,100 +223,100 @@ export default function MerchantTransactionsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white">Transactions</h1>
-          <p className="text-zinc-400">
+          <h1 className="text-3xl font-bold tracking-tight text-(--c-text)">Transactions</h1>
+          <p className="text-(--c-muted)">
             View and manage your transaction history and performance metrics.
           </p>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+        <Card className="bg-(--c-field) border-(--c-line) backdrop-blur-md">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">Total Volume</CardTitle>
-            <TrendingUp className="h-4 w-4 text-emerald-500" />
+            <CardTitle className="text-sm font-medium text-(--c-muted)">Total Volume</CardTitle>
+            <TrendingUp className="h-4 w-4 text-(--c-ok)" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">₦{totalVolume.toLocaleString()}</div>
-            <p className="text-[10px] text-zinc-500 mt-1">Total combined volume</p>
+            <div className="text-2xl font-bold text-(--c-text)">₦{totalVolume.toLocaleString()}</div>
+            <p className="text-[10px] text-(--c-muted) mt-1">Total combined volume</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+        <Card className="bg-(--c-field) border-(--c-line) backdrop-blur-md">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">Total Count</CardTitle>
+            <CardTitle className="text-sm font-medium text-(--c-muted)">Total Count</CardTitle>
             <Activity className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{totalCount}</div>
-            <p className="text-[10px] text-zinc-500 mt-1">All transaction types</p>
+            <div className="text-2xl font-bold text-(--c-text)">{totalCount}</div>
+            <p className="text-[10px] text-(--c-muted) mt-1">All transaction types</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+        <Card className="bg-(--c-field) border-(--c-line) backdrop-blur-md">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">Bank Transfers</CardTitle>
+            <CardTitle className="text-sm font-medium text-(--c-muted)">Bank Transfers</CardTitle>
             <Landmark className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">₦{summary?.bankTransfer?.totalAmount?.toLocaleString() || "0"}</div>
-            <p className="text-[10px] text-zinc-500 mt-1">{summary?.bankTransfer?.count || 0} completed</p>
+            <div className="text-2xl font-bold text-(--c-text)">₦{summary?.bankTransfer?.totalAmount?.toLocaleString() || "0"}</div>
+            <p className="text-[10px] text-(--c-muted) mt-1">{summary?.bankTransfer?.count || 0} completed</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+        <Card className="bg-(--c-field) border-(--c-line) backdrop-blur-md">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">Swap Volume</CardTitle>
+            <CardTitle className="text-sm font-medium text-(--c-muted)">Swap Volume</CardTitle>
             <RefreshCcw className="h-4 w-4 text-indigo-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">₦{summary?.swap?.totalFromAmount?.toLocaleString() || "0"}</div>
-            <p className="text-[10px] text-zinc-500 mt-1">{summary?.swap?.count || 0} completed</p>
+            <div className="text-2xl font-bold text-(--c-text)">₦{summary?.swap?.totalFromAmount?.toLocaleString() || "0"}</div>
+            <p className="text-[10px] text-(--c-muted) mt-1">{summary?.swap?.count || 0} completed</p>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md border-l-4 border-l-blue-500">
+        <Card className="bg-(--c-field) border-(--c-line) backdrop-blur-md border-l-4 border-l-blue-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Onramp Volume</CardTitle>
+            <CardTitle className="text-xs font-semibold text-(--c-muted) uppercase tracking-wider">Onramp Volume</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold text-white">₦{summary?.onramp?.totalAmount?.toLocaleString() || "0"}</div>
-            <p className="text-xs text-zinc-500 mt-1">{summary?.onramp?.count || 0} completed</p>
+            <div className="text-xl font-bold text-(--c-text)">₦{summary?.onramp?.totalAmount?.toLocaleString() || "0"}</div>
+            <p className="text-xs text-(--c-muted) mt-1">{summary?.onramp?.count || 0} completed</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md border-l-4 border-l-purple-500">
+        <Card className="bg-(--c-field) border-(--c-line) backdrop-blur-md border-l-4 border-l-purple-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Offramp Volume</CardTitle>
+            <CardTitle className="text-xs font-semibold text-(--c-muted) uppercase tracking-wider">Offramp Volume</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold text-white">₦{summary?.offramp?.totalAmount?.toLocaleString() || "0"}</div>
-            <p className="text-xs text-zinc-500 mt-1">{summary?.offramp?.count || 0} completed</p>
+            <div className="text-xl font-bold text-(--c-text)">₦{summary?.offramp?.totalAmount?.toLocaleString() || "0"}</div>
+            <p className="text-xs text-(--c-muted) mt-1">{summary?.offramp?.count || 0} completed</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md border-l-4 border-l-orange-500">
+        <Card className="bg-(--c-field) border-(--c-line) backdrop-blur-md border-l-4 border-l-orange-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Bank Transfer Volume</CardTitle>
+            <CardTitle className="text-xs font-semibold text-(--c-muted) uppercase tracking-wider">Bank Transfer Volume</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold text-white">₦{summary?.bankTransfer?.totalAmount?.toLocaleString() || "0"}</div>
-            <p className="text-xs text-zinc-500 mt-1">{summary?.bankTransfer?.count || 0} completed</p>
+            <div className="text-xl font-bold text-(--c-text)">₦{summary?.bankTransfer?.totalAmount?.toLocaleString() || "0"}</div>
+            <p className="text-xs text-(--c-muted) mt-1">{summary?.bankTransfer?.count || 0} completed</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="bg-white/5 border-white/10 backdrop-blur-md overflow-hidden">
+      <Card className="bg-(--c-field) border-(--c-line) backdrop-blur-md overflow-hidden">
         <CardHeader>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <CardTitle className="text-white">Transaction Logs</CardTitle>
+            <CardTitle className="text-(--c-text)">Transaction Logs</CardTitle>
             <div className="relative w-full md:w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-(--c-muted)" />
               <Input
                 placeholder="Search by reference..."
-                className="pl-9 bg-black/20 border-white/10 text-white focus:ring-primary h-9 transition-all"
+                className="pl-9 bg-(--c-field) border-(--c-line) text-(--c-text) focus:ring-primary h-9 transition-all"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -325,7 +325,7 @@ export default function MerchantTransactionsPage() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="all" className="w-full" onValueChange={(v) => { setActiveTab(v as TabValue); setPage(1); }}>
-            <TabsList className="bg-black/20 border-white/10 mb-6 p-1">
+            <TabsList className="bg-(--c-field) border-(--c-line) mb-6 p-1">
               <TabsTrigger value="all" className="data-[state=active]:bg-primary data-[state=active]:text-black transition-all">All</TabsTrigger>
               <TabsTrigger value="onramp" className="data-[state=active]:bg-primary data-[state=active]:text-black transition-all">Onramp</TabsTrigger>
               <TabsTrigger value="offramp" className="data-[state=active]:bg-primary data-[state=active]:text-black transition-all">Offramp</TabsTrigger>
@@ -334,10 +334,10 @@ export default function MerchantTransactionsPage() {
             </TabsList>
 
             <TabsContent value={activeTab} className="mt-0">
-              <div className="rounded-xl border border-white/10 overflow-hidden bg-black/20 backdrop-blur-sm">
+              <div className="rounded-xl border border-(--c-line) overflow-hidden bg-(--c-field) backdrop-blur-sm">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-white/5 border-b border-white/10 text-zinc-400">
+                    <thead className="bg-(--c-field) border-b border-(--c-line) text-(--c-muted)">
                       <tr>
                         <th className="p-4 text-left font-medium">Reference</th>
                         <th className="p-4 text-left font-medium">Type</th>
@@ -353,25 +353,25 @@ export default function MerchantTransactionsPage() {
                           <td colSpan={6} className="p-12 text-center">
                             <div className="flex flex-col items-center gap-3">
                               <Loader2 className="h-8 w-8 text-primary animate-spin" />
-                              <p className="text-zinc-500 animate-pulse">Fetching records...</p>
+                              <p className="text-(--c-muted) animate-pulse">Fetching records...</p>
                             </div>
                           </td>
                         </tr>
                       ) : filtered.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="p-12 text-center text-zinc-500 italic">
+                          <td colSpan={6} className="p-12 text-center text-(--c-muted) italic">
                             No transaction history found.
                           </td>
                         </tr>
                       ) : (
                         filtered.map((tx) => (
-                          <tr key={tx.id} className="border-b border-white/5 hover:bg-white/5 transition-colors group">
-                            <td className="p-4 font-mono text-[11px] text-zinc-400">{tx.reference}</td>
+                          <tr key={tx.id} className="border-b border-(--c-line) hover:bg-(--c-field) transition-colors group">
+                            <td className="p-4 font-mono text-[11px] text-(--c-muted)">{tx.reference}</td>
                             <td className="p-4">{getTypeBadge(tx.type)}</td>
-                            <td className="p-4 text-[11px] text-zinc-400">{getDetails(tx)}</td>
+                            <td className="p-4 text-[11px] text-(--c-muted)">{getDetails(tx)}</td>
                             <td className="p-4">{getAmount(tx)}</td>
                             <td className="p-4">{getStatusBadge(tx.status)}</td>
-                            <td className="p-4 text-zinc-500 whitespace-nowrap text-[11px]">
+                            <td className="p-4 text-(--c-muted) whitespace-nowrap text-[11px]">
                               {format(new Date(tx.createdAt), "MMM d, HH:mm")}
                             </td>
                           </tr>
@@ -384,14 +384,14 @@ export default function MerchantTransactionsPage() {
 
               {meta && meta.totalPages > 1 && (
                 <div className="flex items-center justify-between py-4">
-                  <p className="text-xs text-zinc-500">
-                    Page <span className="text-white font-medium">{page}</span> of <span className="text-white font-medium">{meta.totalPages}</span>
+                  <p className="text-xs text-(--c-muted)">
+                    Page <span className="text-(--c-text) font-medium">{page}</span> of <span className="text-(--c-text) font-medium">{meta.totalPages}</span>
                   </p>
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="border-white/10 text-white h-8 text-[11px] hover:bg-white/5"
+                      className="border-(--c-line) text-(--c-text) h-8 text-[11px] hover:bg-(--c-field)"
                       disabled={page === 1}
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
                     >
@@ -400,7 +400,7 @@ export default function MerchantTransactionsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="border-white/10 text-white h-8 text-[11px] hover:bg-white/5"
+                      className="border-(--c-line) text-(--c-text) h-8 text-[11px] hover:bg-(--c-field)"
                       disabled={page >= meta.totalPages}
                       onClick={() => setPage((p) => p + 1)}
                     >

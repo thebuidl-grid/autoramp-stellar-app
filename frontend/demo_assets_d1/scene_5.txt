@@ -1,0 +1,1 @@
+Simulated again: a partial settlement. Five USDC were expected, but only two and a half were received. The settlement panel shows the expected, received, and outstanding amounts, so nothing is hidden, and the status is Partially Settled rather than Completed. The deposit hash here is a real testnet payment of two and a half USDC.

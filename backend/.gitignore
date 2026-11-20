@@ -64,6 +64,11 @@ yarn.lock
 
 .kiro/
 hello.json
+
+# Local Redis dump and one-off result files can contain customer data
+*.rdb
+results-*.json
+subaccount-update-results.json
 scripts/generate-token.ts
 .env.old
 

@@ -6,6 +6,8 @@ import { MFBService } from './safehaven.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../merchants/notifications/notifications.service';
 import { BalanceCacheService } from '../../common/services/balance-cache.service';
+import { SafehavenOfframpSettlementService } from '../ramp/safehaven-offramp-settlement.service';
+import { SafehavenOnrampSettlementService } from '../ramp/safehaven-onramp-settlement.service';
 
 describe('SafeHaven webhooks — merchant sub-account & delivery routing', () => {
   let service: MFBWebhookService;
@@ -76,6 +78,20 @@ describe('SafeHaven webhooks — merchant sub-account & delivery routing', () =>
         MFBWebhookService,
         { provide: PrismaService, useValue: prisma },
         { provide: MFBService, useValue: { transfer: jest.fn() } },
+        {
+          provide: SafehavenOnrampSettlementService,
+          useValue: {
+            findByDepositAccount: jest.fn().mockResolvedValue(null),
+            findByForwardReference: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: SafehavenOfframpSettlementService,
+          useValue: {
+            findByCollectionAccount: jest.fn().mockResolvedValue(null),
+            findByForwardReference: jest.fn().mockResolvedValue(null),
+          },
+        },
         { provide: MailService, useValue: { sendOtcInflowNotification: jest.fn() } },
         {
           provide: NotificationsService,

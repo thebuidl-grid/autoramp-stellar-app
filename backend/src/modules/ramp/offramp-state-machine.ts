@@ -49,6 +49,18 @@ export const TRANSITIONS: Readonly<Record<OfframpState, readonly OfframpState[]>
   EXPIRED: [],
 };
 
+/**
+ * States a PROVIDER-CONFIRMED payout may override. The provider paying the customer is a fact, whatever we concluded earlier from
+ * silence: an order our timeout expired, or a payout we marked failed, can still turn out to have been paid (a late or missed
+ * webhook). Only the provider's own "settled" counts, never our own inference, and only towards COMPLETED.
+ */
+export const RECOVERABLE_STATES: readonly OfframpState[] = ['EXPIRED', 'FAILED', 'REJECTED', 'INSUFFICIENT_LIQUIDITY'];
+
+export function canRecoverToCompleted(from: string | null | undefined): boolean {
+  const f = normalizeStatus(from);
+  return f !== null && RECOVERABLE_STATES.includes(f);
+}
+
 /** States with no outgoing transitions. (COMPLETED can still be reversed, so it is not final.) */
 export const FINAL_STATES: readonly OfframpState[] = OFFRAMP_STATES.filter((s) => TRANSITIONS[s].length === 0);
 

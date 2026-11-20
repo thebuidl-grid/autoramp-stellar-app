@@ -1,20 +1,52 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { IS_TESTNET } from "@/lib/constants/networks";
+import { connectFreighter, currentFreighterAddress, isFreighterAvailable, signWithFreighter } from "@/lib/stellar-freighter";
+import { isPending } from "@/lib/stellar-wc-restore";
+import {
+  connectWalletConnect,
+  disconnectWalletConnect,
+  findStellarSession,
+  onSessionDeleted,
+  signWithWalletConnect,
+  walletConnectProjectId,
+} from "@/lib/stellar-walletconnect";
 
 /**
- * Stellar wallet connection (Freighter/Varial, xBull, Albedo, Lobstr, Hana,
- * Rabet, WalletConnect, ...) via @creit.tech/stellar-wallets-kit.
+ * Stellar wallet connection: the Freighter browser extension when it is installed, otherwise WalletConnect (Reown):
+ * a QR code on desktop, wallet deep links on a phone.
  *
- * Mirrors the Stacks wallet hook: a module-level shared state + listeners so
- * every useStellarWallet() instance (header, sell panel, ...) stays in sync,
- * and the kit is lazily imported + initialized only on first use.
+ * Module-level shared state + listeners keep every useStellarWallet() instance (header, sell panel, ...) in sync.
+ * The WalletConnect client is lazy-loaded and only started when a wallet is being connected, or when there is a
+ * previous connection to restore.
  */
 
-type WalletState = { address: string | null; isConnecting: boolean };
+type WalletState = {
+  address: string | null;
+  isConnecting: boolean;
+  /** The WalletConnect pairing link while a connect is in progress (shown as a QR code / open-in-app links). */
+  connectUri: string | null;
+};
 
 const STELLAR_ADDRESS_KEY = "stellar-wallet-address";
+/** How the saved address connected: the browser extension, or WalletConnect. Decides how to sign and restore. */
+const STELLAR_KIND_KEY = "stellar-wallet-kind";
+type WalletKind = "freighter" | "walletconnect";
+
+function readKind(): WalletKind {
+  try {
+    return localStorage.getItem(STELLAR_KIND_KEY) === "freighter" ? "freighter" : "walletconnect";
+  } catch {
+    return "walletconnect";
+  }
+}
+function writeKind(kind: WalletKind) {
+  try {
+    localStorage.setItem(STELLAR_KIND_KEY, kind);
+  } catch {}
+}
+/** When a connect attempt started. Survives a page reload, so a returning page knows it is mid-connection. */
+const STELLAR_PENDING_KEY = "stellar-wallet-connect-pending";
 
 function readInitialStellarAddress(): string | null {
   try {
@@ -25,11 +57,31 @@ function readInitialStellarAddress(): string | null {
   }
 }
 
+function readPending(): number | null {
+  try {
+    const v = Number(localStorage.getItem(STELLAR_PENDING_KEY));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+function writePending() {
+  try {
+    localStorage.setItem(STELLAR_PENDING_KEY, String(Date.now()));
+  } catch {}
+}
+function clearPending() {
+  try {
+    localStorage.removeItem(STELLAR_PENDING_KEY);
+  } catch {}
+}
+
 let sharedState: WalletState = {
   address: readInitialStellarAddress(),
   isConnecting: false,
+  connectUri: null,
 };
-let kitInitialized = false;
+let connectAbort: AbortController | null = null;
 const listeners = new Set<() => void>();
 
 function setSharedState(next: Partial<WalletState>) {
@@ -37,62 +89,57 @@ function setSharedState(next: Partial<WalletState>) {
   listeners.forEach((l) => l());
 }
 
-async function getKit() {
-  const { StellarWalletsKit, Networks } = await import(
-    "@creit.tech/stellar-wallets-kit"
-  );
-  const { defaultModules } = await import(
-    "@creit.tech/stellar-wallets-kit/modules/utils"
-  );
-  if (!kitInitialized) {
-    // Freighter was renamed Varial. Show it as "Varial (formerly Freighter)" so users find it under
-    // either name; it talks to the same extension through @stellar/freighter-api.
-    const { VarialModule, VARIAL_ID } = await import(
-      "@creit.tech/stellar-wallets-kit/modules/varial"
-    );
-    class FreighterWalletModule extends VarialModule {
-      constructor() {
-        super();
-        this.productId = "freighter";
-        this.productName = "Varial (formerly Freighter)";
-        this.productUrl = "https://www.freighter.app/";
-        this.productIcon = "https://stellar.creit.tech/wallet-icons/freighter.png";
-      }
-      // The kit decides "installed" from a single 1s round trip and otherwise shows "Install", which
-      // opens the website even when the extension is there. Always offer the wallet and detect the
-      // extension when the user actually clicks it, with a clear error if it is missing.
-      async isAvailable() {
-        return typeof window !== "undefined";
-      }
-      async getAddress(params?: { skipRequestAccess?: boolean }) {
-        const w = window as unknown as { freighter?: unknown; varial?: unknown };
-        let present = !!(w.freighter || w.varial);
-        if (!present) {
-          present = await Promise.race<boolean>([
-            VarialModule.prototype.isAvailable.call(this),
-            new Promise<boolean>((r) => setTimeout(() => r(false), 4000)),
-          ]).catch(() => false);
-        }
-        if (!present) {
-          throw {
-            code: -1,
-            message:
-              "Varial (formerly Freighter) wasn't detected. Install it from https://www.varialwallet.com/, allow it on this site, then reload.",
-          };
-        }
-        return super.getAddress(params ?? {});
-      }
-    }
-    StellarWalletsKit.init({
-      modules: [
-        new FreighterWalletModule(),
-        ...defaultModules({ filterBy: (m) => m.productId !== VARIAL_ID }),
-      ],
-      network: IS_TESTNET ? Networks.TESTNET : Networks.PUBLIC,
-    });
-    kitInitialized = true;
+/** Record a connected address (from the modal or a recovered session). */
+function adoptAddress(address: string, kind: WalletKind = "walletconnect") {
+  writeKind(kind);
+  // Also settle "connecting": the modal's promise may never resolve after a mobile round trip.
+  setSharedState({ address, isConnecting: false, connectUri: null });
+  try {
+    localStorage.setItem(STELLAR_ADDRESS_KEY, address);
+  } catch {}
+  clearPending();
+}
+
+function clearAddress() {
+  try {
+    localStorage.removeItem(STELLAR_ADDRESS_KEY);
+    localStorage.removeItem(STELLAR_KIND_KEY);
+  } catch {}
+  clearPending();
+  setSharedState({ address: null, isConnecting: false, connectUri: null });
+}
+
+let syncing = false;
+
+/**
+ * Match our saved state to WalletConnect's persisted sessions. Recovers a connection the wallet approved while the
+ * browser was away (mobile round trip), and clears an address whose session no longer exists. Does nothing, and
+ * loads nothing, unless there is a saved address or a connect attempt in progress.
+ */
+async function syncFromSessions(): Promise<void> {
+  if (readKind() === "freighter" && sharedState.address) {
+    // Extension connections have no WalletConnect session; drop the address if access was revoked or the account changed.
+    const current = await currentFreighterAddress();
+    if (current && current !== sharedState.address) adoptAddress(current, "freighter");
+    return;
   }
-  return StellarWalletsKit;
+  if (syncing || typeof window === "undefined" || !walletConnectProjectId()) return;
+  const pending = isPending(readPending(), Date.now());
+  if (!sharedState.address && !pending) return;
+  syncing = true;
+  try {
+    const found = await findStellarSession();
+    if (found) {
+      if (found.address !== sharedState.address) adoptAddress(found.address);
+      else clearPending();
+    } else if (sharedState.address && !pending) {
+      clearAddress(); // saved address, but the wallet session is gone
+    }
+  } catch (err) {
+    console.warn("Could not check the Stellar wallet session", err);
+  } finally {
+    syncing = false;
+  }
 }
 
 export function useStellarWallet() {
@@ -105,45 +152,73 @@ export function useStellarWallet() {
     }
     const listener = () => setState(sharedState);
     listeners.add(listener);
+    // Coming back from a wallet app (tab visible again / restored from the back-forward cache).
+    const onReturn = () => {
+      if (document.visibilityState === "visible") void syncFromSessions();
+    };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("pageshow", onReturn);
+    const stopDeleted = onSessionDeleted(() => {
+      void syncFromSessions();
+    });
+    onReturn();
     return () => {
       listeners.delete(listener);
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("pageshow", onReturn);
+      stopDeleted();
     };
   }, []);
 
   const connectStellar = useCallback(async () => {
     if (sharedState.isConnecting) return;
-    setSharedState({ isConnecting: true });
-    try {
-      const kit = await getKit();
-      const { address } = await kit.authModal();
-      if (address) {
-        setSharedState({ address });
-        try {
-          localStorage.setItem(STELLAR_ADDRESS_KEY, address);
-        } catch {}
+    setSharedState({ isConnecting: true, connectUri: null });
+    // A browser extension is the fastest path: no QR code needed.
+    if (await isFreighterAvailable()) {
+      try {
+        const { address } = await connectFreighter();
+        adoptAddress(address, "freighter");
+      } catch (err) {
+        console.error("Freighter connect failed", err);
+        const message = (err as { message?: string })?.message;
+        if (message && typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("stellar-wallet-error", { detail: message }));
+        }
+        setSharedState({ isConnecting: false, connectUri: null });
       }
+      return;
+    }
+    writePending();
+    const controller = new AbortController();
+    connectAbort = controller;
+    try {
+      const { address } = await connectWalletConnect({
+        onUri: (uri) => setSharedState({ connectUri: uri }),
+        signal: controller.signal,
+      });
+      adoptAddress(address);
     } catch (err) {
       console.error("Stellar wallet connect failed", err);
       const message = (err as { message?: string })?.message;
-      if (message && typeof window !== "undefined") {
+      if (message && !/window was closed/i.test(message) && typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("stellar-wallet-error", { detail: message }));
       }
     } finally {
-      setSharedState({ isConnecting: false });
+      if (connectAbort === controller) connectAbort = null;
+      clearPending();
+      setSharedState({ isConnecting: false, connectUri: null });
     }
   }, []);
 
+  /** Close the connect panel without connecting. */
+  const cancelStellarConnect = useCallback(() => {
+    connectAbort?.abort();
+    setSharedState({ connectUri: null });
+  }, []);
+
   const disconnectStellar = useCallback(async () => {
-    try {
-      const kit = await getKit();
-      await kit.disconnect();
-    } catch {
-      // ignore
-    }
-    try {
-      localStorage.removeItem(STELLAR_ADDRESS_KEY);
-    } catch {}
-    setSharedState({ address: null });
+    if (readKind() !== "freighter") await disconnectWalletConnect();
+    clearAddress();
   }, []);
 
   /**
@@ -170,18 +245,11 @@ export function useStellarWallet() {
       }
       const address = sharedState.address;
       if (!address) throw new Error("No Stellar wallet connected");
-      const kit = await getKit();
-      const {
-        buildUsdcPaymentXdr,
-        submitSignedXdr,
-        STELLAR_NETWORK_PASSPHRASE,
-      } = await import("@/lib/stellar-funding");
+      const { buildUsdcPaymentXdr, submitSignedXdr } = await import("@/lib/stellar-funding");
       const xdr = await buildUsdcPaymentXdr(address, funding);
-      const { signedTxXdr } = await kit.signTransaction(xdr, {
-        networkPassphrase: STELLAR_NETWORK_PASSPHRASE,
-        address,
-      });
-      return submitSignedXdr(signedTxXdr);
+      const signedXdr =
+        readKind() === "freighter" ? await signWithFreighter(address, xdr) : await signWithWalletConnect(address, xdr);
+      return submitSignedXdr(signedXdr);
     },
     [],
   );
@@ -194,15 +262,7 @@ export function useStellarWallet() {
     async (xdr: string): Promise<string> => {
       const address = sharedState.address;
       if (!address) throw new Error("No Stellar wallet connected");
-      const kit = await getKit();
-      const { STELLAR_NETWORK_PASSPHRASE } = await import(
-        "@/lib/stellar-funding"
-      );
-      const { signedTxXdr } = await kit.signTransaction(xdr, {
-        networkPassphrase: STELLAR_NETWORK_PASSPHRASE,
-        address,
-      });
-      return signedTxXdr;
+      return readKind() === "freighter" ? signWithFreighter(address, xdr) : signWithWalletConnect(address, xdr);
     },
     [],
   );
@@ -211,6 +271,8 @@ export function useStellarWallet() {
     stellarAddress: state.address,
     isStellarConnected: !!state.address,
     isStellarConnecting: state.isConnecting,
+    stellarConnectUri: state.connectUri,
+    cancelStellarConnect,
     connectStellar,
     disconnectStellar,
     sendUsdc,

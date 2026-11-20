@@ -1,0 +1,1 @@
+I open the Bridge tab and click Connect Wallet. The wallet connects through the standard wallet picker, and the app shows the connected address on the Base Sepolia network, along with the available USDC balance.

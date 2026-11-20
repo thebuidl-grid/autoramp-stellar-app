@@ -1,106 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/database/prisma.service';
-import { TransactionSummaryDto } from './dto/transaction-summary.dto';
-import { GetAnalyticsDto, AnalyticsPeriod } from './dto/get-analytics.dto';
-import { AnalyticsDataPoint } from './dto/analytics-response.dto';
 
 @Injectable()
 export class TransactionsService {
   constructor(private readonly prisma: PrismaService) {}
-
-  async getAnalytics(query: GetAnalyticsDto): Promise<AnalyticsDataPoint[]> {
-    const { period } = query;
-    const now = new Date();
-    let startDate: Date;
-
-    // Determine start date based on period
-    switch (period) {
-      case AnalyticsPeriod.DAILY:
-        startDate = new Date(now.setDate(now.getDate() - 30)); // Last 30 days
-        break;
-      case AnalyticsPeriod.WEEKLY:
-        startDate = new Date(now.setDate(now.getDate() - 7 * 12)); // Last 12 weeks
-        break;
-      case AnalyticsPeriod.MONTHLY:
-        startDate = new Date(now.setMonth(now.getMonth() - 12)); // Last 12 months
-        break;
-      default:
-        startDate = new Date(now.setDate(now.getDate() - 30));
-    }
-
-    // Fetch raw data
-    const [onRamps, offRamps, swaps] = await Promise.all([
-      this.prisma.onrampTransaction.findMany({
-        where: { createdAt: { gte: startDate } },
-        select: { createdAt: true, amount: true },
-      }),
-      this.prisma.offrampTransaction.findMany({
-        where: { createdAt: { gte: startDate } },
-        select: { createdAt: true, fiatAmount: true },
-      }),
-      this.prisma.swapTransaction.findMany({
-        where: { createdAt: { gte: startDate } },
-        select: { createdAt: true, toAmount: true },
-      }),
-    ]);
-
-    // Helper to format date key
-    const getDateKey = (date: Date): string => {
-      const d = new Date(date);
-      if (period === AnalyticsPeriod.MONTHLY) {
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      }
-      if (period === AnalyticsPeriod.WEEKLY) {
-        const firstDay = new Date(d.setDate(d.getDate() - d.getDay()));
-        return `${firstDay.getFullYear()}-${String(firstDay.getMonth() + 1).padStart(2, '0')}-${String(firstDay.getDate()).padStart(2, '0')}`;
-      }
-      return d.toISOString().split('T')[0];
-    };
-
-    // Aggregate data
-    const analyticsMap = new Map<string, AnalyticsDataPoint>();
-
-    const processTransaction = (
-      items: any[],
-      type: 'onRamp' | 'offRamp' | 'swap',
-      amountKey: string,
-    ) => {
-      items.forEach((item) => {
-        const key = getDateKey(item.createdAt);
-        if (!analyticsMap.has(key)) {
-          analyticsMap.set(key, {
-            date: key,
-            onRampCount: 0,
-            offRampCount: 0,
-            swapCount: 0,
-            onRampVolume: 0,
-            offRampVolume: 0,
-            swapVolume: 0,
-          });
-        }
-        const entry = analyticsMap.get(key)!;
-        if (type === 'onRamp') {
-          entry.onRampCount++;
-          entry.onRampVolume += Number(item[amountKey] || 0);
-        } else if (type === 'offRamp') {
-          entry.offRampCount++;
-          entry.offRampVolume += Number(item[amountKey] || 0);
-        } else {
-          entry.swapCount++;
-          entry.swapVolume += Number(item[amountKey] || 0);
-        }
-      });
-    };
-
-    processTransaction(onRamps, 'onRamp', 'amount');
-    processTransaction(offRamps, 'offRamp', 'fiatAmount');
-    processTransaction(swaps, 'swap', 'toAmount');
-
-    // Sort by date
-    return Array.from(analyticsMap.values()).sort((a, b) =>
-      a.date.localeCompare(b.date),
-    );
-  }
 
   async getOnRamps(page: number, limit: number) {
     const [onramps, total] = await this.prisma.$transaction([
@@ -162,45 +65,13 @@ export class TransactionsService {
     };
   }
 
-  async getSummary(): Promise<TransactionSummaryDto> {
-    const [
-      totalOnRamps,
-      totalOnRampAmountResult,
-      totalOffRamps,
-      totalOffRampAmountResult,
-      totalSwaps,
-      totalSwapAmountResult,
-    ] = await this.prisma.$transaction([
-      this.prisma.onrampTransaction.count(),
-      this.prisma.onrampTransaction.aggregate({ _sum: { amount: true } }),
-      this.prisma.offrampTransaction.count(),
-      this.prisma.offrampTransaction.aggregate({ _sum: { fiatAmount: true } }),
-      this.prisma.swapTransaction.count(),
-      this.prisma.swapTransaction.aggregate({ _sum: { toAmount: true } }),
-    ]);
-
-    return {
-      onRamps: {
-        count: totalOnRamps,
-        totalAmount: totalOnRampAmountResult._sum.amount?.toNumber() || 0,
-      },
-      offRamps: {
-        count: totalOffRamps,
-        totalAmount: totalOffRampAmountResult._sum.fiatAmount?.toNumber() || 0,
-      },
-      swaps: {
-        count: totalSwaps,
-        totalAmount: totalSwapAmountResult._sum.toAmount?.toNumber() || 0,
-      },
-    };
-  }
-
   async getAllTransactions(
     page: number = 1,
     limit: number = 10,
     status?: string,
     type?: string,
     search?: string,
+    currency?: string,
   ) {
     const skip = (page - 1) * limit;
     const baseWhere: any = {
@@ -212,23 +83,29 @@ export class TransactionsService {
     }
 
     const orderBy = { createdAt: 'desc' as const };
+    const currencyUpper = currency?.trim().toUpperCase();
+    const whereFor = (field = 'currency'): any => ({
+      ...baseWhere,
+      ...(currencyUpper ? { [field]: { equals: currencyUpper, mode: 'insensitive' as const } } : {}),
+    });
 
     if (type === 'onramp') {
       const [data, total] = await Promise.all([
         this.prisma.onrampTransaction.findMany({
-          where: baseWhere,
+          where: whereFor(),
           include: { user: { select: { email: true } } },
           orderBy,
           skip,
           take: limit,
         }),
-        this.prisma.onrampTransaction.count({ where: baseWhere }),
+        this.prisma.onrampTransaction.count({ where: whereFor() }),
       ]);
       return {
         data: data.map((tx) => ({
           id: tx.id,
           reference: tx.reference,
           amount: tx.amount,
+          currency: tx.currency,
           status: tx.status,
           createdAt: tx.createdAt,
           type: 'onramp',
@@ -247,19 +124,20 @@ export class TransactionsService {
     if (type === 'offramp') {
       const [data, total] = await Promise.all([
         this.prisma.offrampTransaction.findMany({
-          where: baseWhere,
+          where: whereFor(),
           include: { user: { select: { email: true } } },
           orderBy,
           skip,
           take: limit,
         }),
-        this.prisma.offrampTransaction.count({ where: baseWhere }),
+        this.prisma.offrampTransaction.count({ where: whereFor() }),
       ]);
       return {
         data: data.map((tx) => ({
           id: tx.id,
           reference: tx.reference,
-          amount: tx.amount,
+          amount: tx.fiatAmount ?? tx.amount,
+          currency: tx.currency,
           fiatAmount: tx.fiatAmount,
           status: tx.status,
           createdAt: tx.createdAt,
@@ -279,19 +157,20 @@ export class TransactionsService {
     if (type === 'swap') {
       const [data, total] = await Promise.all([
         this.prisma.swapTransaction.findMany({
-          where: baseWhere,
+          where: whereFor('fromTokenType'),
           include: { user: { select: { email: true } } },
           orderBy,
           skip,
           take: limit,
         }),
-        this.prisma.swapTransaction.count({ where: baseWhere }),
+        this.prisma.swapTransaction.count({ where: whereFor('fromTokenType') }),
       ]);
       return {
         data: data.map((tx) => ({
           id: tx.id,
           reference: tx.reference,
           fromAmount: tx.fromAmount,
+          currency: tx.fromTokenType,
           toAmount: tx.toAmount,
           fromTokenType: tx.fromTokenType,
           toTokenType: tx.toTokenType,
@@ -313,19 +192,20 @@ export class TransactionsService {
     if (type === 'merchant_onramp') {
       const [data, total] = await Promise.all([
         this.prisma.merchantOnrampTransaction.findMany({
-          where: baseWhere,
+          where: whereFor(),
           include: { merchant: { select: { name: true } } },
           orderBy,
           skip,
           take: limit,
         }),
-        this.prisma.merchantOnrampTransaction.count({ where: baseWhere }),
+        this.prisma.merchantOnrampTransaction.count({ where: whereFor() }),
       ]);
       return {
         data: data.map((tx) => ({
           id: tx.id,
           reference: tx.reference,
           amount: tx.amount,
+          currency: tx.currency,
           status: tx.status,
           createdAt: tx.createdAt,
           type: 'merchant_onramp',
@@ -344,19 +224,20 @@ export class TransactionsService {
     if (type === 'merchant_offramp') {
       const [data, total] = await Promise.all([
         this.prisma.merchantOfframpTransaction.findMany({
-          where: baseWhere,
+          where: whereFor(),
           include: { merchant: { select: { name: true } } },
           orderBy,
           skip,
           take: limit,
         }),
-        this.prisma.merchantOfframpTransaction.count({ where: baseWhere }),
+        this.prisma.merchantOfframpTransaction.count({ where: whereFor() }),
       ]);
       return {
         data: data.map((tx) => ({
           id: tx.id,
           reference: tx.reference,
-          amount: tx.amount,
+          amount: tx.fiatAmount ?? tx.amount,
+          currency: tx.currency,
           fiatAmount: tx.fiatAmount,
           accountNumber: tx.accountNumber,
           accountName: tx.accountName,
@@ -379,19 +260,20 @@ export class TransactionsService {
     if (type === 'merchant_swap') {
       const [data, total] = await Promise.all([
         this.prisma.merchantSwapTransaction.findMany({
-          where: baseWhere,
+          where: whereFor('fromTokenType'),
           include: { merchant: { select: { name: true } } },
           orderBy,
           skip,
           take: limit,
         }),
-        this.prisma.merchantSwapTransaction.count({ where: baseWhere }),
+        this.prisma.merchantSwapTransaction.count({ where: whereFor('fromTokenType') }),
       ]);
       return {
         data: data.map((tx) => ({
           id: tx.id,
           reference: tx.reference,
           fromAmount: tx.fromAmount,
+          currency: tx.fromTokenType,
           toAmount: tx.toAmount,
           fromTokenType: tx.fromTokenType,
           toTokenType: tx.toTokenType,
@@ -413,19 +295,20 @@ export class TransactionsService {
     if (type === 'bank_transfer') {
       const [data, total] = await Promise.all([
         this.prisma.merchantBankTransfer.findMany({
-          where: baseWhere,
+          where: whereFor(),
           include: { merchant: { select: { name: true } } },
           orderBy,
           skip,
           take: limit,
         }),
-        this.prisma.merchantBankTransfer.count({ where: baseWhere }),
+        this.prisma.merchantBankTransfer.count({ where: whereFor() }),
       ]);
       return {
         data: data.map((tx) => ({
           id: tx.id,
           reference: tx.reference,
           amount: tx.amount,
+          currency: tx.currency,
           beneficiaryAccountNumber: tx.beneficiaryAccountNumber,
           beneficiaryAccountName: tx.beneficiaryAccountName,
           beneficiaryBankCode: tx.beneficiaryBankCode,
@@ -448,19 +331,20 @@ export class TransactionsService {
     if (type === 'otc') {
       const [data, total] = await Promise.all([
         this.prisma.otcTransaction.findMany({
-          where: baseWhere,
+          where: whereFor('token'),
           include: { user: { select: { email: true } } },
           orderBy,
           skip,
           take: limit,
         }),
-        this.prisma.otcTransaction.count({ where: baseWhere }),
+        this.prisma.otcTransaction.count({ where: whereFor('token') }),
       ]);
       return {
         data: data.map((tx) => ({
           id: tx.id,
           reference: tx.reference,
           amount: tx.amount,
+          currency: tx.token,
           status: tx.status,
           createdAt: tx.createdAt,
           type: 'otc',
@@ -479,19 +363,20 @@ export class TransactionsService {
     if (type === 'vas') {
       const [data, total] = await Promise.all([
         this.prisma.vasTransaction.findMany({
-          where: baseWhere,
+          where: whereFor(),
           include: { merchant: { select: { name: true } } },
           orderBy,
           skip,
           take: limit,
         }),
-        this.prisma.vasTransaction.count({ where: baseWhere }),
+        this.prisma.vasTransaction.count({ where: whereFor() }),
       ]);
       return {
         data: data.map((tx) => ({
           id: tx.id,
           reference: tx.reference,
           amount: tx.amount,
+          currency: tx.currency,
           serviceType: tx.serviceType,
           status: tx.status,
           createdAt: tx.createdAt,
@@ -513,6 +398,10 @@ export class TransactionsService {
       : {};
     const statusWhere = status ? { status: status as any } : {};
     const where = { ...statusWhere, ...searchWhere };
+    const whereForType = (field = 'currency'): any => ({
+      ...where,
+      ...(currencyUpper ? { [field]: { equals: currencyUpper, mode: 'insensitive' as const } } : {}),
+    });
 
     const fetchLimit = skip + limit;
 
@@ -537,131 +426,144 @@ export class TransactionsService {
       vasCount,
     ] = await Promise.all([
       this.prisma.onrampTransaction.findMany({
-        where,
+        where: whereForType(),
         orderBy,
         take: fetchLimit,
         select: {
           id: true,
           reference: true,
           amount: true,
+          currency: true,
           status: true,
           createdAt: true,
           userId: true,
         },
       }),
       this.prisma.offrampTransaction.findMany({
-        where,
+        where: whereForType(),
         orderBy,
         take: fetchLimit,
         select: {
           id: true,
           reference: true,
           amount: true,
+          fiatAmount: true,
+          currency: true,
+          tokenType: true,
           status: true,
           createdAt: true,
           userId: true,
         },
       }),
       this.prisma.swapTransaction.findMany({
-        where,
+        where: whereForType('fromTokenType'),
         orderBy,
         take: fetchLimit,
         select: {
           id: true,
           reference: true,
           fromAmount: true,
+          fromTokenType: true,
           status: true,
           createdAt: true,
           userId: true,
         },
       }),
       this.prisma.merchantOnrampTransaction.findMany({
-        where,
+        where: whereForType(),
         orderBy,
         take: fetchLimit,
         select: {
           id: true,
           reference: true,
           amount: true,
+          currency: true,
           status: true,
           createdAt: true,
           merchantId: true,
         },
       }),
       this.prisma.merchantOfframpTransaction.findMany({
-        where,
+        where: whereForType(),
         orderBy,
         take: fetchLimit,
         select: {
           id: true,
           reference: true,
           amount: true,
+          fiatAmount: true,
+          currency: true,
+          tokenType: true,
           status: true,
           createdAt: true,
           merchantId: true,
         },
       }),
       this.prisma.merchantSwapTransaction.findMany({
-        where,
+        where: whereForType('fromTokenType'),
         orderBy,
         take: fetchLimit,
         select: {
           id: true,
           reference: true,
           fromAmount: true,
+          fromTokenType: true,
           status: true,
           createdAt: true,
           merchantId: true,
         },
       }),
       this.prisma.merchantBankTransfer.findMany({
-        where,
+        where: whereForType(),
         orderBy,
         take: fetchLimit,
         select: {
           id: true,
           reference: true,
           amount: true,
+          currency: true,
           status: true,
           createdAt: true,
           merchantId: true,
         },
       }),
       this.prisma.otcTransaction.findMany({
-        where,
+        where: whereForType('token'),
         orderBy,
         take: fetchLimit,
         select: {
           id: true,
           reference: true,
           amount: true,
+          token: true,
           status: true,
           createdAt: true,
           userId: true,
         },
       }),
       this.prisma.vasTransaction.findMany({
-        where,
+        where: whereForType(),
         orderBy,
         take: fetchLimit,
         select: {
           id: true,
           reference: true,
           amount: true,
+          currency: true,
           status: true,
           createdAt: true,
           merchantId: true,
         },
       }),
-      this.prisma.onrampTransaction.count({ where }),
-      this.prisma.offrampTransaction.count({ where }),
-      this.prisma.swapTransaction.count({ where }),
-      this.prisma.merchantOnrampTransaction.count({ where }),
-      this.prisma.merchantOfframpTransaction.count({ where }),
-      this.prisma.merchantSwapTransaction.count({ where }),
-      this.prisma.merchantBankTransfer.count({ where }),
-      this.prisma.otcTransaction.count({ where }),
-      this.prisma.vasTransaction.count({ where }),
+      this.prisma.onrampTransaction.count({ where: whereForType() }),
+      this.prisma.offrampTransaction.count({ where: whereForType() }),
+      this.prisma.swapTransaction.count({ where: whereForType('fromTokenType') }),
+      this.prisma.merchantOnrampTransaction.count({ where: whereForType() }),
+      this.prisma.merchantOfframpTransaction.count({ where: whereForType() }),
+      this.prisma.merchantSwapTransaction.count({ where: whereForType('fromTokenType') }),
+      this.prisma.merchantBankTransfer.count({ where: whereForType() }),
+      this.prisma.otcTransaction.count({ where: whereForType('token') }),
+      this.prisma.vasTransaction.count({ where: whereForType() }),
     ]);
 
     const total =
@@ -683,7 +585,7 @@ export class TransactionsService {
       })),
       ...offrampAll.map((t) => ({
         ...t,
-        amount: t.amount,
+        amount: t.fiatAmount ?? t.amount,
         _type: 'offramp' as const,
       })),
       ...swapAll.map((t) => ({
@@ -698,7 +600,7 @@ export class TransactionsService {
       })),
       ...merchantOfframpAll.map((t) => ({
         ...t,
-        amount: t.amount,
+        amount: t.fiatAmount ?? t.amount,
         _type: 'merchant_offramp' as const,
       })),
       ...merchantSwapAll.map((t) => ({
@@ -746,6 +648,10 @@ export class TransactionsService {
         id: t.id,
         reference: t.reference,
         amount: t.amount,
+        // The combined admin list normalizes several source tables. Preserve each row's
+        // denomination so off-ramps show their payout fiat (KES/NGN/GHS), swaps show the
+        // source token, and the currency column does not become blank.
+        currency: t.currency ?? t.fromTokenType ?? t.token ?? null,
         status: t.status,
         createdAt: t.createdAt,
         type: t._type,

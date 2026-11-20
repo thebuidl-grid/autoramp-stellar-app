@@ -1,3 +1,5 @@
+import { randomInt } from 'crypto';
+
 /**
  * Generate transaction reference
  *
@@ -23,7 +25,8 @@ export function generateTrxReference(
   let result = '';
 
   for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    // crypto.randomInt: references identify money movements and must not be predictable.
+    result += chars.charAt(randomInt(chars.length));
   }
 
   return `${prefix || 'txn'}_${result}`;

@@ -25,6 +25,13 @@ COPY . .
 RUN pnpm run build
 RUN pnpm prune --prod
 
+# ---- migrate: full deps (prisma CLI is a devDependency) for `prisma migrate deploy` ----
+FROM base AS migrate
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json prisma.config.ts ./
+COPY prisma ./prisma
+CMD ["node_modules/.bin/prisma", "migrate", "deploy"]
+
 # ---- runtime: minimal image with only what's needed to run ----
 FROM node:${NODE_VERSION} AS runtime
 ENV NODE_ENV=production

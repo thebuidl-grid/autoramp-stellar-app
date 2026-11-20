@@ -5,12 +5,5 @@
   "compiler": "swc",
   "compilerOptions": {
     "deleteOutDir": true
-  },
-  "assets": [
-    {
-      "include": "modules/analytics/allowed-emails.json",
-      "outDir": "dist/modules/analytics",
-      "watchAssets": true
-    }
-  ]
+  }
 }

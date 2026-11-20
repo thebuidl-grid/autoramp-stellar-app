@@ -98,6 +98,7 @@ export class TransactionsService {
               tokenType: true,
               network: true,
               destinationAddress: true,
+              paymentReference: true,
             },
           })
         : [],
@@ -114,6 +115,7 @@ export class TransactionsService {
               bankCode: true,
               accountNumber: true,
               accountName: true,
+              paymentReference: true,
             },
           })
         : [],
@@ -130,6 +132,7 @@ export class TransactionsService {
               toTokenType: true,
               toAmount: true,
               exchangeRate: true,
+              transactionHash: true,
             },
           })
         : [],
@@ -148,6 +151,7 @@ export class TransactionsService {
               beneficiaryBankCode: true,
               beneficiaryAccountNumber: true,
               narration: true,
+              safehavenReference: true,
             },
           })
         : [],
@@ -165,6 +169,7 @@ export class TransactionsService {
           tokenType: t.tokenType,
           network: t.network,
           destinationAddress: t.destinationAddress,
+          providerReference: t.paymentReference ?? null,
         },
       })),
       ...offramps.map((t) => ({
@@ -179,6 +184,7 @@ export class TransactionsService {
           bankCode: t.bankCode,
           accountNumber: t.accountNumber,
           accountName: t.accountName,
+          providerReference: t.paymentReference ?? null,
         },
       })),
       ...swaps.map((t) => ({
@@ -194,6 +200,7 @@ export class TransactionsService {
           toAmount: t.toAmount?.toNumber?.() ?? Number(t.toAmount) ?? 0,
           exchangeRate:
             t.exchangeRate?.toNumber?.() ?? Number(t.exchangeRate) ?? 0,
+          transactionHash: t.transactionHash ?? null,
         },
       })),
       ...bankTransfers.map((t) => ({
@@ -207,6 +214,7 @@ export class TransactionsService {
           beneficiaryBankCode: t.beneficiaryBankCode,
           beneficiaryAccountNumber: t.beneficiaryAccountNumber,
           narration: t.narration,
+          providerReference: t.safehavenReference ?? null,
         },
       })),
     ];
@@ -216,8 +224,22 @@ export class TransactionsService {
     const total = unified.length;
     const paginated = unified.slice(skip, skip + limit);
 
+    // Fees we charged on this page's transactions (one query), so the dashboard can show fee and net.
+    const feeRows = paginated.length
+      ? await this.prisma.transactionFee.findMany({
+          where: { transactionId: { in: paginated.map((t) => t.id) } },
+          orderBy: { createdAt: 'asc' },
+        })
+      : [];
+    const feesById = new Map<string, Array<{ type: string; amount: string; currency: string }>>();
+    for (const f of feeRows) {
+      const list = feesById.get(f.transactionId) ?? [];
+      list.push({ type: f.feeType, amount: String(f.feeAmount), currency: f.feeCurrency });
+      feesById.set(f.transactionId, list);
+    }
+
     return {
-      data: paginated,
+      data: paginated.map((t) => ({ ...t, fees: feesById.get(t.id) ?? [] })),
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }

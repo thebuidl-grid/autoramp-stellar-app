@@ -3,6 +3,18 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../database/prisma.service';
 import { Resend } from 'resend';
 import * as bcrypt from 'bcrypt';
+import { randomInt } from 'crypto';
+import { AttemptLimiter } from '../../../common/security/attempt-limiter';
+
+/** A 6-digit code has only 1,000,000 values, so cap guesses per email+purpose, whatever the IP. */
+export const OTP_MAX_ATTEMPTS = 5;
+export const otpAttemptLimiter = new AttemptLimiter(
+  OTP_MAX_ATTEMPTS,
+  10 * 60 * 1000,
+  10 * 60 * 1000,
+);
+const otpKey = (email: string, purpose: string) =>
+  `otp:${purpose}:${email.toLowerCase()}`;
 
 /**
  * OTP Service
@@ -32,7 +44,8 @@ export class OtpService {
    * Generate a 6-digit OTP code
    */
   private generateOtpCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    // crypto.randomInt, not Math.random: a predictable generator makes codes guessable.
+    return randomInt(100000, 1000000).toString();
   }
 
   /**
@@ -63,6 +76,9 @@ export class OtpService {
         'Please wait before requesting a new OTP code',
       );
     }
+
+    // A fresh code starts a fresh set of guesses (new codes are limited to one per minute above).
+    otpAttemptLimiter.reset(otpKey(email, purpose));
 
     // Generate OTP
     const code = this.generateOtpCode();
@@ -178,6 +194,13 @@ export class OtpService {
     code: string,
     purpose: string = 'SIGNUP',
   ): Promise<boolean> {
+    const key = otpKey(email, purpose);
+    if (otpAttemptLimiter.lockedFor(key) > 0) {
+      throw new BadRequestException(
+        'Too many incorrect attempts. Please request a new code.',
+      );
+    }
+
     const otps = await this.prisma.otp.findMany({
       where: {
         email,
@@ -207,8 +230,20 @@ export class OtpService {
     }
 
     if (!validOtp) {
+      if (otpAttemptLimiter.recordFailure(key)) {
+        // Too many wrong guesses: burn the outstanding codes so they cannot be guessed further.
+        await this.prisma.otp.updateMany({
+          where: { email, purpose, isUsed: false },
+          data: { isUsed: true },
+        });
+        throw new BadRequestException(
+          'Too many incorrect attempts. Please request a new code.',
+        );
+      }
       throw new BadRequestException('Invalid or expired OTP code');
     }
+
+    otpAttemptLimiter.reset(key);
 
     // Mark OTP as used
     await this.prisma.otp.update({

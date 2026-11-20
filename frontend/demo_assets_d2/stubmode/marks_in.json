@@ -1,0 +1,57 @@
+{
+  "lead": 1.87,
+  "marks": [
+    {
+      "scene": "intro",
+      "t": 0.04
+    },
+    {
+      "scene": "connect",
+      "t": 50.0
+    },
+    {
+      "scene": "form",
+      "t": 70.99
+    },
+    {
+      "scene": "transfer",
+      "t": 93.73
+    },
+    {
+      "scene": "transfer__end",
+      "t": 131.81
+    },
+    {
+      "scene": "explorer_src",
+      "t": 143.43
+    },
+    {
+      "scene": "explorer_src__end",
+      "t": 154.94
+    },
+    {
+      "scene": "explorer_dst",
+      "t": 161.14
+    },
+    {
+      "scene": "explorer_dst__end",
+      "t": 169.94
+    },
+    {
+      "scene": "history",
+      "t": 176.53
+    },
+    {
+      "scene": "history__end",
+      "t": 192.35
+    },
+    {
+      "scene": "outro",
+      "t": 194.31
+    },
+    {
+      "scene": "end",
+      "t": 199.45
+    }
+  ]
+}

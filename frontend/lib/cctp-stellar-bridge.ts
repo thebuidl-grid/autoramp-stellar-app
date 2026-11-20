@@ -1,12 +1,14 @@
 /**
  * Client flow for EVM -> Stellar USDC over CCTP v2 (see lib/cctp-stellar.ts).
- * The user's wallet signs approve + burn. The Stellar mint is signed by the user's
- * Stellar wallet when one is connected (they pay the fee); otherwise the server relay submits it.
+ * The user's wallet signs approve + burn. The Stellar mint is signed by the user's Stellar wallet when one is connected (they pay the
+ * fee); if that wallet is missing, closed or fails, the server relay submits it, so the transfer is never left stuck.
  */
 import { writeContract, waitForTransactionReceipt } from "wagmi/actions";
 import { wagmiConfig } from "@/lib/wagmi-config";
 import { rpc, xdr } from "@stellar/stellar-sdk";
 import { invokeSoroban, stellarConfig } from "@/lib/cctp-stellar-source";
+import { bridgeApi } from "@/lib/api";
+import { completeMint, pollRelay } from "@/lib/cctp-complete";
 import { IS_TESTNET } from "@/lib/constants/networks";
 import {
   CCTP_FAST_FINALITY,
@@ -55,6 +57,8 @@ export interface BridgeEvmToStellarParams {
   stellarSigner?: (xdr: string) => Promise<string>;
   /** Give up waiting for attestation + mint after this long (default 30 min). */
   timeoutMs?: number;
+  /** The wallet could not finish the mint (closed, rejected, failed), so our relayer is finishing it. */
+  onFallback?: (reason: string) => void;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -104,73 +108,47 @@ export async function bridgeEvmToStellarViaCctp(
   await p.onSourceTx?.(burnHash);
 
   p.onStage?.("attesting");
-  const deadline = Date.now() + (p.timeoutMs ?? 30 * 60_000);
+  const window = p.timeoutMs ?? 30 * 60_000;
+  const hasWallet = !!(p.stellarSigner && p.stellarWalletAddress);
 
-  if (p.stellarSigner && p.stellarWalletAddress) {
-    let att: { message: string; attestation: string } | null = null;
-    while (Date.now() < deadline && !att) {
-      const r = await fetch(
-        `/api/bridge/attestation?domain=${sourceDomain}&tx=${burnHash}&network=${network}`,
-        { cache: "no-store" },
-      );
-      const b = (await r.json().catch(() => ({}))) as {
-        status?: string;
-        message?: string;
-        attestation?: string;
-      };
-      if (b.status === "complete" && b.message && b.attestation) {
-        att = { message: b.message, attestation: b.attestation };
-      } else {
-        await sleep(5000);
+  // First choice: the user's own Stellar wallet signs the mint (they pay the fee, nothing touches our relayer).
+  const walletMint = hasWallet
+    ? async () => {
+        const deadline = Date.now() + window;
+        let att: { message: string; attestation: string } | null = null;
+        while (Date.now() < deadline && !att) {
+          const r = await fetch(`/api/bridge/attestation?domain=${sourceDomain}&tx=${burnHash}&network=${network}`, { cache: "no-store" });
+          const b = (await r.json().catch(() => ({}))) as { status?: string; message?: string; attestation?: string };
+          if (b.status === "complete" && b.message && b.attestation) att = { message: b.message, attestation: b.attestation };
+          else await sleep(5000);
+        }
+        if (!att) throw new Error(`Timed out waiting for Circle's attestation. Burn ${burnHash} is safe; funds are not lost.`);
+        p.onStage?.("minting");
+        const cfg = stellarConfig();
+        return invokeSoroban(
+          new rpc.Server(cfg.rpcUrl),
+          cfg.passphrase,
+          p.stellarWalletAddress!,
+          STELLAR_CCTP_FORWARDER[network],
+          "mint_and_forward",
+          [
+            xdr.ScVal.scvBytes(Buffer.from(att.message.replace(/^0x/, ""), "hex")),
+            xdr.ScVal.scvBytes(Buffer.from(att.attestation.replace(/^0x/, ""), "hex")),
+          ],
+          p.stellarSigner!,
+        );
       }
-    }
-    if (!att) {
-      throw new Error(`Timed out waiting for Circle's attestation. Burn ${burnHash} is safe; funds are not lost.`);
-    }
-    p.onStage?.("minting");
-    const cfg = stellarConfig();
-    const mintHash = await invokeSoroban(
-      new rpc.Server(cfg.rpcUrl),
-      cfg.passphrase,
-      p.stellarWalletAddress,
-      STELLAR_CCTP_FORWARDER[network],
-      "mint_and_forward",
-      [
-        xdr.ScVal.scvBytes(Buffer.from(att.message.replace(/^0x/, ""), "hex")),
-        xdr.ScVal.scvBytes(Buffer.from(att.attestation.replace(/^0x/, ""), "hex")),
-      ],
-      p.stellarSigner,
-    );
-    p.onStage?.("done");
-    return { sourceTxHash: burnHash, destinationTxHash: mintHash };
-  }
-  let relayFailures = 0;
-  while (Date.now() < deadline) {
-    const res = await fetch("/api/bridge/stellar-relay", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ burnTxHash: burnHash, sourceDomain, network }),
+    : undefined;
+
+  // Safety net: if the wallet is closed, rejects, or fails, our relayer finishes the mint so the money is never left stuck.
+  const relayMint = () =>
+    pollRelay({
+      call: async () => (await bridgeApi.relayToStellar({ burnTxHash: burnHash, sourceDomain })).data,
+      onMinting: () => p.onStage?.("minting"),
+      deadline: Date.now() + window,
     });
-    const body = (await res.json().catch(() => ({}))) as {
-      status?: string;
-      mintTxHash?: string;
-      error?: string;
-    };
-    if (!res.ok) {
-      // The burn is already confirmed and safe, so ride out transient relay/RPC failures before giving up.
-      if (++relayFailures >= 5) {
-        throw new Error(body.error || `Relay failed (${res.status}). Burn ${burnHash} is safe; retry the mint.`);
-      }
-      await sleep(5000);
-      continue;
-    }
-    relayFailures = 0;
-    if (body.status === "complete" && body.mintTxHash) {
-      p.onStage?.("done");
-      return { sourceTxHash: burnHash, destinationTxHash: body.mintTxHash };
-    }
-    if (body.status === "minting") p.onStage?.("minting");
-    await sleep(5000);
-  }
-  throw new Error(`Timed out waiting for the Stellar mint. Burn ${burnHash} is safe; funds are not lost.`);
+
+  const { hash } = await completeMint({ walletMint, relayMint, onFallback: p.onFallback });
+  p.onStage?.("done");
+  return { sourceTxHash: burnHash, destinationTxHash: hash };
 }

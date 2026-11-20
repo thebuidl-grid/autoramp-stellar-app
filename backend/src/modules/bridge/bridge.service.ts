@@ -1,3 +1,6 @@
+import { currentChainNetwork } from '../../common/request-context';
+import { PayoutOrderRepository } from '../ramp/payout-order.repository';
+import { randomBytes } from 'crypto';
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
@@ -62,6 +65,7 @@ export class BridgeService {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly payoutOrders: PayoutOrderRepository,
   ) {
     this.initializeBridgeKit();
   }
@@ -128,10 +132,11 @@ export class BridgeService {
     }
 
     try {
-      const reference = `BRG-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const reference = `BRG-${Date.now()}-${randomBytes(6).toString('hex')}`;
 
       const bridgeTransaction = await this.prisma.bridgeTransaction.create({
         data: {
+          chainNetwork: currentChainNetwork(),
           reference,
           userId,
           merchantId,
@@ -258,9 +263,7 @@ export class BridgeService {
   ): Promise<void> {
     if (!offrampReference) return;
 
-    const order = await this.prisma.offrampProviderOrder.findUnique({
-      where: { reference: offrampReference },
-    });
+    const order = await this.payoutOrders.findByReference(offrampReference);
 
     if (!order) {
       this.logger.warn(
@@ -269,10 +272,7 @@ export class BridgeService {
       return;
     }
 
-    await this.prisma.offrampProviderOrder.update({
-      where: { id: order.id },
-      data: { bridgeReference, bridgeStatus: 'PENDING' },
-    });
+    await this.payoutOrders.update(order, { bridgeReference, bridgeStatus: 'PENDING' });
   }
 
   /**
@@ -286,9 +286,7 @@ export class BridgeService {
   ): Promise<void> {
     if (!offrampReference) return;
 
-    const order = await this.prisma.offrampProviderOrder.findUnique({
-      where: { reference: offrampReference },
-    });
+    const order = await this.payoutOrders.findByReference(offrampReference);
     if (!order) {
       this.logger.warn(
         `[bridge] funding mirror skipped: off-ramp order ${offrampReference} not found`,
@@ -297,14 +295,11 @@ export class BridgeService {
     }
 
     const normalized = status === 'COMPLETED' ? 'SUCCESS' : status;
-    await this.prisma.offrampProviderOrder.update({
-      where: { id: order.id },
-      data: {
-        bridgeStatus: normalized,
-        ...(normalized === 'SUCCESS' && opts.depositTxHash
-          ? { depositTxHash: opts.depositTxHash }
-          : {}),
-      },
+    await this.payoutOrders.update(order, {
+      bridgeStatus: normalized,
+      ...(normalized === 'SUCCESS' && opts.depositTxHash
+        ? { depositTxHash: opts.depositTxHash }
+        : {}),
     });
   }
 
@@ -436,20 +431,15 @@ export class BridgeService {
       },
     });
 
-    const offramp = await this.prisma.offrampProviderOrder.findUnique({
-      where: { reference: input.oframpFundingReference },
-    });
+    const offramp = await this.payoutOrders.findByReference(input.oframpFundingReference);
 
     let updatedOrder: any = null;
     if (offramp) {
-      updatedOrder = await this.prisma.offrampProviderOrder.update({
-        where: { id: offramp.id },
-        data: {
-          bridgeReference: bridge.reference,
-          bridgeStatus: newStatus,
-          receivedAmount: input.amount ?? bridgeTx.amount,
-          depositTxHash: input.destinationTxHash ?? offramp.depositTxHash,
-        },
+      updatedOrder = await this.payoutOrders.update(offramp, {
+        bridgeReference: bridge.reference,
+        bridgeStatus: newStatus,
+        receivedAmount: input.amount ?? bridgeTx.amount,
+        depositTxHash: input.destinationTxHash ?? offramp.depositTxHash,
       });
     } else {
       this.logger.warn(

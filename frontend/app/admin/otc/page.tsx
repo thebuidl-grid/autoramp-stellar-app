@@ -1,400 +1,284 @@
 "use client";
 
-import { useAdminOtcUsers, useAdminOtcTransactions } from "@/lib/hooks/use-admin-otc";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import {
-    Users,
-    ArrowUpRight,
-    BadgeCheck,
-    AlertCircle,
-    Loader2,
-    RefreshCw,
-    ShieldOff,
-    History,
-    CheckCircle2,
-    Clock,
-    XCircle,
-    Search,
-} from "lucide-react";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { formatDate } from "@/lib/utils";
-import { useState } from "react";
-import { adminApi } from "@/lib/api";
-import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { useDebounce } from "@/lib/hooks/use-debounce";
+import { RefreshCw, Search, X } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  CopyableId,
+  CursorPagination,
+  DataTable,
+  FilterBar,
+  Money,
+  PageHeader,
+  Pagination,
+  SegmentedTabs,
+  SelectField,
+  StatusBadge,
+  TabPanel,
+  type Column,
+} from "@/components/ui-shared";
+import { adminApi, type AdminOtcTransaction, type AdminUser } from "@/lib/api";
+import { useAdminOtcTransactions, useAdminOtcUsers } from "@/lib/hooks/use-admin-otc";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 
+const STATUSES = [
+  { value: "all", label: "All statuses" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "PENDING", label: "Pending" },
+  { value: "PROCESSING", label: "Processing" },
+  { value: "FAILED", label: "Failed" },
+];
+
+const TABS = [
+  { value: "transactions", label: "Transactions" },
+  { value: "users", label: "OTC users" },
+];
+
+const dateInput = "h-8 rounded-(--c-radius) border border-(--c-line) bg-(--c-field) px-2 text-(--c-text) focus-visible:border-(--c-signal) focus-visible:outline-none";
+
 export default function AdminOtcPage() {
-    const [usersPage, setUsersPage] = useState(1);
-    const txCursor = useCursorPagination();
-    const [activeTab, setActiveTab] = useState("transactions");
-    const [txSearch, setTxSearch] = useState("");
-    const [txStatusFilter, setTxStatusFilter] = useState("all");
-    const [txStartDate, setTxStartDate] = useState("");
-    const [txEndDate, setTxEndDate] = useState("");
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [tab, setTab] = useState("transactions");
 
-    const debouncedTxSearch = useDebounce(txSearch, 400);
+  // transactions (cursor paged)
+  const cursor = useCursorPagination();
+  const [pageSize, setPageSize] = useState(10);
+  const [draft, setDraft] = useState("");
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const tx = useAdminOtcTransactions(pageSize, status === "all" ? undefined : status, startDate || undefined, endDate || undefined, search || undefined, cursor.cursor);
 
-    const {
-        data: usersData,
-        isLoading: isUsersLoading,
-        refetch: refetchUsers,
-        isFetching: isUsersFetching
-    } = useAdminOtcUsers(usersPage, 20);
+  // users (page numbered)
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersPageSize, setUsersPageSize] = useState(10);
+  const users = useAdminOtcUsers(usersPage, usersPageSize);
 
-    const {
-        data: txData,
-        isLoading: isTxLoading,
-        refetch: refetchTx,
-        isFetching: isTxFetching
-    } = useAdminOtcTransactions(
-        20,
-        txStatusFilter === "all" ? undefined : txStatusFilter,
-        txStartDate || undefined,
-        txEndDate || undefined,
-        debouncedTxSearch || undefined,
-        txCursor.cursor,
-    );
+  // revoke: ask first, then do it, and say if it failed
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
-    const queryClient = useQueryClient();
+  const revoke = async (user: AdminUser) => {
+    setRevoking(user.id);
+    setRevokeError(null);
+    try {
+      await adminApi.updateUserFlags(user.id, { isOTCEnabled: false });
+      setConfirming(null);
+      await queryClient.invalidateQueries({ queryKey: ["admin-otc-users"] });
+    } catch (e) {
+      const message = (e as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ?? (e as Error)?.message ?? "Unknown error";
+      setRevokeError(`Couldn't revoke OTC access for ${user.email}: ${message}`);
+    } finally {
+      setRevoking(null);
+    }
+  };
 
-    // Users Data
-    const users = usersData?.users || [];
-    const usersPagination = usersData?.pagination;
-    const usersTotalPages = usersPagination?.totalPages || 1;
+  const submitSearch = (e: FormEvent) => {
+    e.preventDefault();
+    setSearch(draft.trim());
+    cursor.reset();
+  };
+  const filter = <T,>(set: (v: T) => void) => (v: T) => {
+    set(v);
+    cursor.reset();
+  };
 
-    // Transactions Data
-    const transactions = txData?.transactions || [];
+  const txColumns: Column<AdminOtcTransaction>[] = [
+    { key: "date", header: "Date", cell: (t) => <span className="text-(--c-muted)">{format(new Date(t.createdAt), "MMM d, HH:mm")}</span>, className: "whitespace-nowrap" },
+    {
+      key: "ref",
+      header: "Reference",
+      cell: (t) => (
+        <span className="block min-w-0">
+          <span onClick={(e) => e.stopPropagation()}>
+            <CopyableId value={t.reference} label="reference" />
+          </span>
+          <span className="block truncate text-xs text-(--c-muted)">{t.userEmail || "Unknown user"}</span>
+        </span>
+      ),
+    },
+    { key: "received", header: "Received", align: "right", cell: (t) => (t.fiatAmountReceived ? <Money value={String(t.fiatAmountReceived)} currency="NGN" /> : <span className="text-(--c-muted)">—</span>) },
+    { key: "status", header: "Status", cell: (t) => <StatusBadge status={t.status} /> },
+    {
+      key: "manage",
+      header: <span className="sr-only">Manage</span>,
+      align: "right",
+      cell: (t) => (
+        <Link href={`/admin/otc/transactions/${t.reference}`} onClick={(e) => e.stopPropagation()} aria-label={`Manage ${t.reference}`} className="text-(--c-signal-text) underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-(--c-signal)">
+          Manage
+        </Link>
+      ),
+    },
+  ];
 
-    const handleToggleOtc = async (userId: string, currentValue: boolean) => {
-        try {
-            await adminApi.updateUserFlags(userId, { isOTCEnabled: !currentValue });
-            queryClient.invalidateQueries({ queryKey: ["admin-otc-users"] });
-        } catch (e) {
-            console.error("Failed to update OTC flag", e);
+  const userColumns: Column<AdminUser>[] = [
+    {
+      key: "user",
+      header: "User",
+      cell: (u) => (
+        <span className="block min-w-0">
+          <span className="block truncate font-medium">{u.email}</span>
+        </span>
+      ),
+    },
+    { key: "status", header: "Status", cell: (u) => <StatusBadge status={u.suspended ? "SUSPENDED" : "ACTIVE"} /> },
+    { key: "joined", header: "Joined", cell: (u) => <span className="text-(--c-muted)">{format(new Date(u.createdAt), "MMM d, yyyy")}</span>, className: "whitespace-nowrap" },
+    {
+      key: "actions",
+      header: <span className="sr-only">Actions</span>,
+      align: "right",
+      cell: (u) =>
+        confirming === u.id ? (
+          <span className="inline-flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <span className="text-(--c-muted)">Remove OTC access?</span>
+            <button type="button" disabled={revoking === u.id} onClick={() => revoke(u)} className="rounded-(--c-radius) bg-(--c-danger) px-2 py-1 font-medium text-(--c-bg) disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--c-signal)">
+              {revoking === u.id ? "Removing…" : "Yes, revoke"}
+            </button>
+            <button type="button" disabled={revoking === u.id} onClick={() => setConfirming(null)} className="rounded-(--c-radius) border border-(--c-line) px-2 py-1 font-medium focus-visible:outline-2 focus-visible:outline-(--c-signal)">
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => { setRevokeError(null); setConfirming(u.id); }} aria-label={`Revoke OTC access for ${u.email}`} className="text-(--c-danger) underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-(--c-signal)">
+              Revoke
+            </button>
+            <Link href={`/admin/users/${u.id}`} aria-label={`View ${u.email}`} className="text-(--c-signal-text) underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-(--c-signal)">
+              View
+            </Link>
+          </span>
+        ),
+    },
+  ];
+
+  const refreshing = tab === "users" ? users.isFetching : tx.isFetching;
+  const txFiltered = !!search || status !== "all" || !!startDate || !!endDate;
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="OTC service"
+        description="Who can trade over the counter, and every OTC trade."
+        actions={
+          <button
+            type="button"
+            onClick={() => (tab === "users" ? users.refetch() : tx.refetch())}
+            disabled={refreshing}
+            className="inline-flex items-center gap-1.5 rounded-(--c-radius) border border-(--c-line) bg-(--c-field) px-3 py-1.5 font-medium transition-colors hover:bg-(--c-raised) disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--c-signal)"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden />
+            Refresh
+          </button>
         }
-    };
+      />
 
-    const handleRefresh = () => {
-        if (activeTab === "users") {
-            refetchUsers();
-        } else {
-            refetchTx();
-        }
-    };
+      <div>
+        <SegmentedTabs label="OTC views" idPrefix="otc" tabs={TABS} value={tab} onChange={setTab} />
 
-    const isRefreshing = activeTab === "users" ? isUsersFetching : isTxFetching;
+        <TabPanel value="transactions" current={tab} idPrefix="otc">
+          <div className="space-y-3 pt-3">
+            <FilterBar label="Filter OTC transactions">
+              <form onSubmit={submitSearch} role="search" className="relative w-full max-w-xs">
+                <Search aria-hidden className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-(--c-muted)" />
+                <input
+                  type="text"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="Find by reference or user"
+                  aria-label="Find by reference or user"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="h-8 w-full rounded-(--c-radius) border border-(--c-line) bg-(--c-field) pr-8 pl-8 placeholder:text-(--c-muted) focus-visible:border-(--c-signal) focus-visible:outline-none"
+                />
+                {draft || search ? (
+                  <button type="button" aria-label="Clear search" onClick={() => { setDraft(""); setSearch(""); cursor.reset(); }} className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-1 text-(--c-muted) hover:text-(--c-text) focus-visible:outline-2 focus-visible:outline-(--c-signal)">
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                ) : null}
+              </form>
+              <SelectField label="Status" value={status} options={STATUSES} onChange={(e) => filter(setStatus)(e.target.value)} />
+              <label className="inline-flex items-center gap-1.5 text-(--c-muted)">
+                From
+                <input type="date" value={startDate} onChange={(e) => filter(setStartDate)(e.target.value)} className={dateInput} />
+              </label>
+              <label className="inline-flex items-center gap-1.5 text-(--c-muted)">
+                To
+                <input type="date" value={endDate} onChange={(e) => filter(setEndDate)(e.target.value)} className={dateInput} />
+              </label>
+            </FilterBar>
 
-    const getStatusBadge = (status: string) => {
-        switch (status?.toUpperCase()) {
-            case "COMPLETED":
-                return (
-                    <Badge className="bg-green-100 text-green-700 hover:bg-green-100 flex items-center gap-1 w-fit">
-                        <CheckCircle2 className="h-3 w-3" /> Completed
-                    </Badge>
-                );
-            case "PENDING":
-                return (
-                    <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 flex items-center gap-1 w-fit">
-                        <Clock className="h-3 w-3" /> Pending
-                    </Badge>
-                );
-            case "PROCESSING":
-                return (
-                    <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 flex items-center gap-1 w-fit">
-                        <RefreshCw className="h-3 w-3 animate-spin" /> Processing
-                    </Badge>
-                );
-            case "FAILED":
-                return (
-                    <Badge className="bg-red-100 text-red-700 hover:bg-red-100 flex items-center gap-1 w-fit">
-                        <XCircle className="h-3 w-3" /> Failed
-                    </Badge>
-                );
-            default:
-                return (
-                    <Badge variant="outline" className="flex items-center gap-1 w-fit">
-                        {status || "UNKNOWN"}
-                    </Badge>
-                );
-        }
-    };
+            <DataTable
+              caption="OTC transactions"
+              columns={txColumns}
+              rows={tx.data?.transactions}
+              getRowId={(t) => t.id}
+              isLoading={tx.isLoading}
+              error={tx.error as { message?: string } | null}
+              errorTitle="Couldn't load OTC transactions"
+              onRetry={() => tx.refetch()}
+              emptyTitle={txFiltered ? "No OTC transactions match these filters" : "No OTC transactions yet"}
+              onRowClick={(t) => router.push(`/admin/otc/transactions/${t.reference}`)}
+              footer={
+                <CursorPagination
+                  pageIndex={cursor.pageNumber}
+                  pageSize={pageSize}
+                  total={tx.data?.total}
+                  hasNewer={cursor.canGoPrevious}
+                  hasOlder={!!tx.data?.hasMore && !!tx.data?.nextCursor}
+                  onNewer={cursor.goPrevious}
+                  onOlder={() => tx.data?.nextCursor && cursor.goNext(tx.data.nextCursor)}
+                  onPageSizeChange={(n) => {
+                    setPageSize(n);
+                    cursor.reset();
+                  }}
+                  disabled={tx.isFetching}
+                />
+              }
+            />
+          </div>
+        </TabPanel>
 
-    return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">OTC Service</h1>
-                    <p className="text-muted-foreground">
-                        Manage OTC users and monitor OTC transactions.
-                    </p>
-                </div>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRefresh}
-                    disabled={isRefreshing}
-                    className="gap-2"
-                >
-                    <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                    Refresh
-                </Button>
-            </div>
-
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="mb-4">
-                    <TabsTrigger value="transactions">Transactions</TabsTrigger>
-                    <TabsTrigger value="users">OTC Users</TabsTrigger>
-                </TabsList>
-
-                {/* TRANSACTIONS TAB */}
-                <TabsContent value="transactions">
-                    <Card>
-                        <CardHeader>
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <CardTitle className="text-base">OTC Transactions</CardTitle>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <div className="relative">
-                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                        <Input
-                                            type="search"
-                                            placeholder="Search reference or user..."
-                                            className="w-[200px] lg:w-[250px] pl-8 h-9"
-                                            value={txSearch}
-                                            onChange={(e) => { setTxSearch(e.target.value); txCursor.reset(); }}
-                                        />
-                                    </div>
-                                    <Select value={txStatusFilter} onValueChange={(val) => { setTxStatusFilter(val); txCursor.reset(); }}>
-                                        <SelectTrigger className="w-[150px] h-9">
-                                            <SelectValue placeholder="Status" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Statuses</SelectItem>
-                                            <SelectItem value="COMPLETED">Completed</SelectItem>
-                                            <SelectItem value="PENDING">Pending</SelectItem>
-                                            <SelectItem value="PROCESSING">Processing</SelectItem>
-                                            <SelectItem value="FAILED">Failed</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <Input
-                                        type="date"
-                                        className="w-[150px] h-9"
-                                        value={txStartDate}
-                                        onChange={(e) => { setTxStartDate(e.target.value); txCursor.reset(); }}
-                                        placeholder="Start date"
-                                    />
-                                    <Input
-                                        type="date"
-                                        className="w-[150px] h-9"
-                                        value={txEndDate}
-                                        onChange={(e) => { setTxEndDate(e.target.value); txCursor.reset(); }}
-                                        placeholder="End date"
-                                    />
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            {isTxLoading ? (
-                                <div className="flex items-center justify-center h-32">
-                                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                                </div>
-                            ) : transactions.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-12 gap-2 text-center opacity-60">
-                                    <History className="w-10 h-10" />
-                                    <p className="font-medium">No OTC transactions yet</p>
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="divide-y divide-border rounded-lg border overflow-hidden">
-                                        <div className="grid grid-cols-[auto_1fr_auto_auto] gap-4 px-4 py-2 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            <span>Date</span>
-                                            <span>Reference / User</span>
-                                            <span className="justify-self-center">Status</span>
-                                            <span className="justify-self-end">Action</span>
-                                        </div>
-
-                                        {transactions.map((tx) => (
-                                            <div
-                                                key={tx.id}
-                                                className="grid grid-cols-[auto_1fr_auto_auto] gap-4 items-center px-4 py-3 hover:bg-muted/30 transition-colors"
-                                            >
-                                                <div className="text-xs text-muted-foreground whitespace-nowrap min-w-[100px]">
-                                                    {format(new Date(tx.createdAt), "MMM d, HH:mm")}
-                                                </div>
-
-                                                <div className="min-w-0">
-                                                    <p className="font-medium font-mono text-sm">{tx.reference}</p>
-                                                    <p className="text-xs text-muted-foreground truncate">
-                                                        {tx.userEmail || "Unknown User"}
-                                                    </p>
-                                                </div>
-
-                                                <div className="justify-self-center">
-                                                    {getStatusBadge(tx.status)}
-                                                </div>
-
-                                                <div className="justify-self-end">
-                                                    <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs gap-1">
-                                                        <Link href={`/admin/otc/transactions/${tx.reference}`}>
-                                                            Manage <ArrowUpRight className="w-3 h-3" />
-                                                        </Link>
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    {(txCursor.canGoPrevious || txData?.hasMore) && (
-                                        <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                                            <p className="text-sm text-muted-foreground">
-                                                Page {txCursor.pageNumber}{txData?.total ? ` — ${txData.total} total` : ""}
-                                            </p>
-                                            <div className="flex gap-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    disabled={!txCursor.canGoPrevious || isTxFetching}
-                                                    onClick={txCursor.goPrevious}
-                                                >
-                                                    Previous
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    disabled={!txData?.hasMore || isTxFetching}
-                                                    onClick={() => txData?.nextCursor && txCursor.goNext(txData.nextCursor)}
-                                                >
-                                                    Next
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* USERS TAB */}
-                <TabsContent value="users">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-base">OTC-Enabled Accounts</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {isUsersLoading ? (
-                                <div className="flex items-center justify-center h-32">
-                                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                                </div>
-                            ) : users.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-12 gap-2 text-center opacity-60">
-                                    <Users className="w-10 h-10" />
-                                    <p className="font-medium">No OTC users yet</p>
-                                    <p className="text-sm text-muted-foreground">
-                                        Enable OTC access for users via the User Management page.
-                                    </p>
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="divide-y divide-border rounded-lg border overflow-hidden">
-                                        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 px-4 py-2 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            <span>User</span>
-                                            <span className="justify-self-center">Status</span>
-                                            <span className="justify-self-center">Joined</span>
-                                            <span className="justify-self-end">Actions</span>
-                                        </div>
-
-                                        {users.map((user) => (
-                                            <div
-                                                key={user.id}
-                                                className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-4 py-3 hover:bg-muted/30 transition-colors"
-                                            >
-                                                <div className="min-w-0">
-                                                    <p className="font-medium truncate text-sm">{user.email}</p>
-                                                    <p className="text-[10px] font-mono text-muted-foreground truncate">
-                                                        {user.id.slice(0, 16)}…
-                                                    </p>
-                                                </div>
-
-                                                <div className="justify-self-center">
-                                                    {user.suspended ? (
-                                                        <span className="flex items-center gap-1 text-xs font-medium text-destructive bg-destructive/10 px-2 py-0.5 rounded-full">
-                                                            <ShieldOff className="w-3 h-3" /> Suspended
-                                                        </span>
-                                                    ) : (
-                                                        <span className="flex items-center gap-1 text-xs font-medium text-green-600 bg-green-500/10 px-2 py-0.5 rounded-full">
-                                                            <BadgeCheck className="w-3 h-3" /> Active
-                                                        </span>
-                                                    )}
-                                                </div>
-
-                                                <div className="justify-self-center text-xs text-muted-foreground whitespace-nowrap">
-                                                    {formatDate(user.createdAt)}
-                                                </div>
-
-                                                <div className="justify-self-end flex items-center gap-2">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                                                        onClick={() => handleToggleOtc(user.id, true)}
-                                                        title="Revoke OTC access"
-                                                    >
-                                                        Revoke
-                                                    </Button>
-                                                    <Button asChild variant="outline" size="sm" className="h-7 px-2 text-xs gap-1">
-                                                        <Link href={`/admin/users/${user.id}`}>
-                                                            View <ArrowUpRight className="w-3 h-3" />
-                                                        </Link>
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    {usersTotalPages > 1 && (
-                                        <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                                            <p className="text-sm text-muted-foreground">
-                                                Page {usersPage} of {usersTotalPages}
-                                            </p>
-                                            <div className="flex gap-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    disabled={usersPage <= 1 || isUsersFetching}
-                                                    onClick={() => setUsersPage((p) => p - 1)}
-                                                >
-                                                    Previous
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    disabled={usersPage >= usersTotalPages || isUsersFetching}
-                                                    onClick={() => setUsersPage((p) => p + 1)}
-                                                >
-                                                    Next
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-            </Tabs>
-        </div>
-    );
+        <TabPanel value="users" current={tab} idPrefix="otc">
+          <div className="space-y-3 pt-3">
+            {revokeError ? (
+              <p role="alert" className="rounded-(--c-radius) border border-(--c-danger) px-3 py-2 text-(--c-danger)">
+                {revokeError}
+              </p>
+            ) : null}
+            <DataTable
+              caption="OTC-enabled accounts"
+              columns={userColumns}
+              rows={users.data?.users}
+              getRowId={(u) => u.id}
+              isLoading={users.isLoading}
+              error={users.error as { message?: string } | null}
+              errorTitle="Couldn't load OTC users"
+              onRetry={() => users.refetch()}
+              emptyTitle="No OTC users yet"
+              emptyHint="Turn on OTC access for someone from their page under Users."
+              footer={
+                <Pagination
+                  page={usersPage}
+                  pageSize={usersPageSize}
+                  total={users.data?.pagination?.total ?? 0}
+                  onPageChange={setUsersPage}
+                  onPageSizeChange={(n) => {
+                    setUsersPageSize(n);
+                    setUsersPage(1);
+                  }}
+                  disabled={users.isFetching}
+                />
+              }
+            />
+          </div>
+        </TabPanel>
+      </div>
+    </div>
+  );
 }

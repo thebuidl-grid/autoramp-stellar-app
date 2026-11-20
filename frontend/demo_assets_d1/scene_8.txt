@@ -1,0 +1,1 @@
+Simulated: a reversal. This payout completed, and was then reversed. The reversal is linked to the transaction, with the amount, the reason, and the state it was in before the reversal, and the history shows Completed followed by Reversed.

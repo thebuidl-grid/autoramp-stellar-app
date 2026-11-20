@@ -1,0 +1,1 @@
+In the transaction history tab, the transfer appears at the top, listed as a Bridge, from Base Sepolia to Stellar Testnet, with a completed status. Expanding it shows the amount, the protocol, and both transaction hashes, linked to their block explorers. This is the live AutoRamp API, so older entries from the same account are listed below.

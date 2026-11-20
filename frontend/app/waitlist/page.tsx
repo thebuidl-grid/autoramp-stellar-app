@@ -9,18 +9,19 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { HeroBackground } from "@/components/hero/hero-background";
 import { waitlistApi } from "@/lib/api";
+import { COUNTRIES, detectFromInternational, findCountry } from "@/lib/countries";
 import {
+  EMPTY_WAITLIST_FORM,
   WAITLIST_USER_TYPES,
-  normalizePhone,
+  composePhone,
+  readOrigin,
   validateWaitlistForm,
   type WaitlistErrors,
   type WaitlistForm,
 } from "@/lib/waitlist";
 
-const EMPTY: WaitlistForm = { name: "", email: "", phoneNumber: "", userType: "" };
-
 export default function WaitlistPage() {
-  const [form, setForm] = useState<WaitlistForm>(EMPTY);
+  const [form, setForm] = useState<WaitlistForm>(EMPTY_WAITLIST_FORM);
   const [errors, setErrors] = useState<WaitlistErrors>({});
   const [status, setStatus] = useState<"idle" | "loading" | "done">("idle");
   const [formError, setFormError] = useState<string | null>(null);
@@ -30,6 +31,17 @@ export default function WaitlistPage() {
     // Clear a field's error as soon as the person edits it.
     setErrors((e) => (e[key] ? { ...e, [key]: undefined } : e));
   };
+
+  /** Typing is kept as-is, but pasting a full "+234 801 ..." number switches the country for you. */
+  function onPhoneChange(value: string) {
+    const detected = detectFromInternational(value, form.phoneCountry);
+    if (detected) {
+      setForm((f) => ({ ...f, phoneCountry: detected.country.iso, phoneNumber: detected.national }));
+    } else {
+      set("phoneNumber", value);
+    }
+    setErrors((e) => (e.phoneNumber ? { ...e, phoneNumber: undefined } : e));
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,8 +55,10 @@ export default function WaitlistPage() {
       await waitlistApi.join({
         name: form.name.trim(),
         email: form.email.trim(),
-        phoneNumber: normalizePhone(form.phoneNumber),
+        phoneNumber: composePhone(form),
+        phoneCountry: form.phoneCountry,
         userType: form.userType,
+        ...readOrigin(window.location, document.referrer),
         source: "waitlist-page",
       });
       setStatus("done");
@@ -115,19 +129,38 @@ export default function WaitlistPage() {
               </Field>
 
               <Field id="wl-phone" label="Phone number" error={errors.phoneNumber}>
-                <Input
-                  id="wl-phone"
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  placeholder="+234 801 234 5678"
-                  className="h-11 text-base"
-                  value={form.phoneNumber}
-                  onChange={(e) => set("phoneNumber", e.target.value)}
-                  disabled={busy}
-                  aria-invalid={!!errors.phoneNumber}
-                  aria-describedby={errors.phoneNumber ? "wl-phone-error" : undefined}
-                />
+                <div className="flex gap-2">
+                  <select
+                    aria-label="Country code"
+                    className="h-11 w-[8.5rem] shrink-0 rounded-md border border-input bg-background px-2 text-base"
+                    value={form.phoneCountry}
+                    onChange={(e) => set("phoneCountry", e.target.value)}
+                    disabled={busy}
+                  >
+                    {COUNTRIES.map((c) => (
+                      <option key={c.iso} value={c.iso}>
+                        {c.iso} +{c.dial}
+                      </option>
+                    ))}
+                  </select>
+                  <Input
+                    id="wl-phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel-national"
+                    placeholder="801 234 5678"
+                    className="h-11 min-w-0 flex-1 text-base"
+                    value={form.phoneNumber}
+                    onChange={(e) => onPhoneChange(e.target.value)}
+                    disabled={busy}
+                    aria-invalid={!!errors.phoneNumber}
+                    aria-describedby={errors.phoneNumber ? "wl-phone-error" : "wl-phone-hint"}
+                  />
+                </div>
+                <p id="wl-phone-hint" className="text-xs text-muted-foreground">
+                  {findCountry(form.phoneCountry)?.name} (+{findCountry(form.phoneCountry)?.dial}). You can also
+                  paste the full number starting with +.
+                </p>
               </Field>
 
               <fieldset className="space-y-2" disabled={busy}>

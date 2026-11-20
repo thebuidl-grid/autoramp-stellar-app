@@ -2,19 +2,18 @@
 
 import { AmountInput } from "./amount-input";
 import { CurrencySelector } from "./currency-selector";
-import { cn } from "@/lib/utils"; // Assuming you have a cn utility, otherwise use standard string
 
 interface SwapSectionProps {
   label: string;
   amount: string;
   onAmountChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  currencyType: "NGN" | "CNGN" | "USDC" | "USDT" | "USDCX";
+  currencyType: "NGN" | "GHS" | "KES" | "CNGN" | "USDC" | "USDT" | "USDCX";
   onCurrencyClick?: () => void;
+  /** Second line on the currency pill, e.g. the network. */
+  currencyDetail?: string;
   showBaseLogo?: boolean;
   disabled?: boolean;
   isLoading?: boolean;
-
-  // New Props
   userBalance?: string;
   onPercentageClick?: (value: string) => void;
   footer?: React.ReactNode;
@@ -26,6 +25,7 @@ export function SwapSection({
   onAmountChange,
   currencyType,
   onCurrencyClick,
+  currencyDetail,
   disabled = false,
   isLoading = false,
   userBalance,
@@ -34,63 +34,59 @@ export function SwapSection({
 }: SwapSectionProps) {
   const handlePercent = (percent: number) => {
     if (userBalance === undefined || !onPercentageClick) return;
-
-    // Calculate percentage as number (safe for this transient UI logic)
     const value = parseFloat(userBalance) * percent;
-
     // Standardize to 6 decimals (USDC/CNGN)
-    const formatted = parseFloat(value.toFixed(6)).toString();
-
-    onPercentageClick(formatted);
+    onPercentageClick(parseFloat(value.toFixed(6)).toString());
   };
 
   return (
-    <div className="space-y-3 bg-black/50 rounded-xl border border-white/10 shadow-2xl p-4 lg:p-6">
-      <div className="flex justify-between items-center">
-        <label className="text-xs text-white/50">{label}</label>
+    <div className="ramp-field p-4 lg:p-5 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="ramp-label">{label}</span>
 
-        {/* Only show buttons if we have a balance and a handler */}
         {userBalance !== undefined && onPercentageClick && !disabled && (
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             {[0.25, 0.5, 1].map((percent) => (
               <button
                 key={percent}
                 type="button"
                 onClick={() => handlePercent(percent)}
-                className={cn(
-                  "text-[10px] font-medium px-2 py-1 rounded-md transition-colors",
-                  "bg-white/5 hover:bg-white/10 text-white/70 hover:text-white",
-                )}
+                className="rounded-md bg-(--r-raised) px-2 py-1 text-xs font-medium text-(--r-muted) transition-colors hover:text-(--r-text)"
               >
-                {percent === 1 ? "100%" : `${percent * 100}%`}
+                {percent === 1 ? "Max" : `${percent * 100}%`}
               </button>
             ))}
           </div>
         )}
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <AmountInput
-            value={amount}
-            onChange={onAmountChange}
-            disabled={disabled}
-            isLoading={isLoading}
-          />
-          <CurrencySelector type={currencyType} onClick={onCurrencyClick} />
-        </div>
-        {/* Optional: Show balance text below input for reference */}
-        {userBalance !== undefined && (
-          <div className="text-right text-[10px] text-white/30">
-            Balance:{" "}
+      <div className="flex items-center justify-between gap-3">
+        <AmountInput
+          value={amount}
+          onChange={onAmountChange}
+          disabled={disabled}
+          isLoading={isLoading}
+          label={label}
+        />
+        <CurrencySelector type={currencyType} onClick={onCurrencyClick} detail={currencyDetail} />
+      </div>
+
+      {userBalance !== undefined && (
+        <div className="text-right text-xs text-(--r-muted)">
+          Balance{" "}
+          <span className="ramp-amount text-(--r-text)">
             {parseFloat(userBalance).toLocaleString(undefined, {
               maximumFractionDigits: 6,
             })}
-          </div>
-        )}
-        
-        {footer && <div className="mt-2 pt-2 border-t border-white/5">{footer}</div>}
-      </div>
+          </span>
+        </div>
+      )}
+
+      {footer && (
+        <div className="border-t border-(--r-line) pt-3 text-xs text-(--r-muted)">
+          {footer}
+        </div>
+      )}
     </div>
   );
 }

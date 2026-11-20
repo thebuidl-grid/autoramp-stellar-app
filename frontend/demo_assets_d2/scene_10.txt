@@ -1,0 +1,1 @@
+Because this transfer ends on Base, the Base wallet connects first: it will receive the USDC and sign the final mint. Then, because the transfer starts on Stellar, I click Connect Stellar. The app uses the Stellar Wallets Kit, which lists the supported Stellar wallets, and I choose Rabet. Both wallets are now connected.

@@ -1,0 +1,21 @@
+{
+  "wallet_evm": "0x6d07c4f69578DF665b21d1296aF2D3D482F4D819",
+  "wallet_stellar": "GAPF7GOEVDR7BOQVBSJNKLDECIYZ2HGHOUFLV5QSW6UB7THKESPYEDR5",
+  "inbound": {
+    "amount": "2",
+    "source_tx": "0xd7d7b5625f913003d653b7274a7e3d55126364cb297a034e905bc0a9662d2dae",
+    "dest_tx": "486e2f83685efad8287dac7312de7063fc241053814f01789f0b070632c5259e",
+    "reference": "BRG-1794344344-1"
+  },
+  "bridges": [
+    {
+      "ref": "BRG-1794344344-1",
+      "fromChain": "Base_Sepolia",
+      "toChain": "Stellar_Testnet",
+      "amount": "2000000",
+      "source": "0xd7d7b5625f913003d653b7274a7e3d55126364cb297a034e905bc0a9662d2dae",
+      "dest": "486e2f83685efad8287dac7312de7063fc241053814f01789f0b070632c5259e",
+      "createdAt": "2026-11-10T20:59:04.000Z"
+    }
+  ]
+}

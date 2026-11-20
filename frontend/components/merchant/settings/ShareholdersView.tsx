@@ -32,7 +32,7 @@ interface ShareholdersViewProps { }
 const DisplayField = ({ label, value }: { label: string, value?: string | number }) => (
     <div className="space-y-1">
         <Label className="text-muted-foreground text-xs uppercase tracking-wider">{label}</Label>
-        <div className="bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm font-medium text-white">
+        <div className="bg-(--c-field) border border-(--c-line) rounded-lg px-4 py-2.5 text-sm font-medium text-(--c-text)">
             {value?.toString() || "N/A"}
         </div>
     </div>
@@ -42,14 +42,14 @@ const DocumentPreview = ({ label, value }: { label: string, value?: string }) =>
     <div className="space-y-2">
         <Label className="text-muted-foreground text-xs uppercase tracking-wider">{label}</Label>
         {value ? (
-            <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl p-4">
+            <div className="flex items-center justify-between bg-(--c-field) border border-(--c-line) rounded-xl p-4">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
                         <FileText className="w-5 h-5 text-primary" />
                     </div>
                     <div>
                         <p className="text-sm font-medium">{label}</p>
-                        <p className="text-xs text-green-400 flex items-center gap-1">
+                        <p className="text-xs text-(--c-ok) flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3" /> Uploaded
                         </p>
                     </div>
@@ -59,7 +59,7 @@ const DocumentPreview = ({ label, value }: { label: string, value?: string }) =>
                 </Button>
             </div>
         ) : (
-            <div className="bg-black/20 border border-white/5 border-dashed rounded-xl p-4 text-center text-sm text-muted-foreground">
+            <div className="bg-(--c-field) border border-(--c-line) border-dashed rounded-xl p-4 text-center text-sm text-muted-foreground">
                 Not provided
             </div>
         )}
@@ -87,39 +87,39 @@ const EditForm = ({
     handleSave,
     cancelAction
 }: EditFormProps) => (
-    <div className="space-y-6 bg-white/5 p-6 rounded-2xl border border-white/10 animate-in slide-in-from-top duration-300">
+    <div className="space-y-6 bg-(--c-field) p-6 rounded-2xl border border-(--c-line) animate-in slide-in-from-top duration-300">
         <div className="flex justify-between items-center mb-4">
             <h4 className="text-lg font-bold">{isAdding ? "Add New Shareholder" : "Edit Shareholder"}</h4>
             <Button variant="ghost" size="sm" onClick={cancelAction}><X className="w-4 h-4" /></Button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-                <Label>First Name <span className="text-red-500">*</span></Label>
-                <Input name="firstName" value={formState.firstName || ""} onChange={handleInputChange} className="bg-black/40 border-white/10" />
+                <Label>First Name <span className="text-(--c-danger)">*</span></Label>
+                <Input name="firstName" value={formState.firstName || ""} onChange={handleInputChange} className="bg-(--c-field) border-(--c-line)" />
             </div>
             <div className="space-y-2">
-                <Label>Last Name <span className="text-red-500">*</span></Label>
-                <Input name="lastName" value={formState.lastName || ""} onChange={handleInputChange} className="bg-black/40 border-white/10" />
+                <Label>Last Name <span className="text-(--c-danger)">*</span></Label>
+                <Input name="lastName" value={formState.lastName || ""} onChange={handleInputChange} className="bg-(--c-field) border-(--c-line)" />
             </div>
             <div className="space-y-2">
-                <Label>Nationality <span className="text-red-500">*</span></Label>
-                <Input name="nationality" value={formState.nationality || ""} onChange={handleInputChange} className="bg-black/40 border-white/10" />
+                <Label>Nationality <span className="text-(--c-danger)">*</span></Label>
+                <Input name="nationality" value={formState.nationality || ""} onChange={handleInputChange} className="bg-(--c-field) border-(--c-line)" />
             </div>
             <div className="space-y-2">
-                <Label>BVN <span className="text-red-500">*</span></Label>
-                <Input name="bvn" value={formState.bvn || ""} onChange={handleInputChange} maxLength={11} className="bg-black/40 border-white/10" />
+                <Label>BVN <span className="text-(--c-danger)">*</span></Label>
+                <Input name="bvn" value={formState.bvn || ""} onChange={handleInputChange} maxLength={11} className="bg-(--c-field) border-(--c-line)" />
             </div>
             <div className="space-y-2">
-                <Label>Ownership Percentage (%) <span className="text-red-500">*</span></Label>
-                <Input name="ownershipPercentage" type="number" value={formState.ownershipPercentage || ""} onChange={handleInputChange} className="bg-black/40 border-white/10" />
+                <Label>Ownership Percentage (%) <span className="text-(--c-danger)">*</span></Label>
+                <Input name="ownershipPercentage" type="number" value={formState.ownershipPercentage || ""} onChange={handleInputChange} className="bg-(--c-field) border-(--c-line)" />
             </div>
             <div className="space-y-2">
-                <Label>ID Type <span className="text-red-500">*</span></Label>
+                <Label>ID Type <span className="text-(--c-danger)">*</span></Label>
                 <select
                     name="idType"
                     value={formState.idType || ""}
                     onChange={handleInputChange}
-                    className="w-full h-10 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                    className="w-full h-10 rounded-md border border-(--c-line) bg-(--c-field) px-3 py-2 text-sm text-(--c-text)"
                 >
                     <option value="">Select ID type</option>
                     <option value="Passport">International Passport</option>
@@ -131,7 +131,7 @@ const EditForm = ({
 
             <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                    <Label>ID Document <span className="text-red-500">*</span></Label>
+                    <Label>ID Document <span className="text-(--c-danger)">*</span></Label>
                     <div className="relative group/file">
                         <input
                             type="file"
@@ -142,18 +142,18 @@ const EditForm = ({
                         <label
                             htmlFor="edit-sh-id-doc"
                             className={cn(
-                                "flex flex-col items-center justify-center w-full h-24 border border-dashed rounded-lg cursor-pointer bg-zinc-900/10 transition-all",
+                                "flex flex-col items-center justify-center w-full h-24 border border-dashed rounded-lg cursor-pointer bg-(--c-panel) transition-all",
                                 uploadingFields["idUrl"] ? "border-primary/50 bg-primary/5" :
                                     formState.idUrl ? "border-green-500/50 bg-green-500/5" : "border-zinc-700 group-hover/file:border-primary/30"
                             )}
                         >
-                            {uploadingFields["idUrl"] ? <Loader2 className="animate-spin" /> : formState.idUrl ? <CheckCircle2 className="text-green-500" /> : <Upload />}
+                            {uploadingFields["idUrl"] ? <Loader2 className="animate-spin" /> : formState.idUrl ? <CheckCircle2 className="text-(--c-ok)" /> : <Upload />}
                             <span className="mt-2 text-[10px]">{uploadingFields["idUrl"] ? "Uploading..." : "Upload ID Document"}</span>
                         </label>
                     </div>
                 </div>
                 <div className="space-y-2">
-                    <Label>Proof of Address <span className="text-red-500">*</span></Label>
+                    <Label>Proof of Address <span className="text-(--c-danger)">*</span></Label>
                     <div className="relative group/file">
                         <input
                             type="file"
@@ -164,12 +164,12 @@ const EditForm = ({
                         <label
                             htmlFor="edit-sh-poa-doc"
                             className={cn(
-                                "flex flex-col items-center justify-center w-full h-24 border border-dashed rounded-lg cursor-pointer bg-zinc-900/10 transition-all",
+                                "flex flex-col items-center justify-center w-full h-24 border border-dashed rounded-lg cursor-pointer bg-(--c-panel) transition-all",
                                 uploadingFields["proofOfAddress"] ? "border-primary/50 bg-primary/5" :
                                     formState.proofOfAddress ? "border-green-500/50 bg-green-500/5" : "border-zinc-700 group-hover/file:border-primary/30"
                             )}
                         >
-                            {uploadingFields["proofOfAddress"] ? <Loader2 className="animate-spin" /> : formState.proofOfAddress ? <CheckCircle2 className="text-green-500" /> : <Upload />}
+                            {uploadingFields["proofOfAddress"] ? <Loader2 className="animate-spin" /> : formState.proofOfAddress ? <CheckCircle2 className="text-(--c-ok)" /> : <Upload />}
                             <span className="mt-2 text-[10px]">{uploadingFields["proofOfAddress"] ? "Uploading..." : "Upload Utility Bill"}</span>
                         </label>
                     </div>
@@ -367,7 +367,7 @@ export default function ShareholdersView() {
 
             <div className="space-y-12">
                 {shareholders.map((shareholder: Shareholder, index: number) => (
-                    <div key={shareholder.id || index} className={index !== 0 ? "pt-12 border-t border-white/10" : ""}>
+                    <div key={shareholder.id || index} className={index !== 0 ? "pt-12 border-t border-(--c-line)" : ""}>
                         {editingId === shareholder.id ? (
                             <EditForm
                                 isAdding={false}
@@ -387,7 +387,7 @@ export default function ShareholdersView() {
                                             <Users className="text-primary w-6 h-6" />
                                         </div>
                                         <div>
-                                            <h3 className="text-lg font-semibold text-white">{shareholder?.firstName} {shareholder?.lastName}</h3>
+                                            <h3 className="text-lg font-semibold text-(--c-text)">{shareholder?.firstName} {shareholder?.lastName}</h3>
                                             <p className="text-sm text-muted-foreground font-mono">
                                                 {shareholder?.metadata?.ownership_percentage || shareholder?.ownershipPercentage || 0}% Ownership
                                             </p>
@@ -397,7 +397,7 @@ export default function ShareholdersView() {
                                         <Button variant="ghost" size="sm" onClick={() => startEditing(shareholder)} className="hover:bg-primary/10 text-primary">
                                             <Edit2 className="w-4 h-4 mr-2" /> Edit
                                         </Button>
-                                        <Button variant="ghost" size="sm" onClick={() => shareholder.id && handleDelete(shareholder.id)} className="hover:bg-red-500/10 text-red-500">
+                                        <Button variant="ghost" size="sm" onClick={() => shareholder.id && handleDelete(shareholder.id)} className="hover:bg-red-500/10 text-(--c-danger)">
                                             <Trash2 className="w-4 h-4 mr-2" /> Remove
                                         </Button>
                                     </div>
@@ -422,7 +422,7 @@ export default function ShareholdersView() {
                 ))}
 
                 {shareholders.length === 0 && !isAdding && (
-                    <div className="text-center py-12 bg-white/5 border border-white/10 rounded-2xl border-dashed">
+                    <div className="text-center py-12 bg-(--c-field) border border-(--c-line) rounded-2xl border-dashed">
                         <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-20" />
                         <p className="text-muted-foreground">No shareholders information found.</p>
                     </div>

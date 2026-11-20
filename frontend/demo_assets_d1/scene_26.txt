@@ -1,0 +1,1 @@
+Finally, the transaction detail page for this cash-out. It is staged data, and it is labelled as simulated, but it carries the real deposit hash. It shows Deposit detected, with the amounts and the status history.

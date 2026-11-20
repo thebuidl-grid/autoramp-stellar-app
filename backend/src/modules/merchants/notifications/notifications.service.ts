@@ -3,6 +3,25 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../../../database/prisma.service';
 import * as crypto from 'crypto';
+import { BadRequestException } from '@nestjs/common';
+import {
+  assertPublicHttpUrl,
+  createSsrfSafeAgents,
+  UnsafeUrlError,
+} from '../../../common/security/ssrf.util';
+
+const MAX_LOGGED_RESPONSE_CHARS = 4000;
+const safeAgents = createSsrfSafeAgents();
+
+/** Keeps a merchant endpoint's response small before it is stored (and shown back to merchants). */
+export function clipResponse(data: unknown): any {
+  if (data === undefined || data === null) return null;
+  const text = typeof data === 'string' ? data : JSON.stringify(data);
+  if (text === undefined) return null;
+  return text.length > MAX_LOGGED_RESPONSE_CHARS
+    ? `${text.slice(0, MAX_LOGGED_RESPONSE_CHARS)}... [truncated]`
+    : data;
+}
 
 @Injectable()
 export class NotificationsService implements OnModuleInit {
@@ -60,6 +79,55 @@ export class NotificationsService implements OnModuleInit {
   }
 
   /**
+   * Webhook targets are merchant-supplied URLs fetched by our server, so they must point at the
+   * public internet: otherwise a merchant could aim us at internal services or cloud metadata
+   * (and the response is stored where the merchant can read it). https only in production.
+   *
+   * Set WEBHOOK_ALLOW_PRIVATE_TARGETS=true to test against local receivers in development.
+   */
+  async assertSafeWebhookTarget(url: string): Promise<void> {
+    if (process.env.WEBHOOK_ALLOW_PRIVATE_TARGETS === 'true') {
+      if (!/^https?:\/\//i.test(url)) {
+        throw new BadRequestException(
+          'Webhook URL must start with http:// or https://',
+        );
+      }
+      return;
+    }
+    const production = process.env.NODE_ENV === 'production';
+    try {
+      await assertPublicHttpUrl(url, {
+        allowHttp: !production,
+        skipDns: !production,
+      });
+    } catch (err) {
+      if (err instanceof UnsafeUrlError) {
+        throw new BadRequestException(`Invalid webhook URL: ${err.message}`);
+      }
+      throw err;
+    }
+  }
+
+  /** POST to a merchant endpoint with SSRF protections (validated URL, public IPs only, no redirects). */
+  private async postToMerchant(
+    url: string,
+    body: any,
+    headers: Record<string, string>,
+  ) {
+    await this.assertSafeWebhookTarget(url);
+    return firstValueFrom(
+      this.httpService.post(url, body, {
+        headers,
+        timeout: 10000,
+        maxRedirects: 0,
+        maxContentLength: 1024 * 1024,
+        httpAgent: safeAgents.httpAgent,
+        httpsAgent: safeAgents.httpsAgent,
+      }),
+    );
+  }
+
+  /**
    * Send a webhook to a single endpoint.
    */
   private async sendWebhook(
@@ -74,16 +142,11 @@ export class NotificationsService implements OnModuleInit {
     const signature = this.signPayload(bodyString, secret);
 
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(url, body, {
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Webhook-Signature': signature,
-            'X-Webhook-Event': event,
-          },
-          timeout: 10000,
-        }),
-      );
+      const response = await this.postToMerchant(url, body, {
+        'Content-Type': 'application/json',
+        'X-Webhook-Signature': signature,
+        'X-Webhook-Event': event,
+      });
 
       this.logger.log(
         `Webhook sent to ${url} [${event}]. Status: ${response.status}`,
@@ -96,7 +159,7 @@ export class NotificationsService implements OnModuleInit {
           url,
           payload: body,
           statusCode: response.status,
-          response: response.data,
+          response: clipResponse(response.data),
           success: true,
           retryCount: 0,
           maxRetries: NotificationsService.MAX_RETRIES,
@@ -114,7 +177,7 @@ export class NotificationsService implements OnModuleInit {
           url,
           payload: body,
           statusCode: error.response?.status ?? null,
-          response: error.response?.data ?? null,
+          response: clipResponse(error.response?.data),
           success: false,
           errorMessage: error.message,
           retryCount: 0,
@@ -300,16 +363,11 @@ export class NotificationsService implements OnModuleInit {
           `Retry #${log.retryCount + 1} for ${log.url} [${log.event}]`,
         );
 
-        const response = await firstValueFrom(
-          this.httpService.post(log.url, body, {
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Webhook-Signature': signature,
-              'X-Webhook-Event': log.event,
-            },
-            timeout: 10000,
-          }),
-        );
+        const response = await this.postToMerchant(log.url, body, {
+          'Content-Type': 'application/json',
+          'X-Webhook-Signature': signature,
+          'X-Webhook-Event': log.event,
+        });
 
         this.logger.log(
           `Retry succeeded for ${log.url}. Status: ${response.status}`,
@@ -320,7 +378,7 @@ export class NotificationsService implements OnModuleInit {
           data: {
             success: true,
             statusCode: response.status,
-            response: response.data,
+            response: clipResponse(response.data),
             retryCount: log.retryCount + 1,
             nextRetryAt: null,
           },
@@ -332,7 +390,7 @@ export class NotificationsService implements OnModuleInit {
           where: { id: log.id },
           data: {
             statusCode: error.response?.status ?? null,
-            response: error.response?.data ?? null,
+            response: clipResponse(error.response?.data),
             errorMessage: error.message,
             retryCount: log.retryCount + 1,
             nextRetryAt,
@@ -373,23 +431,18 @@ export class NotificationsService implements OnModuleInit {
     const signature = this.signPayload(bodyString, webhook.secret);
 
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(log.url, body, {
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Webhook-Signature': signature,
-            'X-Webhook-Event': log.event,
-          },
-          timeout: 10000,
-        }),
-      );
+      const response = await this.postToMerchant(log.url, body, {
+        'Content-Type': 'application/json',
+        'X-Webhook-Signature': signature,
+        'X-Webhook-Event': log.event,
+      });
 
       await this.prisma.merchantWebhookLog.update({
         where: { id: log.id },
         data: {
           success: true,
           statusCode: response.status,
-          response: response.data,
+          response: clipResponse(response.data),
           retryCount: { increment: 1 },
           nextRetryAt: null,
         },
@@ -403,7 +456,7 @@ export class NotificationsService implements OnModuleInit {
         where: { id: log.id },
         data: {
           statusCode: error.response?.status ?? null,
-          response: error.response?.data ?? null,
+          response: clipResponse(error.response?.data),
           errorMessage: error.message,
           retryCount: { increment: 1 },
           nextRetryAt: nextRetry,

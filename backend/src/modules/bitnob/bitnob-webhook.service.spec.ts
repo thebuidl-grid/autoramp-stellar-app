@@ -1,3 +1,5 @@
+import { payoutOrdersOver } from '../ramp/testing/payout-orders-double';
+import { PayoutOrderRepository } from '../ramp/payout-order.repository';
 import { Test, TestingModule } from '@nestjs/testing';
 import { createHmac } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
@@ -112,6 +114,7 @@ describe('BitNobWebhookService', () => {
       providers: [
         BitNobWebhookService,
         { provide: PrismaService, useValue: prisma },
+        { provide: PayoutOrderRepository, useValue: payoutOrdersOver(prisma) },
         { provide: BitNobService, useValue: bitnobService },
         { provide: SwapGateway, useValue: swapGateway },
         { provide: NotificationsService, useValue: notificationsService },
@@ -505,6 +508,48 @@ describe('BitNobWebhookService', () => {
       expect(bitnobService.createWithdrawal).toHaveBeenCalledWith(
         expect.objectContaining({ toAddress: 'GDEST', reference: 'WDR_on_3' }),
       );
+    });
+
+    it('startOnrampFromFiat trades the credited NGN and withdraws USDC (no virtual account)', async () => {
+      const tx = {
+        id: 'tx-4',
+        reference: 'on_4',
+        status: 'PENDING',
+        network: 'base',
+        destinationAddress: '0xDEST',
+        metadata: { safehaven: { accountNumber: '111' } },
+      };
+      prisma.onrampTransaction.update.mockResolvedValue({});
+      bitnobService.tradingQuote.mockResolvedValue({ data: { id: 'q1', price: 1500 } });
+      bitnobService.tradingOrder.mockResolvedValue({ data: { exchange: { receive_quantity: '6000000' } } });
+      bitnobService.createWithdrawal.mockResolvedValue({ data: { transaction_id: 'w1' } });
+
+      const result = await service.startOnrampFromFiat(tx, 5000);
+
+      expect(result).toEqual({ status: 'processed', reference: 'on_4' });
+      expect(prisma.virtualAccount.findFirst).not.toHaveBeenCalled();
+      expect(bitnobService.tradingQuote).toHaveBeenCalledWith(
+        expect.objectContaining({ baseCurrency: 'NGN', quoteCurrency: 'USDC', quantity: 5000 }),
+      );
+      expect(bitnobService.createWithdrawal).toHaveBeenCalledWith(
+        expect.objectContaining({ toAddress: '0xDEST', chain: 'base', reference: 'WDR_on_4' }),
+      );
+    });
+
+    it('startOnrampFromFiat marks the order FAILED when the trade fails', async () => {
+      const tx = { id: 'tx-5', reference: 'on_5', status: 'PENDING', network: 'base', destinationAddress: '0x', metadata: {} };
+      prisma.onrampTransaction.update.mockResolvedValue({});
+      bitnobService.tradingQuote.mockRejectedValue(new Error('insufficient NGN balance'));
+      await expect(service.startOnrampFromFiat(tx, 5000)).rejects.toThrow('insufficient NGN balance');
+      expect(prisma.onrampTransaction.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'FAILED' }) }),
+      );
+    });
+
+    it('startOnrampFromFiat ignores orders that are not PENDING', async () => {
+      const result = await service.startOnrampFromFiat({ id: 'x', reference: 'r', status: 'PROCESSING' }, 5000);
+      expect(result).toMatchObject({ status: 'ignored', reason: 'not_pending' });
+      expect(bitnobService.tradingQuote).not.toHaveBeenCalled();
     });
 
     it('ignores unknown virtual accounts', async () => {

@@ -20,10 +20,11 @@ import {
   type Chain,
   type PublicClient,
   parseUnits,
+  encodeFunctionData,
+  type Hash,
 } from "viem";
-import { writeContract, waitForTransactionReceipt } from "wagmi/actions";
-import { wagmiConfig } from "@/lib/wagmi-config";
 import {
+  SUPPORTED_CHAINS,
   getChainId,
   getRpcUrl,
   getSolanaRpcUrl,
@@ -117,6 +118,9 @@ export function useBridgeStatus(reference?: string) {
       return response.data;
     },
     enabled: !!reference,
+    // A rate-limited poll must not retry straight away: that is what turned one limit hit into a burst of requests a second apart.
+    // The next 5 second poll is the retry.
+    retry: (failureCount, error) => (error as { response?: { status?: number } })?.response?.status !== 429 && failureCount < 2,
     refetchInterval: (query) => {
       const data = query.state.data;
       if (data?.status === "COMPLETED" || data?.status === "FAILED")
@@ -174,6 +178,13 @@ export function useBridge() {
   });
 
   /** Report a step hash to the backend (best effort — records/history only). */
+  /** The user's wallet could not finish the mint (closed, rejected, failed); our relayer is finishing it. Their USDC is safe. */
+  const notifyRelayTakingOver = () =>
+    toast({
+      title: "Finishing your transfer",
+      description: "Your wallet didn't finish the last step, so we're completing it for you. Your USDC is safe.",
+    });
+
   const reportStep = async (
     reference: string,
     step: "SOURCE_TX" | "DESTINATION_TX",
@@ -299,6 +310,7 @@ export function useBridge() {
             setBridgeResult({ reference, state: "pending", sourceTxHash: hash });
             await reportStep(reference, "SOURCE_TX", hash, "PROCESSING");
           },
+          onFallback: notifyRelayTakingOver,
         });
         const outcomeFromStellar: BridgeOutcome = {
           reference,
@@ -307,7 +319,7 @@ export function useBridge() {
           destinationTxHash,
         };
         setBridgeResult(outcomeFromStellar);
-        await reportStep(reference, "DESTINATION_TX", destinationTxHash, "COMPLETED");
+        if (destinationTxHash) await reportStep(reference, "DESTINATION_TX", destinationTxHash, "COMPLETED");
         toast({
           title: "Bridge complete",
           description: `USDC arrived on ${params.toChain.replace(/_/g, " ")}`,
@@ -344,6 +356,7 @@ export function useBridge() {
             setBridgeResult({ reference, state: "pending", sourceTxHash: hash });
             await reportStep(reference, "SOURCE_TX", hash, "PROCESSING");
           },
+          onFallback: notifyRelayTakingOver,
         });
 
         const stellarOutcome: BridgeOutcome = {
@@ -353,7 +366,7 @@ export function useBridge() {
           destinationTxHash,
         };
         setBridgeResult(stellarOutcome);
-        await reportStep(reference, "DESTINATION_TX", destinationTxHash, "COMPLETED");
+        if (destinationTxHash) await reportStep(reference, "DESTINATION_TX", destinationTxHash, "COMPLETED");
         toast({
           title: "Bridge complete",
           description: "USDC arrived on Stellar",
@@ -499,18 +512,30 @@ export function useBridge() {
           throw new Error("Unsupported source chain for CCTP bridge");
         }
 
-        const approveTxHash = await writeContract(wagmiConfig, {
-          address: usdcAddress,
-          abi: APPROVE_ABI,
-          functionName: "approve",
-          args: [tokenMessenger, BigInt(amountBase)] as const,
-          chainId: requiredChainId,
-        } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+        // Send through the connected EIP-1193 provider directly. wagmi's
+        // writeContract action expects connector.getChainId(), which some
+        // RainbowKit wallet connectors do not expose at runtime.
+        const approvalProvider = await evmConnector.getProvider();
+        const approvalRpc = approvalProvider as {
+          request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+        };
+        const approveTxHash = (await approvalRpc.request({
+          method: "eth_sendTransaction",
+          params: [{
+            from: sourceAddress,
+            to: usdcAddress,
+            data: encodeFunctionData({
+              abi: APPROVE_ABI,
+              functionName: "approve",
+              args: [tokenMessenger, BigInt(amountBase)],
+            }),
+            value: "0x0",
+          }],
+        })) as Hash;
 
-        await waitForTransactionReceipt(wagmiConfig, {
-          hash: approveTxHash,
-          chainId: requiredChainId,
-        });
+        await getPublicClient({
+          chain: SUPPORTED_CHAINS.find((chain) => chain.id === requiredChainId) as Chain,
+        }).waitForTransactionReceipt({ hash: approveTxHash });
 
         // Make BridgeKit's own approve a no-op since we already handled it.
         const provider = new CCTPV2BridgingProvider();
@@ -583,7 +608,7 @@ export function useBridge() {
       // 4. Report hashes so backend records/history show real explorer links.
       if (sourceTxHash) await reportStep(reference, "SOURCE_TX", sourceTxHash, "PROCESSING");
       if (destinationTxHash)
-        await reportStep(reference, "DESTINATION_TX", destinationTxHash, "COMPLETED");
+        if (destinationTxHash) await reportStep(reference, "DESTINATION_TX", destinationTxHash, "COMPLETED");
 
       if (outcome.state === "success") {
         toast({

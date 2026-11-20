@@ -22,18 +22,19 @@ export function useTransactions(id?: string, reference?: string) {
 /**
  * Fetch Banks Hook
  */
-export function useBanks() {
+export function useBanks(country: string = "NG") {
   const isAuthenticated = useIsAuthenticated();
   return useQuery({
-    queryKey: ["banks"],
+    queryKey: ["banks", country],
     queryFn: async () => {
-      const response = await stablestackApi.getBanks();
+      const response = await stablestackApi.getBanks(country);
       const raw = response.data.data || [];
       const seen = new Set<string>();
       return raw
         .map((b: any) => ({
           institutionCode: b.bankCode || b.institutionCode || b.code,
           institutionName: b.name || b.institutionName,
+          destinationType: b.destinationType as string | undefined,
         }))
         .filter((b: { institutionCode: string; institutionName: string }) => {
           if (seen.has(b.institutionCode)) return false;
@@ -105,8 +106,8 @@ export function useOffRamp() {
  */
 export function useResolveAccount() {
   return useMutation({
-    mutationFn: ({ bankCode, accountNumber }: { bankCode: string; accountNumber: string }) =>
-      stablestackApi.resolveAccount(bankCode, accountNumber),
+    mutationFn: ({ bankCode, accountNumber, country }: { bankCode: string; accountNumber: string; country?: string }) =>
+      stablestackApi.resolveAccount(bankCode, accountNumber, country),
   });
 }
 

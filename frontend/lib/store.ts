@@ -188,6 +188,8 @@ interface TransactionFormState {
   fromChain: string;
   toChain: string;
   rampNetwork: "base" | "bsc" | "stellar";
+  /** Fiat country for the ramp (NG/GH/KE); only honoured on the stellar network. */
+  rampCountry: "NG" | "GH" | "KE";
 
   // Transaction state
   step: StepType;
@@ -214,6 +216,7 @@ interface TransactionFormState {
   setFromChain: (chain: string) => void;
   setToChain: (chain: string) => void;
   setRampNetwork: (network: "base" | "bsc" | "stellar") => void;
+  setRampCountry: (country: "NG" | "GH" | "KE") => void;
   setStep: (step: StepType) => void;
   setTransactionData: (data: any) => void;
   setSwapData: (data: any) => void;
@@ -227,8 +230,8 @@ interface TransactionFormState {
 export const useTransactionStore = create<TransactionFormState>((set) => ({
   // Initial state
   activeTab: "buy",
-  cryptoType: "CNGN",
-  buyReceiveType: "CNGN",
+  cryptoType: "USDC",
+  buyReceiveType: "USDC",
   fromCryptoType: "USDC",
   toCryptoType: "CNGN",
   sellAmount: "",
@@ -239,6 +242,7 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
   fromChain: DEFAULT_FROM_CHAIN,
   toChain: DEFAULT_TO_CHAIN,
   rampNetwork: "base",
+  rampCountry: "NG",
   step: "form",
   transactionData: null,
   swapData: null,
@@ -261,6 +265,7 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
   setFromChain: (chain) => set({ fromChain: chain }),
   setToChain: (chain) => set({ toChain: chain }),
   setRampNetwork: (network) => set({ rampNetwork: network }),
+  setRampCountry: (country) => set({ rampCountry: country, bankCode: "", accountNumber: "" }),
   setStep: (step) => set({ step }),
   setTransactionData: (data) => set({ transactionData: data }),
   setSwapData: (data) => set({ swapData: data }),
@@ -281,6 +286,7 @@ export const useTransactionStore = create<TransactionFormState>((set) => ({
       fromChain: DEFAULT_FROM_CHAIN,
       toChain: DEFAULT_TO_CHAIN,
       rampNetwork: "base",
-      buyReceiveType: "CNGN",
+      rampCountry: "NG",
+      buyReceiveType: "USDC",
     }),
 }));

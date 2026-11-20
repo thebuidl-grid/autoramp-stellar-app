@@ -8,14 +8,17 @@ import {
 } from "@/lib/network";
 
 const OPTIONS: { mode: NetworkMode; label: string }[] = [
-  { mode: "testnet", label: "Testnet" },
   { mode: "mainnet", label: "Mainnet" },
+  { mode: "testnet", label: "Testnet" },
 ];
 
 /**
- * Testnet/Mainnet toggle. Switching persists the choice and reloads the app so
+ * Mainnet/Testnet toggle. Switching persists the choice and reloads the app so
  * module-level network constants (wagmi chains, token addresses, wallets) are
  * rebuilt for the selected network.
+ *
+ * Mainnet is the normal state and stays quiet; testnet is the exception, so it
+ * is the one that looks different.
  *
  * Rendered only after RootProvider mounts, so reading localStorage in the state
  * initializer is safe and avoids a setState-in-effect.
@@ -25,9 +28,9 @@ export function NetworkSwitch({ className = "" }: { className?: string }) {
 
   return (
     <div
-      className={`inline-flex items-center rounded-full border border-white/10 bg-white/5 p-0.5 text-[11px] sm:text-xs shrink-0 ${className}`}
+      className={`inline-flex shrink-0 items-center rounded-full border border-white/10 bg-white/5 p-0.5 text-[11px] sm:text-xs ${className}`}
       role="group"
-      aria-label="Network selection"
+      aria-label="Network"
     >
       {OPTIONS.map(({ mode, label }) => {
         const selected = network === mode;
@@ -39,19 +42,17 @@ export function NetworkSwitch({ className = "" }: { className?: string }) {
               if (mode !== network) setActiveNetwork(mode);
             }}
             aria-pressed={selected}
-            title={
-              mode === "mainnet"
-                ? "Mainnet is not yet supported by the Autoramp backend (testnet-only)"
-                : undefined
-            }
-            className={`rounded-full px-2 sm:px-3 py-1 font-medium transition-colors ${
+            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium transition-colors ${
               selected
-                ? mode === "mainnet"
-                  ? "bg-amber-400 text-black"
-                  : "bg-[#00F9C7] text-black"
-                : "text-white/60 hover:text-white"
+                ? mode === "testnet"
+                  ? "bg-[#f4b740] text-black"
+                  : "bg-white/10 text-white"
+                : "text-white/55 hover:text-white"
             }`}
           >
+            {selected && mode === "mainnet" && (
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[#00f9c7]" />
+            )}
             {label}
           </button>
         );

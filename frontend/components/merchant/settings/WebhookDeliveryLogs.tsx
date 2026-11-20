@@ -105,13 +105,13 @@ export default function WebhookDeliveryLogs() {
   const getSuccessBadge = (success: boolean, statusCode: number) => {
     if (success) {
       return (
-        <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 flex items-center gap-1 w-fit">
+        <Badge className="bg-emerald-500/10 text-(--c-ok) border-emerald-500/20 flex items-center gap-1 w-fit">
           <CheckCircle2 className="h-3 w-3" /> {statusCode}
         </Badge>
       );
     }
     return (
-      <Badge className="bg-red-500/10 text-red-500 border-red-500/20 flex items-center gap-1 w-fit">
+      <Badge className="bg-red-500/10 text-(--c-danger) border-red-500/20 flex items-center gap-1 w-fit">
         <XCircle className="h-3 w-3" /> {statusCode || "N/A"}
       </Badge>
     );
@@ -122,20 +122,20 @@ export default function WebhookDeliveryLogs() {
     const isCompleted = event.endsWith(".completed");
     if (isFailed) {
       return (
-        <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[11px]">
+        <Badge className="bg-red-500/10 text-(--c-danger) border-red-500/20 text-[11px]">
           {event}
         </Badge>
       );
     }
     if (isCompleted) {
       return (
-        <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[11px]">
+        <Badge className="bg-emerald-500/10 text-(--c-ok) border-emerald-500/20 text-[11px]">
           {event}
         </Badge>
       );
     }
     return (
-      <Badge variant="secondary" className="bg-white/5 text-zinc-300 border-white/10 text-[11px]">
+      <Badge variant="secondary" className="bg-(--c-field) text-(--c-text) border-(--c-line) text-[11px]">
         {event}
       </Badge>
     );
@@ -146,15 +146,15 @@ export default function WebhookDeliveryLogs() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h3 className="text-lg font-semibold text-white">Delivery Logs</h3>
-          <p className="text-sm text-zinc-400">
+          <h3 className="text-lg font-semibold text-(--c-text)">Delivery Logs</h3>
+          <p className="text-sm text-(--c-muted)">
             View webhook delivery history and retry failed deliveries.
           </p>
         </div>
         <Button
           variant="outline"
           size="sm"
-          className="border-white/10 text-white self-start"
+          className="border-(--c-line) text-(--c-text) self-start"
           onClick={() => refetch()}
           disabled={isFetching}
         >
@@ -176,11 +176,11 @@ export default function WebhookDeliveryLogs() {
             setPage(1);
           }}
         >
-          <SelectTrigger className="w-52 bg-white/5 border-white/10 text-white">
+          <SelectTrigger className="w-52 bg-(--c-field) border-(--c-line) text-(--c-text)">
             <Filter className="h-4 w-4 mr-2" />
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-white/10 max-h-[300px]">
+          <SelectContent className="bg-(--c-panel) border-(--c-line) max-h-[300px]">
             {EVENT_FILTERS.map((f) => (
               <SelectItem key={f.value} value={f.value}>
                 {f.label}
@@ -196,10 +196,10 @@ export default function WebhookDeliveryLogs() {
             setPage(1);
           }}
         >
-          <SelectTrigger className="w-44 bg-white/5 border-white/10 text-white">
+          <SelectTrigger className="w-44 bg-(--c-field) border-(--c-line) text-(--c-text)">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-white/10">
+          <SelectContent className="bg-(--c-panel) border-(--c-line)">
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="true">Successful</SelectItem>
             <SelectItem value="false">Failed</SelectItem>
@@ -208,11 +208,11 @@ export default function WebhookDeliveryLogs() {
       </div>
 
       {/* Table */}
-      <Card className="bg-white/5 border-white/10 overflow-hidden">
+      <Card className="bg-(--c-field) border-(--c-line) overflow-hidden">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-white/5 text-zinc-400 border-b border-white/10">
+              <thead className="bg-(--c-field) text-(--c-muted) border-b border-(--c-line)">
                 <tr>
                   <th className="p-4 text-left font-medium">Event</th>
                   <th className="p-4 text-left font-medium">Endpoint</th>
@@ -228,17 +228,17 @@ export default function WebhookDeliveryLogs() {
                     <td colSpan={6} className="p-12 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <Loader2 className="h-6 w-6 border-2 border-primary border-t-transparent animate-spin" />
-                        <p className="text-zinc-500">Loading delivery logs...</p>
+                        <p className="text-(--c-muted)">Loading delivery logs...</p>
                       </div>
                     </td>
                   </tr>
                 ) : logs.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="p-12 text-center">
-                      <div className="flex flex-col items-center gap-2 text-zinc-500">
+                      <div className="flex flex-col items-center gap-2 text-(--c-muted)">
                         <Globe className="h-8 w-8 opacity-40" />
                         <p>No webhook delivery logs found.</p>
-                        <p className="text-xs text-zinc-600">
+                        <p className="text-xs text-(--c-muted)">
                           Logs appear here after webhooks are sent.
                         </p>
                       </div>
@@ -248,13 +248,13 @@ export default function WebhookDeliveryLogs() {
                   logs.map((log) => (
                     <tr
                       key={log.id}
-                      className="hover:bg-white/5 transition-colors"
+                      className="hover:bg-(--c-field) transition-colors"
                     >
                       <td className="p-4">{getEventBadge(log.event)}</td>
                       <td className="p-4">
                         <div className="flex items-center gap-1.5 max-w-[280px]">
-                          <ArrowUpRight className="h-3 w-3 text-zinc-500 shrink-0" />
-                          <span className="font-mono text-[11px] text-zinc-400 truncate">
+                          <ArrowUpRight className="h-3 w-3 text-(--c-muted) shrink-0" />
+                          <span className="font-mono text-[11px] text-(--c-muted) truncate">
                             {log.url}
                           </span>
                         </div>
@@ -265,16 +265,16 @@ export default function WebhookDeliveryLogs() {
                       <td className="p-4 max-w-[200px]">
                         {log.errorMessage ? (
                           <span
-                            className="text-[11px] text-red-400 truncate block"
+                            className="text-[11px] text-(--c-danger) truncate block"
                             title={log.errorMessage}
                           >
                             {log.errorMessage}
                           </span>
                         ) : (
-                          <span className="text-[11px] text-zinc-600">—</span>
+                          <span className="text-[11px] text-(--c-muted)">—</span>
                         )}
                       </td>
-                      <td className="p-4 text-zinc-500 whitespace-nowrap text-[11px]">
+                      <td className="p-4 text-(--c-muted) whitespace-nowrap text-[11px]">
                         {format(
                           new Date(log.createdAt),
                           "MMM d, HH:mm"
@@ -311,9 +311,9 @@ export default function WebhookDeliveryLogs() {
       {/* Pagination */}
       {pagination && pagination.totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-xs text-zinc-500">
-            Page <span className="text-white">{pagination.page}</span> of{" "}
-            <span className="text-white">{pagination.totalPages}</span>
+          <p className="text-xs text-(--c-muted)">
+            Page <span className="text-(--c-text)">{pagination.page}</span> of{" "}
+            <span className="text-(--c-text)">{pagination.totalPages}</span>
             <span className="ml-2">
               ({pagination.total} total)
             </span>
@@ -322,7 +322,7 @@ export default function WebhookDeliveryLogs() {
             <Button
               variant="outline"
               size="sm"
-              className="border-white/10 text-white text-[11px]"
+              className="border-(--c-line) text-(--c-text) text-[11px]"
               disabled={page === 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
             >
@@ -331,7 +331,7 @@ export default function WebhookDeliveryLogs() {
             <Button
               variant="outline"
               size="sm"
-              className="border-white/10 text-white text-[11px]"
+              className="border-(--c-line) text-(--c-text) text-[11px]"
               disabled={page >= pagination.totalPages}
               onClick={() => setPage((p) => p + 1)}
             >
@@ -346,10 +346,10 @@ export default function WebhookDeliveryLogs() {
         open={!!retryTarget}
         onOpenChange={(open) => !open && setRetryTarget(null)}
       >
-        <DialogContent className="bg-black/90 border-white/10">
+        <DialogContent className="bg-black/90 border-(--c-line)">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-400" />
+              <AlertTriangle className="w-5 h-5 text-(--c-warn)" />
               Retry Webhook Delivery
             </DialogTitle>
             <DialogDescription>

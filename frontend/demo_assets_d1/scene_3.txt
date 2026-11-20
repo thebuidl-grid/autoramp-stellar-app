@@ -1,0 +1,1 @@
+Opening that hash on Stellar Expert, the deposit is a real, successful payment on the Stellar test network. This earlier proof transaction was a native lumens payment; the USDC deposits you will see next are real USDC.

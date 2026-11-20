@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'crypto';
+import { createHash, createHmac, randomBytes } from 'crypto';
 
 /**
  * Standalone Bitnob API key tester.
@@ -30,7 +30,7 @@ function parseArgs(): Cfg {
 
   const clientId = (flag('client-id') || process.env.BITNOB_CLIENT_ID || '').trim();
   const key = (
-    flag('key') || process.env.BITNOB_KEY || process.env.BITNOB_API_KEY || ''
+    flag('key') || process.env.BITNOB_KEY || ''
   ).trim();
   const baseUrl = (
     flag('url') ||
@@ -96,6 +96,13 @@ async function main() {
   console.log(
     `Testing Bitnob key — client ${cfg.clientId.slice(0, 8)}… @ ${cfg.baseUrl}\n`,
   );
+  // Fingerprints let you compare the API and worker environments without exposing the secret:
+  // run this in both containers; the values must be identical.
+  const fp = (v: string) => createHash('sha256').update(v).digest('hex').slice(0, 8);
+  console.log(
+    `Env: BITNOB_KEY set=${Boolean(process.env.BITNOB_KEY)} BITNOB_API_KEY set=${Boolean(process.env.BITNOB_API_KEY)} ` +
+      `| key fingerprint=${fp(cfg.key)} (len ${cfg.key.length}) | client id fingerprint=${fp(cfg.clientId)}\n`,
+  );
 
   // 1. whoami — canonical auth check
   console.log('1) POST /api/whoami');
@@ -112,6 +119,19 @@ async function main() {
   console.log(`   banks returned = ${bankCount}`);
   console.log('');
 
+  // 3. The exact call the NGN on-ramp makes before trading: a trading quote. A quote is non-binding and
+  //    moves no money, so it is safe to run. This is what failed with "Invalid HMAC signature" in the worker.
+  console.log('3) POST /api/trading/quotes  (NGN -> USDC, quantity 2000; no money moves)');
+  const quote = await call(cfg, 'POST', '/api/trading/quotes', {
+    base_currency: 'NGN',
+    quote_currency: 'USDC',
+    side: 'sell',
+    quantity: '2000',
+  });
+  console.log(`   status = ${quote.status}`);
+  console.log(`   response = ${JSON.stringify(quote.data).slice(0, 400)}`);
+  console.log('');
+
   // Summary
   console.log('=== RESULT ===');
   if (who.status === 403) {
@@ -126,6 +146,14 @@ async function main() {
     console.log('OK: key authenticated successfully.');
   } else {
     console.log(`UNEXPECTED: whoami status = ${who.status}`);
+  }
+  if (quote.status >= 200 && quote.status < 300) {
+    console.log('OK: trading quote accepted — the on-ramp trade call will authenticate.');
+  } else {
+    console.log(
+      `TRADING QUOTE FAILED (${quote.status}) — the on-ramp trade will fail the same way. ` +
+        'If whoami passed but this failed, the account may lack NGN trading, or the signing differs for this endpoint.',
+    );
   }
 }
 

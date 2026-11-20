@@ -1,0 +1,1 @@
+I use the swap button to flip the route, so the source is now Stellar Testnet and the destination is Base Sepolia. I enter one USDC, and the destination address on Base.

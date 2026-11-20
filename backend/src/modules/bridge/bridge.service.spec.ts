@@ -1,3 +1,5 @@
+import { payoutOrdersOver } from '../ramp/testing/payout-orders-double';
+import { PayoutOrderRepository } from '../ramp/payout-order.repository';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { BadRequestException } from '@nestjs/common';
@@ -32,6 +34,7 @@ describe('BridgeService.confirmDelivery', () => {
         BridgeService,
         { provide: ConfigService, useValue: { get: jest.fn() } },
         { provide: PrismaService, useValue: prisma },
+        { provide: PayoutOrderRepository, useValue: payoutOrdersOver(prisma) },
       ],
     }).compile();
 
@@ -293,6 +296,7 @@ describe('BridgeService.initiateBridge', () => {
         BridgeService,
         { provide: ConfigService, useValue: { get: jest.fn() } },
         { provide: PrismaService, useValue: prisma },
+        { provide: PayoutOrderRepository, useValue: payoutOrdersOver(prisma) },
       ],
     }).compile();
 
@@ -394,6 +398,7 @@ describe('BridgeService off-ramp linking', () => {
         BridgeService,
         { provide: ConfigService, useValue: { get: jest.fn() } },
         { provide: PrismaService, useValue: prisma },
+        { provide: PayoutOrderRepository, useValue: payoutOrdersOver(prisma) },
       ],
     }).compile();
 

@@ -6,11 +6,14 @@ import { MFBService } from '../safehaven/safehaven.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../merchants/notifications/notifications.service';
 import { BalanceCacheService } from '../../common/services/balance-cache.service';
+import { SafehavenOfframpSettlementService } from '../ramp/safehaven-offramp-settlement.service';
+import { SafehavenOnrampSettlementService } from '../ramp/safehaven-onramp-settlement.service';
 
 describe('MFB Onramp Auto-Settle Flow', () => {
   let safeHavenWebhookService: MFBWebhookService;
   let prisma: PrismaService;
   let safehavenService: MFBService;
+  let module: TestingModule;
 
   const testOnrampTransaction = {
     id: 'test-onramp-id',
@@ -31,7 +34,7 @@ describe('MFB Onramp Auto-Settle Flow', () => {
   };
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         WebhookHandlers,
         MFBWebhookService,
@@ -104,6 +107,20 @@ describe('MFB Onramp Auto-Settle Flow', () => {
           },
         },
         {
+          provide: SafehavenOnrampSettlementService,
+          useValue: {
+            findByDepositAccount: jest.fn().mockResolvedValue(null),
+            findByForwardReference: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: SafehavenOfframpSettlementService,
+          useValue: {
+            findByCollectionAccount: jest.fn().mockResolvedValue(null),
+            findByForwardReference: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
           provide: BalanceCacheService,
           useValue: {
             get: jest.fn(),
@@ -117,6 +134,55 @@ describe('MFB Onramp Auto-Settle Flow', () => {
     safeHavenWebhookService = module.get<MFBWebhookService>(MFBWebhookService);
     prisma = module.get<PrismaService>(PrismaService);
     safehavenService = module.get<MFBService>(MFBService);
+  });
+
+  describe('SafeHaven NGN settlement (virtualAccount.transfer)', () => {
+    const vaTransfer = (over: any = {}) => ({
+      type: 'virtualAccount.transfer',
+      data: {
+        virtualAccount: 'va-1',
+        paymentReference: 'pay-1',
+        creditAccountNumber: '6012821803',
+        amount: 2000,
+        status: 'Completed',
+        ...over,
+      },
+    });
+
+    it('settles via the on-ramp settlement service and never runs the legacy funding transfer', async () => {
+      const onramp = module.get(SafehavenOnrampSettlementService);
+      const order = { id: 'o1', reference: 'on_1', status: 'PENDING' };
+      (onramp.findByDepositAccount as jest.Mock).mockResolvedValue(order);
+      (onramp as any).settleCredit = jest.fn().mockResolvedValue({ status: 'success' });
+
+      const res = await safeHavenWebhookService.processWebhook(vaTransfer() as any);
+
+      expect((onramp as any).settleCredit).toHaveBeenCalledWith(order, { amount: 2000 });
+      expect(res).toEqual({ status: 'success' });
+      expect(safehavenService.transfer).not.toHaveBeenCalled();
+    });
+
+    it('ignores non-completed events for those accounts without falling through to the legacy path', async () => {
+      const onramp = module.get(SafehavenOnrampSettlementService);
+      (onramp.findByDepositAccount as jest.Mock).mockResolvedValue({ id: 'o1', status: 'PENDING' });
+      (onramp as any).settleCredit = jest.fn();
+
+      const res: any = await safeHavenWebhookService.processWebhook(vaTransfer({ status: 'Created' }) as any);
+
+      expect(res).toMatchObject({ status: 'ignored', reason: 'not_completed' });
+      expect((onramp as any).settleCredit).not.toHaveBeenCalled();
+      expect(safehavenService.transfer).not.toHaveBeenCalled();
+    });
+
+    it('legacy path skips orders that carry SafeHaven settlement metadata', async () => {
+      (prisma.onrampTransaction.findFirst as jest.Mock).mockResolvedValue({
+        ...testOnrampTransaction,
+        metadata: { safehaven: { accountNumber: '6012821803' } },
+      });
+      const res: any = await safeHavenWebhookService.processWebhook(vaTransfer({ creditAccountNumber: '2041363986' }) as any);
+      expect(res).toMatchObject({ status: 'ignored' });
+      expect(safehavenService.transfer).not.toHaveBeenCalled();
+    });
   });
 
   describe('Successful auto-settle on onramp completion', () => {

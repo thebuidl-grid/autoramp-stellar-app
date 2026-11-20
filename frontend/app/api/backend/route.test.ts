@@ -76,6 +76,42 @@ describe("/api/backend proxy", () => {
     expect(seen.cf).toBe("198.51.100.9");
   });
 
+  it("forwards the network toggle header, so the backend can record mainnet or testnet", async () => {
+    let seen: string | null = null;
+    server.use(
+      http.get(`${BACKEND}/n`, ({ request }) => {
+        seen = request.headers.get("x-chain-network");
+        return HttpResponse.json({});
+      }),
+    );
+    await GET(req("/api/backend/n", { headers: { "x-chain-network": "testnet" } }), ctx("n"));
+    expect(seen).toBe("testnet");
+  });
+
+  it("forwards the visitor's edge country, and never a client-supplied one", async () => {
+    let seen: string | null = "unset";
+    server.use(
+      http.get(`${BACKEND}/c`, ({ request }) => {
+        seen = request.headers.get("x-visitor-country");
+        return HttpResponse.json({});
+      }),
+    );
+
+    await GET(req("/api/backend/c", { headers: { "cf-ipcountry": "gh" } }), ctx("c"));
+    expect(seen).toBe("GH");
+
+    await GET(req("/api/backend/c", { headers: { "x-vercel-ip-country": "KE" } }), ctx("c"));
+    expect(seen).toBe("KE");
+
+    // a spoofed header from the browser is dropped (allowlist), unknown/Tor pseudo-codes are ignored
+    await GET(req("/api/backend/c", { headers: { "x-visitor-country": "US" } }), ctx("c"));
+    expect(seen).toBeNull();
+    await GET(req("/api/backend/c", { headers: { "cf-ipcountry": "XX" } }), ctx("c"));
+    expect(seen).toBeNull();
+    await GET(req("/api/backend/c", { headers: { "cf-ipcountry": "T1" } }), ctx("c"));
+    expect(seen).toBeNull();
+  });
+
   it("does not forward arbitrary client headers (e.g. cookies, host)", async () => {
     let seen: Record<string, string | null> = {};
     server.use(
@@ -118,10 +154,22 @@ describe("/api/backend proxy", () => {
     expect(text).not.toContain("backend.internal");
   });
 
-  it("returns 500 (without details) when API_URL is not configured", async () => {
+  it("tells developers exactly what to set when API_URL is missing (non-production)", async () => {
     vi.stubEnv("API_URL", "");
+    vi.stubEnv("NODE_ENV", "development");
     vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await GET(req("/api/backend/x"), ctx("x"));
     expect(res.status).toBe(500);
+    expect((await res.json()).message).toContain("API_URL");
+    expect(JSON.stringify(res)).not.toContain(BACKEND);
+  });
+
+  it("returns a generic 500 in production when API_URL is missing", async () => {
+    vi.stubEnv("API_URL", "");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await GET(req("/api/backend/x"), ctx("x"));
+    expect(res.status).toBe(500);
+    expect((await res.json()).message).toBe("Service is not configured");
   });
 });

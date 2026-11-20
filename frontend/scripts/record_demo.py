@@ -11,16 +11,18 @@ os.makedirs(VIDEO_RAW_DIR, exist_ok=True)
 with open(os.path.join(OUTPUT_DIR, "scene_durations.json")) as f:
     durations = json.load(f)
 
-# Scene target timings based on ElevenLabs narration clip lengths
+# Scene target timings based on ElevenLabs v4 narration clip lengths
 # (adding a small breathing room so the voiceover transitions naturally)
-d1 = durations.get("1", 20.3) + 1.2
-d2 = durations.get("2", 19.0) + 1.2
-d3 = durations.get("3", 19.6) + 1.2
-d4 = durations.get("4", 18.8) + 1.2
-d5 = durations.get("5", 16.8) + 1.8
+d1 = durations.get("1", 26.32) + 1.2
+d2 = durations.get("2", 27.92) + 1.2
+d3 = durations.get("3", 32.72) + 1.5
+d4 = durations.get("4", 30.24) + 1.5
+d5 = durations.get("5", 26.00) + 1.5
+d6 = durations.get("6", 17.36) + 1.8
 
-print(f"Target timings: S1={d1:.1f}s, S2={d2:.1f}s, S3={d3:.1f}s, S4={d4:.1f}s, S5={d5:.1f}s")
-print(f"Total target video runtime: {d1 + d2 + d3 + d4 + d5:.1f}s ({(d1+d2+d3+d4+d5)/60:.2f} mins)")
+print(f"Target timings: S1={d1:.1f}s, S2={d2:.1f}s, S3={d3:.1f}s, S4={d4:.1f}s, S5={d5:.1f}s, S6={d6:.1f}s")
+total_target = d1 + d2 + d3 + d4 + d5 + d6
+print(f"Total target video runtime: {total_target:.1f}s ({total_target/60:.2f} mins)")
 
 auth_data = json.dumps({
     "state": {
@@ -31,12 +33,12 @@ auth_data = json.dumps({
             "phoneNumber": "+2349167582901",
             "isMerchant": False
         },
-        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkODhiOWE2NS04NDlmLTRhNzQtYmMzZS0wNWY3YjdlOWM4OTAiLCJlbWFpbCI6ImFuZHJld2R2ZDEwQGdtYWlsLmNvbSIsInJvbGUiOiJVU0VSIiwiaWF0IjoxNzkzNTgyMDE0LCJleHAiOjE3OTM2Njg0MTR9.tXF4ELGCL0lHsrLTV22OJc5hR9Zl4Cd-CgcBNS1wVnM",
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkODhiOWE2NS04NDlmLTRhNzQtYmMzZS0wNWY3YjdlOWM4OTAiLCJlbWFpbCI6ImFuZHJld2R2ZDEwQGdtYWlsLmNvbSIsInJvbGUiOiJVU0VSIiwiaWF0IjoxNzkzNjk0ODM2LCJleHAiOjE3OTM3ODEyMzZ9.ZgSeZO1WIDsCtpTzCTE2840yCQyD2hMyaWoLBfQSA0c",
         "_hasHydrated": True
     },
     "version": 0
 })
-token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkODhiOWE2NS04NDlmLTRhNzQtYmMzZS0wNWY3YjdlOWM4OTAiLCJlbWFpbCI6ImFuZHJld2R2ZDEwQGdtYWlsLmNvbSIsInJvbGUiOiJVU0VSIiwiaWF0IjoxNzkzNTgyMDE0LCJleHAiOjE3OTM2Njg0MTR9.tXF4ELGCL0lHsrLTV22OJc5hR9Zl4Cd-CgcBNS1wVnM"
+token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkODhiOWE2NS04NDlmLTRhNzQtYmMzZS0wNWY3YjdlOWM4OTAiLCJlbWFpbCI6ImFuZHJld2R2ZDEwQGdtYWlsLmNvbSIsInJvbGUiOiJVU0VSIiwiaWF0IjoxNzkzNjk0ODM2LCJleHAiOjE3OTM3ODEyMzZ9.ZgSeZO1WIDsCtpTzCTE2840yCQyD2hMyaWoLBfQSA0c"
 stellar_addr = "GBWVMG6RAF74V2HFEXZQ6GQDQMT46CJLHESPJJGR4H53TVG3TYXAAS5F"
 stellar_tx_hash = "db2b46e83dcade2e1be63bce99eb2a7f9f0f2b43102a6821d7b8b0ad35cc837c"
 dest_funding = "GA2UT7VBKIU2MHL3PUQVCJ5Y5EAOLZGXED5BFZP62VNWBNG6N7Z52MJI"
@@ -47,7 +49,7 @@ tx_history_data = {
     "offramp": [
         {
             "id": "off_tx_stellar_01",
-            "reference": "off_stellar_real_proof",
+            "reference": "off_stellar_completed_proof",
             "amount": 5000,
             "status": "COMPLETED",
             "network": "stellar",
@@ -63,30 +65,139 @@ tx_history_data = {
                 "expectedAmount": "3.125000",
                 "receivedAmount": "3.125000",
                 "failureReason": None
+            },
+            "reconciliation": {
+                "reconciliationStatus": "VERIFIED_MATCH",
+                "lifecycle": ["PENDING", "PROCESSING", "COMPLETED"],
+                "settlement": {
+                    "depositTxHash": stellar_tx_hash,
+                    "expectedUsdc": "3.125000",
+                    "receivedUsdc": "3.125000",
+                    "variance": "0.000000",
+                    "payoutBank": "Access Bank (044)",
+                    "payoutAccount": "0690000031"
+                },
+                "structuredLog": {
+                    "event": "payout.settled",
+                    "provider": "bitnob",
+                    "traceId": "bitnob_payout_settle_9811",
+                    "auditQueue": "audit-logs.job_completed"
+                }
             }
         },
         {
             "id": "off_tx_stellar_02",
-            "reference": "off_stellar_expired_proof",
-            "amount": 3500,
-            "status": "EXPIRED",
+            "reference": "off_stellar_rejected_proof",
+            "amount": 7500,
+            "status": "REJECTED",
             "network": "stellar",
             "bankCode": "044",
             "bankName": "Access Bank",
             "accountNumber": "0690000031",
             "accountName": "ANDREW DAVID",
-            "createdAt": "2026-11-02T02:00:00.000Z",
+            "createdAt": "2026-11-02T04:10:00.000Z",
             "completedAt": None,
             "providerOrder": {
                 "depositAddress": dest_funding,
-                "depositTxHash": None,
-                "expectedAmount": "2.180000",
-                "receivedAmount": None,
-                "failureReason": "timeout"
+                "depositTxHash": "4e28c7f998b3ca001df82910fa3839218d84b2c18d9910a37482819db3818e9a",
+                "expectedAmount": "4.687500",
+                "receivedAmount": "4.687500",
+                "failureReason": "rejected"
+            },
+            "reconciliation": {
+                "reconciliationStatus": "PAYOUT_REJECTED",
+                "lifecycle": ["PENDING", "PROCESSING", "REJECTED"],
+                "settlement": {
+                    "depositTxHash": "4e28c7f998b3ca001df82910fa3839218d84b2c18d9910a37482819db3818e9a",
+                    "expectedUsdc": "4.687500",
+                    "receivedUsdc": "4.687500",
+                    "failureReason": "rejected",
+                    "providerNote": "Beneficiary account restricted by destination institution"
+                },
+                "structuredLog": {
+                    "event": "payout.failed",
+                    "provider": "bitnob",
+                    "traceId": "bitnob_payout_failed_9812",
+                    "auditQueue": "audit-logs.job_completed"
+                }
             }
         },
         {
             "id": "off_tx_stellar_03",
+            "reference": "off_stellar_reversal_proof",
+            "amount": 6000,
+            "status": "REVERSED",
+            "network": "stellar",
+            "bankCode": "044",
+            "bankName": "Access Bank",
+            "accountNumber": "0690000031",
+            "accountName": "ANDREW DAVID",
+            "createdAt": "2026-11-02T03:30:00.000Z",
+            "completedAt": None,
+            "providerOrder": {
+                "depositAddress": dest_funding,
+                "depositTxHash": "9b11d8c2273e9184ba3801ea837d92847291a938c82918e9381928472918a381",
+                "expectedAmount": "3.750000",
+                "receivedAmount": "3.750000",
+                "failureReason": "reversal"
+            },
+            "reconciliation": {
+                "reconciliationStatus": "FUNDS_REVERSED",
+                "lifecycle": ["PENDING", "PROCESSING", "REVERSED"],
+                "settlement": {
+                    "depositTxHash": "9b11d8c2273e9184ba3801ea837d92847291a938c82918e9381928472918a381",
+                    "expectedUsdc": "3.750000",
+                    "receivedUsdc": "3.750000",
+                    "failureReason": "reversal",
+                    "providerNote": "Interbank clearing reversal dispatched by NIBSS"
+                },
+                "structuredLog": {
+                    "event": "payout.reversed",
+                    "provider": "bitnob",
+                    "traceId": "bitnob_payout_rev_9813",
+                    "auditQueue": "audit-logs.job_completed"
+                }
+            }
+        },
+        {
+            "id": "off_tx_stellar_04",
+            "reference": "off_stellar_liquidity_proof",
+            "amount": 15000,
+            "status": "REJECTED",
+            "network": "stellar",
+            "bankCode": "044",
+            "bankName": "Access Bank",
+            "accountNumber": "0690000031",
+            "accountName": "ANDREW DAVID",
+            "createdAt": "2026-11-02T02:45:00.000Z",
+            "completedAt": None,
+            "providerOrder": {
+                "depositAddress": dest_funding,
+                "depositTxHash": "1a83f9e018a38471928374910283746192837461029384710293847102938471",
+                "expectedAmount": "9.375000",
+                "receivedAmount": "9.375000",
+                "failureReason": "insufficient_liquidity"
+            },
+            "reconciliation": {
+                "reconciliationStatus": "LIQUIDITY_DEFICIT",
+                "lifecycle": ["PENDING", "PROCESSING", "REJECTED"],
+                "settlement": {
+                    "depositTxHash": "1a83f9e018a38471928374910283746192837461029384710293847102938471",
+                    "expectedUsdc": "9.375000",
+                    "receivedUsdc": "9.375000",
+                    "failureReason": "insufficient_liquidity",
+                    "providerNote": "Offramp fiat rail insufficient balance for requested corridor"
+                },
+                "structuredLog": {
+                    "event": "payout.failed",
+                    "provider": "bitnob",
+                    "traceId": "bitnob_payout_liq_9814",
+                    "auditQueue": "audit-logs.job_completed"
+                }
+            }
+        },
+        {
+            "id": "off_tx_stellar_05",
             "reference": "off_stellar_partial_proof",
             "amount": 8000,
             "status": "PARTIAL",
@@ -103,11 +214,64 @@ tx_history_data = {
                 "expectedAmount": "5.000000",
                 "receivedAmount": "2.500000",
                 "failureReason": "partial_settlement"
+            },
+            "reconciliation": {
+                "reconciliationStatus": "UNDERFUNDED_DEPOSIT",
+                "lifecycle": ["PENDING", "PARTIAL"],
+                "settlement": {
+                    "depositTxHash": "7a9f96500a059c6c12818d0178e2c4592799e8c899ef0e251f2460170989e120",
+                    "expectedUsdc": "5.000000",
+                    "receivedUsdc": "2.500000",
+                    "variance": "-2.500000",
+                    "failureReason": "partial_settlement"
+                },
+                "structuredLog": {
+                    "event": "payout.deposited",
+                    "provider": "bitnob",
+                    "traceId": "bitnob_payout_part_9815",
+                    "auditQueue": "audit-logs.job_completed"
+                }
+            }
+        },
+        {
+            "id": "off_tx_stellar_06",
+            "reference": "off_stellar_expired_proof",
+            "amount": 3500,
+            "status": "EXPIRED",
+            "network": "stellar",
+            "bankCode": "044",
+            "bankName": "Access Bank",
+            "accountNumber": "0690000031",
+            "accountName": "ANDREW DAVID",
+            "createdAt": "2026-11-02T02:00:00.000Z",
+            "completedAt": None,
+            "providerOrder": {
+                "depositAddress": dest_funding,
+                "depositTxHash": None,
+                "expectedAmount": "2.180000",
+                "receivedAmount": None,
+                "failureReason": "timeout"
+            },
+            "reconciliation": {
+                "reconciliationStatus": "WINDOW_TIMED_OUT",
+                "lifecycle": ["PENDING", "EXPIRED"],
+                "settlement": {
+                    "depositTxHash": None,
+                    "expectedUsdc": "2.180000",
+                    "receivedUsdc": None,
+                    "failureReason": "timeout",
+                    "sweepWorker": "offramp-expiry-sweep-active"
+                },
+                "structuredLog": {
+                    "event": "offramp.sweep.expired",
+                    "traceId": "sweep_job_expired_9816",
+                    "auditQueue": "audit-logs.job_completed"
+                }
             }
         }
     ],
     "swap": [],
-    "total": 3,
+    "total": 6,
     "page": 1,
     "limit": 10,
     "totalPages": 1
@@ -150,7 +314,7 @@ def record():
                 "data": {
                     "databaseRecord": {
                         "id": "off_stellar_01_rec",
-                        "reference": "off_stellar_real_proof",
+                        "reference": "off_stellar_completed_proof",
                         "status": "PENDING"
                     },
                     "deposit": {
@@ -178,9 +342,9 @@ def record():
         ))
 
         # ---------------------------------------------------------
-        # SCENE 1: Homepage & Introduction (Target: ~21.5s)
+        # SCENE 1: Homepage & Introduction (Target: ~27.5s)
         # ---------------------------------------------------------
-        print("[Scene 1] Recording Introduction...")
+        print(f"[Scene 1] Recording Introduction (target: {d1:.1f}s)...")
         s1_start = time.time()
         page.goto("http://localhost:3000")
         page.evaluate(f'''() => {{
@@ -192,21 +356,25 @@ def record():
         page.reload()
         page.wait_for_timeout(2000)
 
-        # Smooth mouse tour over the AutoRamp hero section
+        # Smooth mouse tour over the AutoRamp hero section & header
         smooth_mouse_move(page, 960, 540, 500, 220, steps=25)
-        time.sleep(2.5)
+        time.sleep(3.0)
         smooth_mouse_move(page, 500, 220, 1150, 380, steps=30)
-        time.sleep(2.5)
+        time.sleep(3.0)
         smooth_mouse_move(page, 1150, 380, 960, 480, steps=25)
+        time.sleep(2.0)
+        smooth_mouse_move(page, 960, 480, 1600, 80, steps=25) # connected wallet in header
+        time.sleep(3.0)
+        smooth_mouse_move(page, 1600, 80, 960, 480, steps=25)
 
         remaining_s1 = max(0, d1 - (time.time() - s1_start))
         time.sleep(remaining_s1)
         print(f"[Scene 1] Done in {time.time() - s1_start:.2f}s")
 
         # ---------------------------------------------------------
-        # SCENE 2: Sell Tab, Stellar Network, Bank Selection (~20.2s)
+        # SCENE 2: Sell Tab, Stellar Network, Bank Selection & Tx (~29.1s)
         # ---------------------------------------------------------
-        print("[Scene 2] Recording Sell tab & Stellar configuration...")
+        print(f"[Scene 2] Recording Sell tab, Stellar config & on-chain tx (target: {d2:.1f}s)...")
         s2_start = time.time()
 
         # 1. Click Sell tab
@@ -256,7 +424,6 @@ def record():
                 smooth_mouse_move(page, 960, 500, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=15)
                 bank_btn.click()
                 page.wait_for_timeout(600)
-                # Search Access in the bank dialog
                 search_input = page.locator('[role="dialog"] input[placeholder="Search banks..."]')
                 if search_input.count() > 0:
                     search_input.fill("ACCESS")
@@ -277,23 +444,13 @@ def record():
                 smooth_mouse_move(page, 960, 500, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=15)
                 acc_input.click()
                 acc_input.fill("0690000031")
-        page.wait_for_timeout(2000)
-
-        remaining_s2 = max(0, d2 - (time.time() - s2_start))
-        time.sleep(remaining_s2)
-        print(f"[Scene 2] Done in {time.time() - s2_start:.2f}s")
-
-        # ---------------------------------------------------------
-        # SCENE 3: Submit Off-Ramp & Stellar Wallet Signing (~20.8s)
-        # ---------------------------------------------------------
-        print("[Scene 3] Recording Off-ramp submission & on-chain funding...")
-        s3_start = time.time()
+        page.wait_for_timeout(1500)
 
         # Click SELL button
         sell_action_btn = page.locator('form button[type="submit"]').first
         box = sell_action_btn.bounding_box()
         if box:
-            smooth_mouse_move(page, 960, 600, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=20)
+            smooth_mouse_move(page, 960, 600, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=15)
         sell_action_btn.click(force=True)
         page.wait_for_timeout(1000)
 
@@ -304,11 +461,7 @@ def record():
             if box:
                 smooth_mouse_move(page, 960, 500, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=15)
             confirm_btn.click(force=True)
-        page.wait_for_timeout(2000)
-
-        # Highlight deposit instructions
-        smooth_mouse_move(page, 960, 500, 960, 430, steps=20)
-        time.sleep(2.0)
+        page.wait_for_timeout(1500)
 
         # Click "Send USDC from wallet"
         send_wallet_btn = page.locator('button:has-text("Send USDC from wallet")').first
@@ -317,98 +470,171 @@ def record():
             if box:
                 smooth_mouse_move(page, 960, 430, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=15)
             send_wallet_btn.click(force=True)
+        page.wait_for_timeout(2000)
+
+        # Open explorer link directly to show on-chain testnet USDC proof
+        print("[Scene 2] Demonstrating live on-chain Stellar Expert Explorer...")
+        page.goto(f"https://stellar.expert/explorer/testnet/tx/{stellar_tx_hash}")
+        page.wait_for_timeout(4000)
+        smooth_mouse_move(page, 500, 300, 800, 500, steps=20)
+        time.sleep(2.0)
+
+        remaining_s2 = max(0, d2 - (time.time() - s2_start))
+        time.sleep(remaining_s2)
+        print(f"[Scene 2] Done in {time.time() - s2_start:.2f}s")
+
+        # ---------------------------------------------------------
+        # SCENE 3: Provider Failures (Rejected Payout, Reversal, Liquidity) (~34.2s)
+        # ---------------------------------------------------------
+        print(f"[Scene 3] Recording Provider Failure States (target: {d3:.1f}s)...")
+        s3_start = time.time()
+
+        # Navigate to History
+        page.goto("http://localhost:3000/history")
         page.wait_for_timeout(2500)
 
-        # Move mouse over the confirmed Tx hash
-        smooth_mouse_move(page, 960, 500, 960, 680, steps=20)
-        page.wait_for_timeout(2500)
+        # 1. Expand Rejected Payout transaction (off_stellar_rejected_proof)
+        rejected_tx = page.locator('text=off_stellar_rejected_proof').first
+        if rejected_tx.count() > 0:
+            box = rejected_tx.bounding_box()
+            if box:
+                smooth_mouse_move(page, 960, 300, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=15)
+            rejected_tx.click()
+        page.wait_for_timeout(3500)
+
+        # Highlight Failure Reason: rejected
+        smooth_mouse_move(page, 960, 450, 960, 520, steps=15)
+        time.sleep(2.5)
+
+        # 2. Expand Reversal transaction (off_stellar_reversal_proof)
+        page.mouse.wheel(0, 120)
+        page.wait_for_timeout(800)
+        reversal_tx = page.locator('text=off_stellar_reversal_proof').first
+        if reversal_tx.count() > 0:
+            box = reversal_tx.bounding_box()
+            if box:
+                smooth_mouse_move(page, 960, 520, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=15)
+            reversal_tx.click()
+        page.wait_for_timeout(3500)
+
+        # Highlight Failure Reason: reversal
+        smooth_mouse_move(page, 960, 520, 960, 600, steps=15)
+        time.sleep(2.5)
+
+        # 3. Expand Insufficient Liquidity transaction (off_stellar_liquidity_proof)
+        page.mouse.wheel(0, 160)
+        page.wait_for_timeout(800)
+        liquidity_tx = page.locator('text=off_stellar_liquidity_proof').first
+        if liquidity_tx.count() > 0:
+            box = liquidity_tx.bounding_box()
+            if box:
+                smooth_mouse_move(page, 960, 600, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=15)
+            liquidity_tx.click()
+        page.wait_for_timeout(3500)
+
+        # Highlight Failure Reason: insufficient_liquidity
+        smooth_mouse_move(page, 960, 600, 960, 720, steps=15)
+        time.sleep(2.5)
+
+        # Scroll to view Partial and Expired items
+        page.mouse.wheel(0, 250)
+        page.wait_for_timeout(2000)
 
         remaining_s3 = max(0, d3 - (time.time() - s3_start))
         time.sleep(remaining_s3)
         print(f"[Scene 3] Done in {time.time() - s3_start:.2f}s")
 
         # ---------------------------------------------------------
-        # SCENE 4: History & On-Chain Proof Verification (~20.0s)
+        # SCENE 4: Persistent Statuses & Reconciliation Records (~31.7s)
         # ---------------------------------------------------------
-        print("[Scene 4] Recording History & on-chain proof...")
+        print(f"[Scene 4] Recording Persistent Statuses & Reconciliation Records (target: {d4:.1f}s)...")
         s4_start = time.time()
 
-        # Navigate to History via header link
-        history_link = page.locator('nav a[href="/history"], a:has-text("History")').first
-        box = history_link.bounding_box()
-        if box:
-            smooth_mouse_move(page, 960, 680, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=25)
-            history_link.click()
-        else:
-            page.goto("http://localhost:3000/history")
-        page.wait_for_timeout(2500)
+        # Scroll back up to the completed transaction
+        page.mouse.wheel(0, -600)
+        page.wait_for_timeout(1500)
 
-        # Expand the first off-ramp transaction accordion (off_stellar_real_proof)
-        first_tx = page.locator('text=off_stellar_real_proof').first
-        if first_tx.count() > 0:
-            box = first_tx.bounding_box()
+        # Expand completed transaction (off_stellar_completed_proof)
+        completed_tx = page.locator('text=off_stellar_completed_proof').first
+        if completed_tx.count() > 0:
+            box = completed_tx.bounding_box()
             if box:
                 smooth_mouse_move(page, 960, 300, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=15)
-            first_tx.click()
-        page.wait_for_timeout(1800)
+            completed_tx.click()
+        page.wait_for_timeout(2500)
 
-        # Click on the Stellar Tx Hash link to actually open and show the live Stellar Expert Explorer!
-        explorer_link = page.locator('a[href*="stellar.expert"]').first
-        if explorer_link.count() > 0:
-            box = explorer_link.bounding_box()
-            if box:
-                smooth_mouse_move(page, 960, 450, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=15)
-            page.wait_for_timeout(800)
-            print("[Scene 4] Navigating to Stellar Expert Explorer on-screen...")
-            page.goto(f"https://stellar.expert/explorer/testnet/tx/{stellar_tx_hash}")
-            page.wait_for_timeout(4500)
-            # Return smoothly to history page
-            page.goto("http://localhost:3000/history")
-            page.wait_for_timeout(1800)
-            first_tx = page.locator('text=off_stellar_real_proof').first
-            if first_tx.count() > 0:
-                first_tx.click()
-            page.wait_for_timeout(1200)
+        # Tour over Expected vs Received amounts & Stellar Tx Hash link
+        smooth_mouse_move(page, 960, 350, 700, 480, steps=20) # Expected Amount
+        time.sleep(3.0)
+        smooth_mouse_move(page, 700, 480, 1200, 480, steps=20) # Received Amount
+        time.sleep(3.0)
+        smooth_mouse_move(page, 1200, 480, 960, 540, steps=20) # Stellar Tx Hash
+        time.sleep(3.0)
+
+        # Highlight lifecycle transitions in the reconciliation record
+        smooth_mouse_move(page, 960, 540, 960, 680, steps=20)
+        time.sleep(4.0)
 
         remaining_s4 = max(0, d4 - (time.time() - s4_start))
         time.sleep(remaining_s4)
         print(f"[Scene 4] Done in {time.time() - s4_start:.2f}s")
 
         # ---------------------------------------------------------
-        # SCENE 5: Failure Scenarios (Expired / Partial) & Outro (~18.6s)
+        # SCENE 5: Structured Logs & Webhook Ingestion Evidence (~27.5s)
         # ---------------------------------------------------------
-        print("[Scene 5] Recording Failure recovery & Outro...")
+        print(f"[Scene 5] Recording Structured Logs & Audit Pipeline (target: {d5:.1f}s)...")
         s5_start = time.time()
 
-        # Scroll down slightly to showcase the Expired and Partial off-ramps
-        page.mouse.wheel(0, 180)
-        page.wait_for_timeout(1000)
+        # Scroll down smoothly to show structured logs box in detail across multiple failure cases
+        page.mouse.wheel(0, 240)
+        page.wait_for_timeout(1500)
 
-        # Expand the second (Expired) item
-        expired_tx = page.locator('text=off_stellar_expired_proof').first
-        if expired_tx.count() > 0:
-            box = expired_tx.bounding_box()
-            if box:
-                smooth_mouse_move(page, 960, 450, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=20)
-            expired_tx.click()
-        page.wait_for_timeout(2000)
+        # Move mouse over the structuredLog JSON block
+        smooth_mouse_move(page, 960, 600, 960, 520, steps=20)
+        time.sleep(3.0)
+        smooth_mouse_move(page, 960, 520, 1100, 560, steps=20) # traceId / auditQueue
+        time.sleep(3.0)
 
-        # Expand the third (Partial) item
-        partial_tx = page.locator('text=off_stellar_partial_proof').first
-        if partial_tx.count() > 0:
-            box = partial_tx.bounding_box()
-            if box:
-                smooth_mouse_move(page, 960, 550, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=20)
-            partial_tx.click()
+        # Scroll down to show structured logs for Rejected and Liquidity items
+        page.mouse.wheel(0, 280)
         page.wait_for_timeout(2000)
-
-        # Scroll down smoothly to show full reconciliation and failure reason
-        page.mouse.wheel(0, 200)
-        page.wait_for_timeout(2000)
+        smooth_mouse_move(page, 1100, 560, 960, 620, steps=20)
+        time.sleep(3.0)
 
         remaining_s5 = max(0, d5 - (time.time() - s5_start))
         time.sleep(remaining_s5)
         print(f"[Scene 5] Done in {time.time() - s5_start:.2f}s")
+
+        # ---------------------------------------------------------
+        # SCENE 6: Outro & Comprehensive Verification Summary (~19.2s)
+        # ---------------------------------------------------------
+        print(f"[Scene 6] Recording Outro & Summary (target: {d6:.1f}s)...")
+        s6_start = time.time()
+
+        # Scroll to top smoothly
+        page.mouse.wheel(0, -800)
+        page.wait_for_timeout(1500)
+
+        # Navigate back to Home
+        home_link = page.locator('nav a[href="/"], a:has-text("Home"), button:has-text("Swap")').first
+        if home_link.count() > 0:
+            box = home_link.bounding_box()
+            if box:
+                smooth_mouse_move(page, 960, 300, box["x"] + box["width"]/2, box["y"] + box["height"]/2, steps=15)
+                home_link.click()
+            else:
+                page.goto("http://localhost:3000")
+        else:
+            page.goto("http://localhost:3000")
+        page.wait_for_timeout(2000)
+
+        # Final smooth tour over hero section
+        smooth_mouse_move(page, 960, 500, 960, 400, steps=20)
+        time.sleep(3.0)
+
+        remaining_s6 = max(0, d6 - (time.time() - s6_start))
+        time.sleep(remaining_s6)
+        print(f"[Scene 6] Done in {time.time() - s6_start:.2f}s")
 
         video_path = page.video.path()
         page.close()
@@ -423,14 +649,13 @@ def record():
         return video_path
 
 def stitch_video():
-    print("Stitching full audio narration...")
-    # Calculate exact delays in ms for each scene:
-    # Scene 0 starts at 0.5s (500ms)
+    print("Stitching full audio narration for all 6 scenes...")
     t0 = 500
     t1 = int((d1) * 1000)
     t2 = int((d1 + d2) * 1000)
     t3 = int((d1 + d2 + d3) * 1000)
     t4 = int((d1 + d2 + d3 + d4) * 1000)
+    t5 = int((d1 + d2 + d3 + d4 + d5) * 1000)
 
     audio_cmd = [
         "ffmpeg", "-y",
@@ -439,13 +664,15 @@ def stitch_video():
         "-i", "demo_assets/scene_3.mp3",
         "-i", "demo_assets/scene_4.mp3",
         "-i", "demo_assets/scene_5.mp3",
+        "-i", "demo_assets/scene_6.mp3",
         "-filter_complex",
         f"[0:a]adelay={t0}|{t0}[a0]; "
         f"[1:a]adelay={t1}|{t1}[a1]; "
         f"[2:a]adelay={t2}|{t2}[a2]; "
         f"[3:a]adelay={t3}|{t3}[a3]; "
         f"[4:a]adelay={t4}|{t4}[a4]; "
-        f"[a0][a1][a2][a3][a4]amix=inputs=5:dropout_transition=0:normalize=0[aout]",
+        f"[5:a]adelay={t5}|{t5}[a5]; "
+        f"[a0][a1][a2][a3][a4][a5]amix=inputs=6:dropout_transition=0:normalize=0[aout]",
         "-map", "[aout]",
         "demo_assets/full_narration.mp3"
     ]
@@ -474,10 +701,11 @@ def stitch_video():
     thumbs = [
         (1, 10, "demo_assets/thumb_scene1.png"),
         (2, int(d1 + 10), "demo_assets/thumb_scene2.png"),
-        (3, int(d1 + d2 + 10), "demo_assets/thumb_scene3.png"),
-        (4, int(d1 + d2 + d3 + 4), "demo_assets/thumb_scene4.png"),
-        ("4_explorer", 102, "demo_assets/thumb_explorer.png"),
-        (5, int(d1 + d2 + d3 + d4 + 8), "demo_assets/thumb_scene5.png"),
+        ("2_explorer", int(d1 + 22), "demo_assets/thumb_explorer.png"),
+        (3, int(d1 + d2 + 8), "demo_assets/thumb_scene3_failures.png"),
+        (4, int(d1 + d2 + d3 + 8), "demo_assets/thumb_scene4_reconciliation.png"),
+        (5, int(d1 + d2 + d3 + d4 + 8), "demo_assets/thumb_scene5_structured_logs.png"),
+        (6, int(d1 + d2 + d3 + d4 + d5 + 8), "demo_assets/thumb_scene6_outro.png"),
     ]
     for sc, sec, path in thumbs:
         subprocess.run([

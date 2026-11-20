@@ -51,16 +51,16 @@ function CustomTooltip({
   } catch {}
 
   return (
-    <div className="rounded-lg border border-white/10 bg-black/80 backdrop-blur-md px-4 py-3 shadow-xl">
-      <p className="text-sm font-medium text-white mb-2">{displayDate}</p>
+    <div className="rounded-lg border border-(--c-line) bg-black/80 backdrop-blur-md px-4 py-3 shadow-xl">
+      <p className="text-sm font-medium text-(--c-text) mb-2">{displayDate}</p>
       {payload.map((entry) => (
         <div key={entry.name} className="flex items-center gap-2 text-sm">
           <span
             className="h-2.5 w-2.5 rounded-full shrink-0"
             style={{ backgroundColor: entry.color }}
           />
-          <span className="text-white/60">{entry.name}:</span>
-          <span className="text-white font-medium">
+          <span className="text-(--c-text)/60">{entry.name}:</span>
+          <span className="text-(--c-text) font-medium">
             {prefix}
             {entry.value.toLocaleString()}
           </span>

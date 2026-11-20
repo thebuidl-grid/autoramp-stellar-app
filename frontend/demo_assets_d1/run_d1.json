@@ -1,0 +1,47 @@
+{
+  "api": "https://api-autoramp.thebuidl.xyz",
+  "real_reference": "off_stellar_real_proof",
+  "real_deposits": {
+    "partial": {
+      "amount": "2.5",
+      "expected": "5",
+      "memo": "d1-partial",
+      "hash": "a283674047e72cf197faeff96eac606e9d949406578c6bbd3244e06a0707c8a2",
+      "ledger": 5664923,
+      "url": "https://stellar.expert/explorer/testnet/tx/a283674047e72cf197faeff96eac606e9d949406578c6bbd3244e06a0707c8a2"
+    },
+    "rejected": {
+      "amount": "1",
+      "expected": "1",
+      "memo": "d1-rejected",
+      "hash": "6acda0f53278366bc6e38b46d2895159f0b87435083cc9ee644b9ad51b77ad1c",
+      "ledger": 5664924,
+      "url": "https://stellar.expert/explorer/testnet/tx/6acda0f53278366bc6e38b46d2895159f0b87435083cc9ee644b9ad51b77ad1c"
+    },
+    "reversal": {
+      "amount": "1",
+      "expected": "1",
+      "memo": "d1-reversal",
+      "hash": "7f97fe88ed4f9a2ce0557277a90cdccec8e7ca1680fee126f09f8dae31d1fbb5",
+      "ledger": 5664925,
+      "url": "https://stellar.expert/explorer/testnet/tx/7f97fe88ed4f9a2ce0557277a90cdccec8e7ca1680fee126f09f8dae31d1fbb5"
+    },
+    "liquidity": {
+      "amount": "1",
+      "expected": "1",
+      "memo": "d1-liquidity",
+      "hash": "07211f95fdc02253613c12e1c541dabac11bf0f09f9ec6bbe0f409123540e90e",
+      "ledger": 5664926,
+      "url": "https://stellar.expert/explorer/testnet/tx/07211f95fdc02253613c12e1c541dabac11bf0f09f9ec6bbe0f409123540e90e"
+    }
+  },
+  "staged": [
+    "sim_timeout_demo",
+    "sim_partial_demo",
+    "sim_rejected_demo",
+    "sim_reversal_demo",
+    "sim_liquidity_demo"
+  ],
+  "real_status": "COMPLETED",
+  "real_hash": "80e855d2ddb63abadcb6cb66ca14068e9fbc4e6fbe3882752ab538c534d33aed"
+}

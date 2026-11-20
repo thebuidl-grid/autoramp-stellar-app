@@ -1,3 +1,4 @@
+import { currentChainNetwork } from '../../common/request-context';
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
@@ -208,6 +209,7 @@ export class SwapService {
         {
           type: 'off',
           network: dto.network || 'base',
+          sourceAddress: dto.sourceAddress,
           amount: dto.amount, // NGN amount (estimated NGN value from frontend)
           destination: {
             bankCode: dto.offrampDestination.bankCode,
@@ -227,7 +229,9 @@ export class SwapService {
 
       // Extract recipient address from offramp response
       // The address is at data.depositAddress, not data.depositAccount.address
+      // Bitnob off-ramp returns it as deposit.receiveAddress
       const recipientAddress =
+        offrampResult?.deposit?.receiveAddress ||
         offrampResult?.data?.depositAddress ||
         offrampResult?.data?.depositAccount?.address;
 
@@ -259,6 +263,7 @@ export class SwapService {
       if (merchantId) {
         swapTransaction = await this.prisma.merchantSwapTransaction.create({
           data: {
+          chainNetwork: currentChainNetwork(),
             merchantId,
             reference: offrampTransaction.reference,
             fromTokenType,
@@ -278,6 +283,7 @@ export class SwapService {
       } else {
         swapTransaction = await this.prisma.swapTransaction.create({
           data: {
+          chainNetwork: currentChainNetwork(),
             userId,
             reference: offrampTransaction.reference, // Same reference as offramp
             fromTokenType,
@@ -311,6 +317,7 @@ export class SwapService {
           const depositAccount = offrampResult?.data?.depositAccount || {};
           await this.prisma.merchantOfframpTransaction.create({
             data: {
+          chainNetwork: currentChainNetwork(),
               merchantId,
               reference: offrampTransaction.reference,
               amount: dto.amount,
@@ -581,6 +588,7 @@ export class SwapService {
         const merchantSwapTransaction =
           await this.prisma.merchantSwapTransaction.create({
             data: {
+          chainNetwork: currentChainNetwork(),
               merchantId,
               reference,
               fromTokenType: dto.fromTokenType.toUpperCase(),
@@ -646,6 +654,7 @@ export class SwapService {
       if (userId) {
         const userSwapTransaction = await this.prisma.swapTransaction.create({
           data: {
+          chainNetwork: currentChainNetwork(),
             userId,
             reference,
             fromTokenType: dto.fromTokenType.toUpperCase(),

@@ -1,3 +1,6 @@
+import { PayoutPollService } from './payout-poll.service';
+import { payoutOrdersOver } from './testing/payout-orders-double';
+import { PayoutOrderRepository } from './payout-order.repository';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../database/prisma.service';
 import { OfframpExpiryService } from './offramp-expiry.service';
@@ -32,7 +35,10 @@ describe('OfframpExpiryService', () => {
       providers: [
         OfframpExpiryService,
         { provide: PrismaService, useValue: prisma },
+        { provide: PayoutOrderRepository, useValue: payoutOrdersOver(prisma) },
         { provide: OfframpStateService, useValue: offrampState },
+        // default: the order never reached Bitnob, so there is nothing to ask and expiry proceeds as before
+        { provide: PayoutPollService, useValue: { pollTransaction: jest.fn().mockResolvedValue({ outcome: 'no_provider' }) } },
       ],
     }).compile();
 

@@ -5,6 +5,7 @@ import {
   computeSettlement,
   normalizeOfframpStatus,
   reasonLabel,
+  sellProgress,
   statusMeta,
   viewFromLegacy,
 } from "./offramp-status";
@@ -101,5 +102,28 @@ describe("viewFromLegacy (older backend response)", () => {
       { action: "duplicate_event_ignored", oldStatus: "COMPLETED", newStatus: "COMPLETED", createdAt: "x" },
     ]);
     expect(v.statusHistory).toHaveLength(0);
+  });
+});
+
+describe("sellProgress", () => {
+  it("keeps the screen's own wording while still waiting for the deposit", () => {
+    expect(sellProgress("AWAITING_DEPOSIT")).toBeNull();
+    expect(sellProgress("INITIATED")).toBeNull();
+    expect(sellProgress(undefined)).toBeNull();
+  });
+  it("reports progress after the deposit lands", () => {
+    expect(sellProgress("DEPOSIT_DETECTED")?.phase).toBe("progress");
+    expect(sellProgress("PAYOUT_PENDING")?.title).toBe("Sending your payout");
+  });
+  it("reports a finished payout", () => {
+    expect(sellProgress("COMPLETED")?.phase).toBe("done");
+  });
+  it("says plainly when it did not pay out", () => {
+    for (const s of ["FAILED", "REJECTED", "REVERSED", "EXPIRED", "PARTIALLY_SETTLED", "INSUFFICIENT_LIQUIDITY"]) {
+      expect(sellProgress(s)?.phase).toBe("failed");
+    }
+    expect(sellProgress("EXPIRED")?.subtitle).toMatch(/contact support/i);
+    // Older backends use legacy names.
+    expect(sellProgress("CANCELLED")?.phase).toBe("failed");
   });
 });

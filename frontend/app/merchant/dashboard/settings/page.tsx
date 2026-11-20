@@ -41,7 +41,7 @@ export default function MerchantSettingsPage() {
             </div>
 
             <Tabs defaultValue="business" className="w-full space-y-6">
-                <TabsList className="bg-white/5 border border-white/10 p-1 rounded-xl w-full justify-start overflow-x-auto">
+                <TabsList className="bg-(--c-field) border border-(--c-line) p-1 rounded-xl w-full justify-start overflow-x-auto">
                     <TabsTrigger value="business" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-black">Business Details</TabsTrigger>
                     <TabsTrigger value="documentation" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-black">Documentation</TabsTrigger>
                     <TabsTrigger value="directors" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-black">Directors</TabsTrigger>
@@ -51,8 +51,8 @@ export default function MerchantSettingsPage() {
                     <TabsTrigger value="delivery-logs" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-black">Delivery Logs</TabsTrigger>
                 </TabsList>
 
-                <Card className="bg-black/30 backdrop-blur-md border-white/10 rounded-2xl overflow-hidden">
-                    <CardHeader className="border-b border-white/5 bg-white/2">
+                <Card className="bg-(--c-field) backdrop-blur-md border-(--c-line) rounded-2xl overflow-hidden">
+                    <CardHeader className="border-b border-(--c-line) bg-(--c-field)">
                         <CardTitle>Merchant Profile Information</CardTitle>
                         <CardDescription>
                             Keep your business profile and settlement details up to date.

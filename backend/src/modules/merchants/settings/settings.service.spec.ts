@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { SettingsService } from './settings.service';
 import { PrismaService } from '../../../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -25,6 +29,7 @@ describe('SettingsService', () => {
 
   const mockNotifications = {
     generateWebhookSecret: jest.fn().mockReturnValue('whsec_test123'),
+    assertSafeWebhookTarget: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(async () => {
@@ -46,7 +51,12 @@ describe('SettingsService', () => {
   describe('getWebhooks', () => {
     it('should return all webhooks for a merchant', async () => {
       prisma.merchantWebhook.findMany.mockResolvedValue([
-        { id: 'wh-1', url: 'https://example.com', secret: 'whsec_...', active: true },
+        {
+          id: 'wh-1',
+          url: 'https://example.com',
+          secret: 'whsec_...',
+          active: true,
+        },
       ]);
 
       const result = await service.getWebhooks('merchant-1');
@@ -76,6 +86,19 @@ describe('SettingsService', () => {
       expect(result.url).toBe('https://new-webhook.example.com');
       expect(result.secret).toBe('whsec_test123');
       expect(notificationsService.generateWebhookSecret).toHaveBeenCalled();
+    });
+
+    it('rejects an unsafe webhook URL (e.g. an internal address) and saves nothing', async () => {
+      notificationsService.assertSafeWebhookTarget.mockRejectedValueOnce(
+        new BadRequestException(
+          'Invalid webhook URL: URL points to a private address',
+        ),
+      );
+
+      await expect(
+        service.addWebhook('merchant-1', { url: 'https://169.254.169.254/' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.merchantWebhook.create).not.toHaveBeenCalled();
     });
 
     it('should throw ConflictException for duplicate URL', async () => {

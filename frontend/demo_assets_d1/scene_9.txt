@@ -1,0 +1,1 @@
+Simulated: insufficient liquidity. The payout was held because there was not enough liquidity. The page shows the required amount, the available amount, and the shortfall, and tells the user the transaction is on hold and can be retried.

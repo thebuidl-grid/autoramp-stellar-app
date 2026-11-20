@@ -16,6 +16,8 @@ interface OnrampConfirmationModalProps {
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
   amount: string;
+  /** Fiat symbol shown before the amount (defaults to ₦). */
+  currencySymbol?: string;
   walletAddress: string;
   network: string;
   isLoading?: boolean;
@@ -26,6 +28,7 @@ export function OnrampConfirmationModal({
   onOpenChange,
   onConfirm,
   amount,
+  currencySymbol = "₦",
   walletAddress,
   network,
   isLoading = false,
@@ -41,7 +44,7 @@ export function OnrampConfirmationModal({
           <div className="bg-white/5 p-4 rounded-lg space-y-3 border border-white/10">
             <div className="flex justify-between items-center">
               <span className="text-white/50 text-sm">Amount to Pay</span>
-              <span className="text-white font-medium">₦{amount}</span>
+              <span className="text-white font-medium">{currencySymbol}{amount}</span>
             </div>
 
             <div className="h-px bg-white/10 w-full" />

@@ -17,6 +17,7 @@ import {
   trustWallet,
 } from "@rainbow-me/rainbowkit/wallets";
 import { createConfig, http } from "wagmi";
+import { WALLETCONNECT_PROJECT_ID } from "@/lib/constants/walletconnect";
 import { SUPPORTED_CHAINS, getRpcUrl } from "./constants/networks";
 
 /**
@@ -28,9 +29,7 @@ const FALLBACK_RPC_URLS: Record<number, string | undefined> = {
   1: "https://ethereum-rpc.publicnode.com",
 };
 
-// Get project ID from environment
-const projectId =
-  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "default-project-id";
+const projectId = WALLETCONNECT_PROJECT_ID;
 
 const connectors =
   typeof window !== "undefined"
@@ -59,6 +58,20 @@ const connectors =
         {
           appName: "AutoRamp",
           projectId,
+          // Mobile: the wallet app only knows how to send the user back to the
+          // browser if the dapp metadata carries a redirect (universal link).
+          // Without it the wallet opens and the user is stranded there.
+          walletConnectParameters: {
+            metadata: {
+              name: "AutoRamp",
+              description: "AutoRamp",
+              url: window.location.origin,
+              icons: [`${window.location.origin}/favicon.ico`],
+              redirect: {
+                universal: window.location.origin,
+              },
+            },
+          },
         },
       )
     : [];

@@ -1,0 +1,57 @@
+{
+  "lead": 4.41,
+  "marks": [
+    {
+      "scene": "flow_form",
+      "t": 0.02
+    },
+    {
+      "scene": "flow_form__end",
+      "t": 53.34
+    },
+    {
+      "scene": "flow_connect",
+      "t": 53.34
+    },
+    {
+      "scene": "flow_connect__end",
+      "t": 65.12
+    },
+    {
+      "scene": "flow_sell",
+      "t": 65.13
+    },
+    {
+      "scene": "flow_sell__end",
+      "t": 84.61
+    },
+    {
+      "scene": "flow_deposit",
+      "t": 84.61
+    },
+    {
+      "scene": "flow_deposit__end",
+      "t": 98.42
+    },
+    {
+      "scene": "flow_explorer",
+      "t": 107.25
+    },
+    {
+      "scene": "flow_explorer__end",
+      "t": 114.85
+    },
+    {
+      "scene": "flow_status",
+      "t": 117.68
+    },
+    {
+      "scene": "flow_status__end",
+      "t": 133.54
+    },
+    {
+      "scene": "end",
+      "t": 133.54
+    }
+  ]
+}

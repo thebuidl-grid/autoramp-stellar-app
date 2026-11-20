@@ -16,11 +16,11 @@ All four transactions below are **real testnet transactions**, driven from the A
 - Demo wallets (throwaway testnet): EVM `0x6d07c4f69578DF665b21d1296aF2D3D482F4D819`, Stellar `GAPF7GOEVDR7BOQVBSJNKLDECIYZ2HGHOUFLV5QSW6UB7THKESPYEDR5` (Circle testnet USDC, issuer `GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5`).
 - Circle Stellar CCTP: domain 27; testnet `CctpForwarder` `CA66Q2WFBND6V4UEB7RD4SAXSVIWMD6RA4X3U32ELVFGXV5PJK4T4VSZ`; testnet `TokenMessengerMinter` `CDNG7HXAPBWICI2E3AUBP3YZWZELJLYSB6F5CC7WLDTLTHVM74SLRTHP`.
 - Note: `@circle-fin/bridge-kit` (≤ 1.17.1) has no Stellar chain, so both directions run CCTP v2 directly
-  (`lib/cctp-stellar*.ts`, `app/api/bridge/stellar-relay`, `app/api/bridge/attestation`). The simulated fiat payout is not part of this recording.
+  (`lib/cctp-stellar*.ts`, the backend `POST /bridge/stellar-relay`, `app/api/bridge/attestation`). The simulated fiat payout is not part of this recording.
 
 ## Re-recording
 1. `wallet.json` (EVM + Stellar keys) outside the repo, e.g. `~/.config/autoramp-demo/wallet.json`; fund the EVM address with Base Sepolia ETH + USDC.
 2. `DEMO_WALLET_FILE=… node scripts/demo-wallet-server.mjs`
-3. Production build pointed at the live API: `NEXT_PUBLIC_API_URL=https://api-autoramp.thebuidl.xyz NEXT_PUBLIC_NETWORK=testnet npm run build`, then `STELLAR_RELAYER_SECRET=… npm start`.
+3. Production build pointed at the live API: `NEXT_PUBLIC_API_URL=https://api-autoramp.thebuidl.xyz NEXT_PUBLIC_NETWORK=testnet npm run build`, then `npm start` (the Stellar relayer key now lives only in the backend env as `STELLAR_RELAYER_SECRET`).
 4. `AUTORAMP_TOKEN=… DEMO_WALLET_FILE=… python3 scripts/record_d2_real.py --api real --legs in` then `--legs out`.
 5. `python3 scripts/generate_voiceover_d2.py --force` (free Nigerian Edge voice), then `python3 scripts/stitch_d2_real.py --legs in|out|full`.

@@ -1,0 +1,1 @@
+Next I connect a Stellar wallet. This is a real testnet wallet that holds testnet USDC.

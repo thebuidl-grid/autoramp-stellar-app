@@ -64,15 +64,17 @@ describe('Ramp DTOs Transaction Limits', () => {
   });
 
   describe('offRampDto', () => {
-    it('should fail if amount is less than 2000', async () => {
-      const dto = plainToInstance(offRampDto, {
-        network: 'base',
-        amount: 1000,
-        destination: { bankCode: '011', accountNumber: '1234567890' },
-      });
-      const errors = await validate(dto);
+    it('has no minimum amount, only that it is positive', async () => {
+      const mk = (amount: number) =>
+        plainToInstance(offRampDto, {
+          network: 'base',
+          amount,
+          destination: { bankCode: '011', accountNumber: '1234567890' },
+        });
+      expect((await validate(mk(100))).length).toBe(0);
+      const errors = await validate(mk(0));
       expect(errors.length).toBeGreaterThan(0);
-      expect(errors[0].constraints).toHaveProperty('min');
+      expect(errors[0].constraints).toHaveProperty('isPositive');
     });
 
     it('should pass if amount exceeds 500,000 (max enforced by service)', async () => {
@@ -131,6 +133,17 @@ describe('Ramp DTOs Transaction Limits', () => {
         network: 'stellar',
         amount: 5000,
         destination: { bankCode: '058', accountNumber: '1234567890' },
+      });
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept network=bsc with an EVM sourceAddress', async () => {
+      const dto = plainToInstance(offRampDto, {
+        network: 'bsc',
+        amount: 5000,
+        destination: { bankCode: '058', accountNumber: '1234567890' },
+        sourceAddress: '0x' + 'a'.repeat(40),
       });
       const errors = await validate(dto);
       expect(errors.length).toBe(0);

@@ -1,0 +1,1 @@
+Now the off-ramp process itself, in the real application. I open Sell, choose USDC, and the Stellar network. I enter one USDC, then pick Zenith Bank and type the account number. The app looks up and shows the account name before it lets me continue.

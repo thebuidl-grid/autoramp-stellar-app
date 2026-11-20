@@ -1,3 +1,4 @@
+import { isIP } from 'net';
 import {
   ExecutionContext,
   HttpException,
@@ -36,7 +37,8 @@ export class CustomThrottlerGuard extends ThrottlerGuard {
   protected async getTracker(req: Record<string, any>): Promise<string> {
     const cfIp = req.headers?.['cf-connecting-ip'];
     const ip = Array.isArray(cfIp) ? cfIp[0] : cfIp;
-    return typeof ip === 'string' && ip.trim() ? ip.trim() : req.ip;
+    // Only a syntactically valid IP is a usable key: arbitrary text must not mint unlimited buckets.
+    return typeof ip === 'string' && isIP(ip.trim()) ? ip.trim() : req.ip;
   }
 
   protected async throwThrottlingException(

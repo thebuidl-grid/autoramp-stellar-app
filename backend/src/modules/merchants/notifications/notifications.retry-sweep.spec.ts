@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { of, throwError } from 'rxjs';
-import { NotificationsService } from './notifications.service';
+import { NotificationsService, clipResponse } from './notifications.service';
 
 const URL_A = 'https://mihaspay-backend.example.run.app/api/webhooks/autoramp';
 const URL_B = 'https://merchant.example.com:8443/hooks';
@@ -203,5 +203,129 @@ describe('NotificationsService retry sweep', () => {
     await sweep();
     expect(prisma.merchantWebhook.findMany).not.toHaveBeenCalled();
     expect(http.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('merchant webhook SSRF protections', () => {
+  const make = () => {
+    const http = { post: jest.fn() };
+    const prisma: any = {
+      merchantWebhookLog: {
+        create: jest.fn().mockResolvedValue({}),
+        update: jest.fn(),
+      },
+    };
+    return { http, prisma, svc: new NotificationsService(http as any, prisma) };
+  };
+  const original = { ...process.env };
+  afterEach(() => {
+    process.env = { ...original };
+  });
+
+  it.each([
+    'https://169.254.169.254/latest/meta-data/',
+    'https://127.0.0.1:8080/hook',
+    'https://localhost/hook',
+    'https://[::1]/hook',
+    'https://10.0.0.5/hook',
+    'https://intranet.internal/hook',
+    'ftp://example.com/hook',
+    'file:///etc/passwd',
+    'https://user:pass@example.com/hook',
+  ])('refuses %s', async (url) => {
+    const { svc } = make();
+    await expect(svc.assertSafeWebhookTarget(url)).rejects.toThrow(
+      /Invalid webhook URL/,
+    );
+  });
+
+  it('accepts a normal public https URL', async () => {
+    const { svc } = make();
+    await expect(
+      svc.assertSafeWebhookTarget('https://merchant.example.com/hooks'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('requires https in production, allows http elsewhere', async () => {
+    const { svc } = make();
+    process.env.NODE_ENV = 'development';
+    await expect(
+      svc.assertSafeWebhookTarget('http://merchant.example.com/hooks'),
+    ).resolves.toBeUndefined();
+    process.env.NODE_ENV = 'production';
+    jest
+      .spyOn(require('dns').promises, 'lookup')
+      .mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    await expect(
+      svc.assertSafeWebhookTarget('http://merchant.example.com/hooks'),
+    ).rejects.toThrow(/https/);
+  });
+
+  it('in production also rejects a public-looking name that resolves to a private IP', async () => {
+    const { svc } = make();
+    process.env.NODE_ENV = 'production';
+    jest
+      .spyOn(require('dns').promises, 'lookup')
+      .mockResolvedValue([{ address: '10.0.0.7', family: 4 }]);
+    await expect(
+      svc.assertSafeWebhookTarget('https://sneaky.example.com/hooks'),
+    ).rejects.toThrow(/private/);
+  });
+
+  it('never sends a request to an unsafe URL, and records the failed attempt', async () => {
+    const { svc, http, prisma } = make();
+    await (svc as any).sendWebhook(
+      'wh',
+      'm1',
+      'https://169.254.169.254/',
+      'sec',
+      'account.credit',
+      { a: 1 },
+    );
+    expect(http.post).not.toHaveBeenCalled();
+    expect(prisma.merchantWebhookLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        success: false,
+        errorMessage: expect.stringContaining('Invalid webhook URL'),
+      }),
+    });
+  });
+
+  it('sends with redirects disabled, a size cap and the SSRF-safe agents', async () => {
+    const { svc, http } = make();
+    http.post.mockReturnValue(of({ status: 200, data: 'ok' }));
+    await (svc as any).sendWebhook(
+      'wh',
+      'm1',
+      'https://merchant.example.com/hooks',
+      'sec',
+      'e',
+      { a: 1 },
+    );
+    const opts = http.post.mock.calls[0][2];
+    expect(opts.maxRedirects).toBe(0);
+    expect(opts.maxContentLength).toBeGreaterThan(0);
+    expect(opts.httpsAgent).toBeDefined();
+    expect(opts.httpAgent).toBeDefined();
+  });
+
+  it('allows private targets only with the explicit development flag', async () => {
+    const { svc } = make();
+    process.env.WEBHOOK_ALLOW_PRIVATE_TARGETS = 'true';
+    await expect(
+      svc.assertSafeWebhookTarget('http://localhost:4000/hook'),
+    ).resolves.toBeUndefined();
+    await expect(svc.assertSafeWebhookTarget('gopher://x')).rejects.toThrow();
+  });
+});
+
+describe('clipResponse', () => {
+  it('keeps small responses and truncates huge ones', () => {
+    expect(clipResponse({ ok: true })).toEqual({ ok: true });
+    expect(clipResponse(null)).toBeNull();
+    const big = 'x'.repeat(10_000);
+    const clipped = clipResponse(big) as string;
+    expect(clipped.length).toBeLessThan(4100);
+    expect(clipped).toContain('[truncated]');
   });
 });

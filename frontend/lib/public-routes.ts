@@ -6,7 +6,17 @@
  * Prefixes are matched on a path-segment boundary: "/waitlist" and
  * "/waitlist/x" match, "/waitlisting" does not.
  */
-export const PUBLIC_PREFIXES = ["/auth", "/admin", "/merchant", "/docs", "/dashboard", "/waitlist"] as const;
+export const PUBLIC_PREFIXES = [
+  "/auth",
+  "/admin",
+  "/merchant",
+  "/docs",
+  "/dashboard",
+  "/waitlist",
+  "/guide",
+  "/privacy-policy",
+  "/debug/env",
+] as const;
 
 export function isPublicPath(pathname: string | null | undefined): boolean {
   if (!pathname) return false;

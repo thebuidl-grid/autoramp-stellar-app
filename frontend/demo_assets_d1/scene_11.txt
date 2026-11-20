@@ -1,0 +1,1 @@
+Back on the history page, the real transaction is listed together with the five staged outcomes, each with its own status label.

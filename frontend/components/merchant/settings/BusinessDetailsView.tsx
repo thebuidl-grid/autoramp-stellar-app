@@ -15,7 +15,7 @@ interface BusinessDetailsViewProps { }
 const DisplayField = ({ label, value }: { label: string, value?: string }) => (
     <div className="space-y-1">
         <Label className="text-muted-foreground text-xs uppercase tracking-wider">{label}</Label>
-        <div className="bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm font-medium">
+        <div className="bg-(--c-field) border border-(--c-line) rounded-lg px-4 py-2.5 text-sm font-medium">
             {value || "N/A"}
         </div>
     </div>
@@ -38,7 +38,7 @@ const EditField = ({
 }) => (
     <div className="space-y-2">
         <Label className="text-xs uppercase tracking-wider">
-            {label} {required && <span className="text-red-500">*</span>}
+            {label} {required && <span className="text-(--c-danger)">*</span>}
         </Label>
         {type === "textarea" ? (
             <Textarea
@@ -46,7 +46,7 @@ const EditField = ({
                 value={value}
                 onChange={onChange}
                 required={required}
-                className="bg-black/40 border-white/10 min-h-[100px]"
+                className="bg-(--c-field) border-(--c-line) min-h-[100px]"
             />
         ) : (
             <Input
@@ -54,7 +54,7 @@ const EditField = ({
                 value={value}
                 onChange={onChange}
                 required={required}
-                className="bg-black/40 border-white/10"
+                className="bg-(--c-field) border-(--c-line)"
             />
         )}
     </div>

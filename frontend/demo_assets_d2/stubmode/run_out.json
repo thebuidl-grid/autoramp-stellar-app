@@ -1,0 +1,30 @@
+{
+  "wallet_evm": "0x6d07c4f69578DF665b21d1296aF2D3D482F4D819",
+  "wallet_stellar": "GAPF7GOEVDR7BOQVBSJNKLDECIYZ2HGHOUFLV5QSW6UB7THKESPYEDR5",
+  "outbound": {
+    "amount": "1",
+    "source_tx": "dc6c8b5863f600ff2572c3b2280cbdad8c78028f75173346c2caab00d0c2caa6",
+    "dest_tx": "0x8c5765b5a6998858f1f96a405cecc1c9e656b60c298dc752803fc732822b2125",
+    "reference": "BRG-1794344551-2"
+  },
+  "bridges": [
+    {
+      "ref": "BRG-1794344344-1",
+      "fromChain": "Base_Sepolia",
+      "toChain": "Stellar_Testnet",
+      "amount": "2000000",
+      "source": "0xd7d7b5625f913003d653b7274a7e3d55126364cb297a034e905bc0a9662d2dae",
+      "dest": "486e2f83685efad8287dac7312de7063fc241053814f01789f0b070632c5259e",
+      "createdAt": "2026-11-10T20:59:04.000Z"
+    },
+    {
+      "ref": "BRG-1794344551-2",
+      "fromChain": "Stellar_Testnet",
+      "toChain": "Base_Sepolia",
+      "amount": "1000000",
+      "source": "dc6c8b5863f600ff2572c3b2280cbdad8c78028f75173346c2caab00d0c2caa6",
+      "dest": "0x8c5765b5a6998858f1f96a405cecc1c9e656b60c298dc752803fc732822b2125",
+      "createdAt": "2026-11-10T21:02:31.000Z"
+    }
+  ]
+}

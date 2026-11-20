@@ -1,0 +1,1 @@
+And this is the destination transaction on Stellar Expert: successful, and it called mint and forward on Circle's forwarder, which credited the USDC to the destination account. Together, these two transactions prove the cross-chain movement.

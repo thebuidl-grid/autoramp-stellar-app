@@ -7,6 +7,7 @@ import { NotificationsModule } from '../merchants/notifications/notifications.mo
 import { DatabaseModule } from '../../database/database.module';
 import { SwapModule } from '../swap/swap.module';
 import { OfframpStateModule } from '../ramp/offramp-state.module';
+import { PayoutOrderModule } from '../ramp/payout-order.repository';
 
 @Global()
 @Module({
@@ -17,6 +18,7 @@ import { OfframpStateModule } from '../ramp/offramp-state.module';
     NotificationsModule,
     forwardRef(() => SwapModule),
     OfframpStateModule,
+    PayoutOrderModule,
   ],
   providers: [BitNobService, BitNobWebhookService],
   exports: [BitNobService, BitNobWebhookService],

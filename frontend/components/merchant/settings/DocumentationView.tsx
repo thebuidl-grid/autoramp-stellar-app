@@ -17,7 +17,7 @@ interface DocumentationViewProps { }
 const DisplayField = ({ label, value }: { label: string, value?: string }) => (
     <div className="space-y-1">
         <Label className="text-muted-foreground text-xs uppercase tracking-wider">{label}</Label>
-        <div className="bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm font-medium">
+        <div className="bg-(--c-field) border border-(--c-line) rounded-lg px-4 py-2.5 text-sm font-medium">
             {value || "N/A"}
         </div>
     </div>
@@ -52,9 +52,9 @@ const DocumentPreview = ({
                 <label
                     htmlFor={`file-${name}`}
                     className={cn(
-                        "flex flex-col items-center justify-center w-full h-24 border border-dashed rounded-xl cursor-pointer bg-zinc-900/10 transition-all",
+                        "flex flex-col items-center justify-center w-full h-24 border border-dashed rounded-xl cursor-pointer bg-(--c-panel) transition-all",
                         uploadingFields[name] ? "border-primary/50 bg-primary/5" :
-                            value ? "border-green-500/50 bg-green-500/5 text-green-400" : "border-zinc-700 group-hover/file:border-primary/30"
+                            value ? "border-green-500/50 bg-green-500/5 text-(--c-ok)" : "border-zinc-700 group-hover/file:border-primary/30"
                     )}
                 >
                     {uploadingFields[name] ? (
@@ -70,14 +70,14 @@ const DocumentPreview = ({
                 </label>
             </div>
         ) : value ? (
-            <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl p-4">
+            <div className="flex items-center justify-between bg-(--c-field) border border-(--c-line) rounded-xl p-4">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
                         <FileText className="w-5 h-5 text-primary" />
                     </div>
                     <div>
                         <p className="text-sm font-medium">{label}</p>
-                        <p className="text-xs text-green-400 flex items-center gap-1">
+                        <p className="text-xs text-(--c-ok) flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3" /> Attached
                         </p>
                     </div>
@@ -87,7 +87,7 @@ const DocumentPreview = ({
                 </Button>
             </div>
         ) : (
-            <div className="bg-black/20 border border-white/5 border-dashed rounded-xl p-4 text-center text-sm text-muted-foreground">
+            <div className="bg-(--c-field) border border-(--c-line) border-dashed rounded-xl p-4 text-center text-sm text-muted-foreground">
                 No document attached
             </div>
         )}
@@ -271,20 +271,20 @@ export default function DocumentationView() {
                     ) : (
                         <>
                             <div className="space-y-2">
-                                <Label className="text-xs uppercase tracking-wider">Trading Name <span className="text-red-500">*</span></Label>
-                                <Input name="tradingName" value={formData.tradingName} onChange={handleInputChange} className="bg-black/40 border-white/10" />
+                                <Label className="text-xs uppercase tracking-wider">Trading Name <span className="text-(--c-danger)">*</span></Label>
+                                <Input name="tradingName" value={formData.tradingName} onChange={handleInputChange} className="bg-(--c-field) border-(--c-line)" />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-xs uppercase tracking-wider">Tax Identification Number (TIN) <span className="text-red-500">*</span></Label>
-                                <Input name="taxIdentificationNumber" value={formData.taxIdentificationNumber} onChange={handleInputChange} className="bg-black/40 border-white/10" />
+                                <Label className="text-xs uppercase tracking-wider">Tax Identification Number (TIN) <span className="text-(--c-danger)">*</span></Label>
+                                <Input name="taxIdentificationNumber" value={formData.taxIdentificationNumber} onChange={handleInputChange} className="bg-(--c-field) border-(--c-line)" />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-xs uppercase tracking-wider">Source of Capital <span className="text-red-500">*</span></Label>
-                                <Input name="capitalSource" value={formData.capitalSource} onChange={handleInputChange} className="bg-black/40 border-white/10" />
+                                <Label className="text-xs uppercase tracking-wider">Source of Capital <span className="text-(--c-danger)">*</span></Label>
+                                <Input name="capitalSource" value={formData.capitalSource} onChange={handleInputChange} className="bg-(--c-field) border-(--c-line)" />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-xs uppercase tracking-wider">Proof of Funds <span className="text-red-500">*</span></Label>
-                                <Input name="proofOfFunds" value={formData.proofOfFunds} onChange={handleInputChange} className="bg-black/40 border-white/10" />
+                                <Label className="text-xs uppercase tracking-wider">Proof of Funds <span className="text-(--c-danger)">*</span></Label>
+                                <Input name="proofOfFunds" value={formData.proofOfFunds} onChange={handleInputChange} className="bg-(--c-field) border-(--c-line)" />
                             </div>
                         </>
                     )}

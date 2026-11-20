@@ -1,0 +1,1 @@
+Simulated: a rejected payout. The deposit was real, but the payout provider rejected the payout. The status is Payout Rejected, it is marked as not paid out, and the provider's code and message are shown, along with the original deposit hash.

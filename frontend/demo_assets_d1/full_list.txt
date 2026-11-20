@@ -1,0 +1,2 @@
+file '/home/emperorsixpacks/GitHub/autoramp-frontend/docs/autoramp_d1_flow_part.mp4'
+file '/home/emperorsixpacks/GitHub/autoramp-frontend/docs/autoramp_d1_offramp_hardening_demo.mp4'

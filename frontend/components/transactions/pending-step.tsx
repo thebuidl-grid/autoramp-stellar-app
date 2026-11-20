@@ -5,6 +5,7 @@ import { copyToClipboard } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { useState } from "react";
 import type { TabType } from "@/lib/hooks/use-transaction-form";
+import { depositBankName } from "@/lib/deposit-bank";
 
 interface PendingStepProps {
   activeTab: TabType;
@@ -63,7 +64,7 @@ export function PendingStep({
           <div className="space-y-4 p-4 bg-black/50 rounded-xl">
             <div className="flex justify-between">
               <span className="text-white/70">Bank Name</span>
-              <span className="text-white">{transactionData.data.depositAccount.bankName}</span>
+              <span className="text-white">{depositBankName(transactionData.data.depositAccount)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-white/70">Account Number</span>

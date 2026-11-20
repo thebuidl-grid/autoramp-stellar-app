@@ -1,3 +1,4 @@
+import { requestContextMiddleware } from './common/request-context';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -5,12 +6,25 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { securityHeaders } from './common/security/security-headers.middleware';
 
 async function bootstrap() {
   // rawBody is required for HMAC verification of Bitnob webhooks
   // (signature is computed over the exact bytes, not the parsed JSON)
   const app = await NestFactory.create(AppModule, { rawBody: true });
   const configService = app.get(ConfigService);
+
+  // Baseline security headers on every response; don't advertise the framework.
+  (app.getHttpAdapter().getInstance() as any).disable('x-powered-by');
+  app.use(securityHeaders());
+  app.use(requestContextMiddleware);
+
+  const jwtSecret = configService.get<string>('JWT_SECRET') ?? '';
+  if (jwtSecret.length < 32) {
+    console.error(
+      `[security] JWT_SECRET is only ${jwtSecret.length} characters. Use at least 32 random characters (openssl rand -hex 32); short secrets can be brute-forced and let anyone forge admin tokens.`,
+    );
+  }
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -62,7 +76,13 @@ async function bootstrap() {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-api-key',
+      // the website's mainnet/testnet toggle, recorded on every transaction (see common/request-context.ts)
+      'x-chain-network',
+    ],
     exposedHeaders: [
       'Content-Type',
       'Authorization',

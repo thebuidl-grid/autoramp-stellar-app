@@ -18,10 +18,10 @@ export function SavedAccountSelector({ onSelect }: SavedAccountSelectorProps) {
     return (
         <div className="space-y-2">
             <div className="flex items-center justify-between">
-                <label className="text-sm text-white/70">Quick Select</label>
+                <span className="ramp-label">Saved bank accounts</span>
                 <Link
                     href="/profile?tab=accounts"
-                    className="text-xs text-primary hover:text-primary/80"
+                    className="text-xs font-medium text-(--r-text) underline-offset-2 hover:underline"
                 >
                     Manage accounts
                 </Link>
@@ -39,7 +39,7 @@ export function SavedAccountSelector({ onSelect }: SavedAccountSelectorProps) {
                             });
                         }
                     }}
-                    className="w-full h-12 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white outline-none appearance-none pr-10 hover:bg-white/10 transition-colors"
+                    className="ramp-field h-12 w-full appearance-none px-4 pr-10 text-sm text-(--r-text) outline-none"
                 >
                     <option value="">Select a saved account...</option>
                     {accounts.map((account) => (
@@ -48,7 +48,7 @@ export function SavedAccountSelector({ onSelect }: SavedAccountSelectorProps) {
                         </option>
                     ))}
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50 pointer-events-none" />
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-(--r-muted)" />
             </div>
         </div>
     );

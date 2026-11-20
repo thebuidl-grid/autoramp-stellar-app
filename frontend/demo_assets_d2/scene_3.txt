@@ -1,0 +1,1 @@
+The source network is Base Sepolia, and the destination is Stellar Testnet. I type an amount of two USDC, and enter the destination: a Stellar account that already has a USDC trustline.

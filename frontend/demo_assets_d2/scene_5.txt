@@ -1,0 +1,1 @@
+This is the source transaction on a Base Sepolia block explorer. The status is success, the method is deposit for burn with hook, and two USDC were burned. This is independent proof of the funds leaving Base.

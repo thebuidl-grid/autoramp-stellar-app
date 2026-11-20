@@ -8,6 +8,8 @@ import { MailService } from '../mail/mail.service';
 import { SwapGateway } from '../swap/swap.gateway';
 import { NotificationsService } from '../merchants/notifications/notifications.service';
 import { BalanceCacheService } from '../../common/services/balance-cache.service';
+import { SafehavenOfframpSettlementService } from '../ramp/safehaven-offramp-settlement.service';
+import { SafehavenOnrampSettlementService } from '../ramp/safehaven-onramp-settlement.service';
 
 describe('Webhook Integration Tests', () => {
   let webhookService: WebhookService;
@@ -100,6 +102,20 @@ describe('Webhook Integration Tests', () => {
           provide: NotificationsService,
           useValue: {
             notifyMerchant: jest.fn(),
+          },
+        },
+        {
+          provide: SafehavenOnrampSettlementService,
+          useValue: {
+            findByDepositAccount: jest.fn().mockResolvedValue(null),
+            findByForwardReference: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: SafehavenOfframpSettlementService,
+          useValue: {
+            findByCollectionAccount: jest.fn().mockResolvedValue(null),
+            findByForwardReference: jest.fn().mockResolvedValue(null),
           },
         },
         {

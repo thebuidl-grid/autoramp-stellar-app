@@ -19,7 +19,7 @@ interface BankAccountViewProps {
 const DisplayField = ({ label, value }: { label: string, value?: string }) => (
     <div className="space-y-1">
         <Label className="text-muted-foreground text-xs uppercase tracking-wider">{label}</Label>
-        <div className="bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-sm font-medium text-white flex items-center gap-3">
+        <div className="bg-(--c-field) border border-(--c-line) rounded-lg px-4 py-3 text-sm font-medium text-(--c-text) flex items-center gap-3">
             {label === "Bank Name" && <Building2 className="w-4 h-4 text-primary" />}
             {label === "Account Number" && <CreditCard className="w-4 h-4 text-secondary" />}
             {value || "N/A"}
@@ -191,7 +191,7 @@ export default function BankAccountView({ banks }: BankAccountViewProps) {
                 )}
             </div>
 
-            <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-white/10 rounded-2xl p-8">
+            <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-(--c-line) rounded-2xl p-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {!isEditing ? (
                         <>
@@ -205,7 +205,7 @@ export default function BankAccountView({ banks }: BankAccountViewProps) {
                     ) : (
                         <>
                             <div className="md:col-span-2 space-y-2">
-                                <Label className="text-xs uppercase tracking-wider">Bank Name <span className="text-red-500">*</span></Label>
+                                <Label className="text-xs uppercase tracking-wider">Bank Name <span className="text-(--c-danger)">*</span></Label>
                                 <SearchableBankSelect
                                     banks={banks}
                                     value={formData.bankCode}
@@ -214,7 +214,7 @@ export default function BankAccountView({ banks }: BankAccountViewProps) {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-xs uppercase tracking-wider">Account Number <span className="text-red-500">*</span></Label>
+                                <Label className="text-xs uppercase tracking-wider">Account Number <span className="text-(--c-danger)">*</span></Label>
                                 <div className="flex gap-2">
                                     <Input
                                         name="accountNumber"
@@ -222,7 +222,7 @@ export default function BankAccountView({ banks }: BankAccountViewProps) {
                                         onChange={handleInputChange}
                                         maxLength={10}
                                         placeholder="0123456789"
-                                        className="bg-black/40 border-white/10 h-14"
+                                        className="bg-(--c-field) border-(--c-line) h-14"
                                     />
                                     <Button
                                         variant="secondary"
@@ -235,13 +235,13 @@ export default function BankAccountView({ banks }: BankAccountViewProps) {
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-xs uppercase tracking-wider">Account Name <span className="text-red-500">*</span></Label>
+                                <Label className="text-xs uppercase tracking-wider">Account Name <span className="text-(--c-danger)">*</span></Label>
                                 <div className={cn(
-                                    "bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-sm font-medium h-14 flex items-center justify-between",
+                                    "bg-(--c-field) border border-(--c-line) rounded-lg px-4 py-2.5 text-sm font-medium h-14 flex items-center justify-between",
                                     !formData.accountName && "text-muted-foreground italic"
                                 )}>
                                     {formData.accountName || "Verify account to see name"}
-                                    {formData.accountName && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                                    {formData.accountName && <CheckCircle2 className="w-4 h-4 text-(--c-ok)" />}
                                 </div>
                             </div>
                         </>

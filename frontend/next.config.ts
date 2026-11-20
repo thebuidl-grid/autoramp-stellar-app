@@ -70,6 +70,14 @@ const nextConfig: NextConfig = {
         __dirname,
         "node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs",
       ),
+      // @coinbase/cdp-sdk statically imports these optional x402
+      // payment-facilitator peer deps (pulled in transitively via
+      // RainbowKit's Base Account connector); this app never invokes
+      // x402 payments, so stub them out rather than installing unused SDKs.
+      "@x402/core": false,
+      "@x402/evm": false,
+      "@x402/svm": false,
+      "@x402/extensions": false,
     };
 
     return config;

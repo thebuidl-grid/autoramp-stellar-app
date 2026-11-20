@@ -7,14 +7,15 @@ import { getChainMetadata } from "@/lib/constants/networks";
 interface ChainSelectorProps {
   chain: string;
   onClick?: () => void;
+  /** Accessible context, e.g. "From network". */
   label: string;
 }
 
+/** A network row inside a bridge field: logo, name, chevron. */
 export function ChainSelector({ chain, onClick, label }: ChainSelectorProps) {
   const metadata = getChainMetadata(chain);
   const logo = metadata?.logo;
   const displayName = metadata?.name || chain;
-
   const isClickable = onClick !== undefined;
 
   return (
@@ -22,31 +23,24 @@ export function ChainSelector({ chain, onClick, label }: ChainSelectorProps) {
       type="button"
       onClick={onClick}
       disabled={!isClickable}
-      className={`flex items-center gap-3 px-4 h-[64px] rounded-xl border border-white/10 bg-white/5 transition-all w-full shrink-0 group ${
-        isClickable ? "hover:bg-white/10 hover:border-white/20 cursor-pointer active:scale-[0.98]" : "cursor-default"
+      aria-label={isClickable ? `${label}: ${displayName}. Change` : `${label}: ${displayName}`}
+      className={`flex h-12 w-full items-center gap-3 rounded-xl border border-(--r-line) bg-(--r-raised) px-3 text-left transition-colors ${
+        isClickable ? "cursor-pointer hover:border-(--r-muted)/40" : "cursor-default"
       }`}
     >
-      <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center overflow-hidden p-1.5 border border-white/10 relative">
+      <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-(--r-field)">
         {logo ? (
-          <Image
-            src={logo}
-            alt={displayName}
-            fill
-            className="object-contain p-2"
-          />
+          <Image src={logo} alt="" fill sizes="28px" className="object-contain p-1" />
         ) : (
-          <div className="text-[10px] font-bold text-white/40 uppercase bg-gradient-to-br from-white/10 to-white/5 w-full h-full flex items-center justify-center">
+          <span className="text-[10px] font-bold text-(--r-muted)">
             {displayName.substring(0, 2)}
-          </div>
+          </span>
         )}
-      </div>
-      <div className="text-left flex-1 min-w-[80px]">
-        <div className="flex items-center gap-1.5 leading-none mb-1">
-          <span className="text-[10px] uppercase tracking-wider text-white/30 font-bold">{label}</span>
-        </div>
-        <div className="text-sm font-semibold text-white truncate">{displayName}</div>
-      </div>
-      {isClickable && <ChevronRight size={14} className="text-white/20 group-hover:text-white/40 transition-colors" />}
+      </span>
+      <span className="flex-1 truncate text-sm font-semibold text-(--r-text)">
+        {displayName}
+      </span>
+      {isClickable && <ChevronRight size={14} className="text-(--r-muted)" />}
     </button>
   );
 }

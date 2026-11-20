@@ -37,6 +37,8 @@ export class SettingsService {
    * Add a new webhook endpoint for a merchant.
    */
   async addWebhook(merchantId: string, dto: { url: string; label?: string }) {
+    await this.notificationsService.assertSafeWebhookTarget(dto.url);
+
     // Check for duplicate URL
     const existing = await this.prisma.merchantWebhook.findFirst({
       where: { merchantId, url: dto.url },
@@ -84,6 +86,7 @@ export class SettingsService {
 
     // If changing URL, check for duplicates
     if (dto.url && dto.url !== webhook.url) {
+      await this.notificationsService.assertSafeWebhookTarget(dto.url);
       const duplicate = await this.prisma.merchantWebhook.findFirst({
         where: { merchantId, url: dto.url, id: { not: webhookId } },
       });

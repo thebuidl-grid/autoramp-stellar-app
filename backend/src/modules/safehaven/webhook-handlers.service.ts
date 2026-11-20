@@ -5,6 +5,8 @@ import { MFBService } from './safehaven.service';
 import { NotificationsService } from '../merchants/notifications/notifications.service';
 import { MailService } from '../mail/mail.service';
 import { BalanceCacheService } from '../../common/services/balance-cache.service';
+import { SafehavenOfframpSettlementService } from '../ramp/safehaven-offramp-settlement.service';
+import { SafehavenOnrampSettlementService } from '../ramp/safehaven-onramp-settlement.service';
 
 @Injectable()
 export class WebhookHandlers {
@@ -16,16 +18,54 @@ export class WebhookHandlers {
     private readonly mailService: MailService,
     private readonly notificationsService: NotificationsService,
     private readonly balanceCacheService: BalanceCacheService,
+    private readonly offrampSettlement: SafehavenOfframpSettlementService,
+    private readonly onrampSettlement: SafehavenOnrampSettlementService,
   ) {}
 
   mapStatus(
-    shStatus: string,
+    shStatus?: string | null,
   ): 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' {
-    const status = shStatus.toLowerCase();
+    const status = shStatus?.toLowerCase();
     if (status === 'completed' || status === 'success') return 'COMPLETED';
     if (status === 'failed' || status === 'declined') return 'FAILED';
     if (status === 'pending') return 'PENDING';
     return 'PROCESSING';
+  }
+
+  /**
+   * SafeHaven reports a payment into a virtual account as `virtualAccount.transfer`, not `account.credit`.
+   * For our NGN SafeHaven-settled orders (on-ramp deposit account / off-ramp collection account) this runs the
+   * same settlement as a credit. Returns null when the account isn't one of ours so the legacy path continues.
+   */
+  async handleVirtualAccountTransfer(payload: MFBWebhookDto) {
+    const { data } = payload;
+    const account = data.creditAccountNumber || data.destinationAccountNumber;
+    const paymentReference = data.paymentReference || data.reference;
+    if (!account) return null;
+
+    const offramp = await this.offrampSettlement.findByCollectionAccount(account);
+    const onramp = offramp
+      ? null
+      : await this.onrampSettlement.findByDepositAccount(account);
+    if (!offramp && !onramp) return null;
+
+    // Never fall through to the legacy path for these accounts: it would "fund" the account from our own
+    // balance instead of settling the order.
+    if (this.mapStatus(data.status) !== 'COMPLETED') {
+      return { status: 'ignored', reason: 'not_completed', account };
+    }
+
+    this.logger.log(
+      `virtualAccount.transfer into ${account} (ref: ${paymentReference}) → ${offramp ? 'off-ramp' : 'on-ramp'} settlement`,
+    );
+    const result = offramp
+      ? await this.offrampSettlement.settleCredit(offramp, { amount: data.amount })
+      : await this.onrampSettlement.settleCredit(onramp, { amount: data.amount });
+    await this.markWebhookProcessed(
+      paymentReference,
+      offramp ? 'Offramp NGN forwarded' : 'Onramp NGN settled',
+    );
+    return result;
   }
 
   /**
@@ -43,6 +83,28 @@ export class WebhookHandlers {
     this.logger.log(
       `Processing account.credit for account: ${creditAccountNumber}, ref: ${paymentReference}`,
     );
+
+    // 0. NGN off-ramp collection account (Bitnob paid our SafeHaven virtual account) → forward to the user
+    const settlingOfframp =
+      await this.offrampSettlement.findByCollectionAccount(creditAccountNumber);
+    if (settlingOfframp) {
+      const result = await this.offrampSettlement.settleCredit(settlingOfframp, {
+        amount: data.amount,
+      });
+      await this.markWebhookProcessed(paymentReference, 'Offramp NGN forwarded');
+      return result;
+    }
+
+    // 0b. NGN on-ramp deposit account (user paid our SafeHaven virtual account) → Bitnob trade + USDC payout
+    const settlingOnramp =
+      await this.onrampSettlement.findByDepositAccount(creditAccountNumber);
+    if (settlingOnramp) {
+      const result = await this.onrampSettlement.settleCredit(settlingOnramp, {
+        amount: data.amount,
+      });
+      await this.markWebhookProcessed(paymentReference, 'Onramp NGN settled');
+      return result;
+    }
 
     // 1. OTC user sub-account inflow → auto-settle
     const otcUser = await this.prisma.otcUser.findFirst({
@@ -336,6 +398,27 @@ export class WebhookHandlers {
 
     const mappedStatus =
       responseCode === '00' ? 'COMPLETED' : this.mapStatus(shStatus);
+
+    // 0. Onward transfer of an NGN off-ramp settled through SafeHaven
+    if (paymentReference) {
+      const forwarded =
+        await this.offrampSettlement.findByForwardReference(paymentReference);
+      if (forwarded) {
+        const outcome =
+          mappedStatus === 'COMPLETED'
+            ? 'COMPLETED'
+            : mappedStatus === 'FAILED' || mappedStatus === 'CANCELLED'
+              ? 'FAILED'
+              : 'PROCESSING';
+        const result = await this.offrampSettlement.settleDebit(
+          forwarded,
+          outcome,
+          data,
+        );
+        await this.markWebhookProcessed(paymentReference, 'Offramp forward debit');
+        return result;
+      }
+    }
 
     // 1. Match a pending merchant bank transfer (payout result)
     if (paymentReference) {

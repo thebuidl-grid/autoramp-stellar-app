@@ -1,0 +1,1 @@
+To summarise: thirteen explicit states with enforced transitions, timeout handling, partial settlement, rejected payouts, reversals, and insufficient liquidity, all visible to the user with a clear explanation. The real cash-out and the Stellar deposits are verifiable on chain, and the failure scenarios were simulated and labelled as such. Thank you for watching.

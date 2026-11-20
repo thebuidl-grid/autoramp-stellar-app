@@ -1,0 +1,1 @@
+That completes the round trip: USDC moved from Base to Stellar and back, entirely through AutoRamp's interface, with every transaction verifiable on chain. Thank you for watching.

@@ -50,13 +50,13 @@ export function MerchantAuditLogs() {
   const getSuccessBadge = (success: boolean, statusCode: number) => {
     if (success) {
       return (
-        <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 flex items-center gap-1 w-fit">
+        <Badge className="bg-emerald-500/10 text-(--c-ok) border-emerald-500/20 flex items-center gap-1 w-fit">
           <CheckCircle2 className="h-3 w-3" /> {statusCode}
         </Badge>
       );
     }
     return (
-      <Badge className="bg-red-500/10 text-red-500 border-red-500/20 flex items-center gap-1 w-fit">
+      <Badge className="bg-red-500/10 text-(--c-danger) border-red-500/20 flex items-center gap-1 w-fit">
         <XCircle className="h-3 w-3" /> {statusCode}
       </Badge>
     );
@@ -66,16 +66,16 @@ export function MerchantAuditLogs() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">Audit Logs</h2>
-          <p className="text-zinc-500 text-sm">Track all API requests and operations.</p>
+          <h2 className="text-xl font-semibold text-(--c-text)">Audit Logs</h2>
+          <p className="text-(--c-muted) text-sm">Track all API requests and operations.</p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-48 bg-white/5 border-white/10 text-white">
+            <SelectTrigger className="w-48 bg-(--c-field) border-(--c-line) text-(--c-text)">
               <Filter className="h-4 w-4 mr-2" />
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-zinc-900 border-white/10">
+            <SelectContent className="bg-(--c-panel) border-(--c-line)">
               {ACTION_FILTERS.map((f) => (
                 <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
               ))}
@@ -84,11 +84,11 @@ export function MerchantAuditLogs() {
         </div>
       </div>
 
-      <Card className="bg-white/5 border-white/10 overflow-hidden">
+      <Card className="bg-(--c-field) border-(--c-line) overflow-hidden">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-white/5 text-zinc-400 border-b border-white/10">
+              <thead className="bg-(--c-field) text-(--c-muted) border-b border-(--c-line)">
                 <tr>
                   <th className="p-4 text-left font-medium">Action</th>
                   <th className="p-4 text-left font-medium">Method</th>
@@ -105,36 +105,36 @@ export function MerchantAuditLogs() {
                     <td colSpan={7} className="p-12 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <Loader2 className="h-6 w-6 border-2 border-primary border-t-transparent animate-spin" />
-                        <p className="text-zinc-500">Loading audit logs...</p>
+                        <p className="text-(--c-muted)">Loading audit logs...</p>
                       </div>
                     </td>
                   </tr>
                 ) : logs.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-12 text-center text-zinc-500">
+                    <td colSpan={7} className="p-12 text-center text-(--c-muted)">
                       No audit logs found.
                     </td>
                   </tr>
                 ) : (
                   logs.map((log) => (
-                    <tr key={log.id} className="hover:bg-white/5 transition-colors">
+                    <tr key={log.id} className="hover:bg-(--c-field) transition-colors">
                       <td className="p-4">
-                        <Badge variant="secondary" className="bg-white/5 text-zinc-300 border-white/10 text-[11px]">
+                        <Badge variant="secondary" className="bg-(--c-field) text-(--c-text) border-(--c-line) text-[11px]">
                           {log.action}
                         </Badge>
                       </td>
-                      <td className="p-4 font-mono text-[11px] text-zinc-400">{log.method}</td>
-                      <td className="p-4 font-mono text-[11px] text-zinc-400 max-w-[250px] truncate">{log.endpoint}</td>
+                      <td className="p-4 font-mono text-[11px] text-(--c-muted)">{log.method}</td>
+                      <td className="p-4 font-mono text-[11px] text-(--c-muted) max-w-[250px] truncate">{log.endpoint}</td>
                       <td className="p-4">{getSuccessBadge(log.success, log.statusCode)}</td>
-                      <td className="p-4 text-[11px] text-zinc-500">{log.duration}ms</td>
-                      <td className="p-4 text-zinc-500 whitespace-nowrap text-[11px]">
+                      <td className="p-4 text-[11px] text-(--c-muted)">{log.duration}ms</td>
+                      <td className="p-4 text-(--c-muted) whitespace-nowrap text-[11px]">
                         {format(new Date(log.createdAt), "MMM d, HH:mm")}
                       </td>
                       <td className="p-4 text-right">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-zinc-500 hover:text-white h-7 text-[11px]"
+                          className="text-(--c-muted) hover:text-(--c-text) h-7 text-[11px]"
                           onClick={() => setSelectedLog(log)}
                         >
                           View
@@ -151,14 +151,14 @@ export function MerchantAuditLogs() {
 
       {meta && meta.total > limit && (
         <div className="flex items-center justify-between">
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-(--c-muted)">
             Showing {((page - 1) * limit) + 1}–{Math.min(page * limit, meta.total)} of {meta.total}
           </p>
           <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
-              className="border-white/10 text-white text-[11px]"
+              className="border-(--c-line) text-(--c-text) text-[11px]"
               disabled={page === 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
             >
@@ -167,7 +167,7 @@ export function MerchantAuditLogs() {
             <Button
               variant="outline"
               size="sm"
-              className="border-white/10 text-white text-[11px]"
+              className="border-(--c-line) text-(--c-text) text-[11px]"
               disabled={page * limit >= meta.total}
               onClick={() => setPage((p) => p + 1)}
             >
@@ -178,60 +178,60 @@ export function MerchantAuditLogs() {
       )}
 
       <Dialog open={!!selectedLog} onOpenChange={() => setSelectedLog(null)}>
-        <DialogContent className="bg-zinc-900 border-white/10 text-white max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-(--c-panel) border-(--c-line) text-(--c-text) max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-white">Audit Log Detail</DialogTitle>
+            <DialogTitle className="text-(--c-text)">Audit Log Detail</DialogTitle>
           </DialogHeader>
           {selectedLog && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Action</p>
-                  <p className="text-sm text-white">{selectedLog.action}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-(--c-muted) mb-1">Action</p>
+                  <p className="text-sm text-(--c-text)">{selectedLog.action}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Provider</p>
-                  <p className="text-sm text-white">{selectedLog.provider}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-(--c-muted) mb-1">Provider</p>
+                  <p className="text-sm text-(--c-text)">{selectedLog.provider}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Method</p>
-                  <p className="text-sm font-mono text-white">{selectedLog.method}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-(--c-muted) mb-1">Method</p>
+                  <p className="text-sm font-mono text-(--c-text)">{selectedLog.method}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Status</p>
+                  <p className="text-[10px] uppercase tracking-wider text-(--c-muted) mb-1">Status</p>
                   {getSuccessBadge(selectedLog.success, selectedLog.statusCode)}
                 </div>
                 <div className="col-span-2">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Endpoint</p>
-                  <p className="text-sm font-mono text-zinc-300">{selectedLog.endpoint}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-(--c-muted) mb-1">Endpoint</p>
+                  <p className="text-sm font-mono text-(--c-text)">{selectedLog.endpoint}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Duration</p>
-                  <p className="text-sm text-white">{selectedLog.duration}ms</p>
+                  <p className="text-[10px] uppercase tracking-wider text-(--c-muted) mb-1">Duration</p>
+                  <p className="text-sm text-(--c-text)">{selectedLog.duration}ms</p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Created</p>
-                  <p className="text-sm text-white">{format(new Date(selectedLog.createdAt), "MMM d, yyyy HH:mm:ss")}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-(--c-muted) mb-1">Created</p>
+                  <p className="text-sm text-(--c-text)">{format(new Date(selectedLog.createdAt), "MMM d, yyyy HH:mm:ss")}</p>
                 </div>
               </div>
 
               {selectedLog.errorMessage && (
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Error</p>
-                  <p className="text-sm text-red-400">{selectedLog.errorMessage}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-(--c-muted) mb-1">Error</p>
+                  <p className="text-sm text-(--c-danger)">{selectedLog.errorMessage}</p>
                 </div>
               )}
 
               <div>
-                <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">Request</p>
-                <pre className="bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-zinc-300 overflow-x-auto">
+                <p className="text-[10px] uppercase tracking-wider text-(--c-muted) mb-2">Request</p>
+                <pre className="bg-(--c-field) border border-(--c-line) rounded-lg p-3 text-xs text-(--c-text) overflow-x-auto">
                   {JSON.stringify(selectedLog.request, null, 2)}
                 </pre>
               </div>
 
               <div>
-                <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">Response</p>
-                <pre className="bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-zinc-300 overflow-x-auto">
+                <p className="text-[10px] uppercase tracking-wider text-(--c-muted) mb-2">Response</p>
+                <pre className="bg-(--c-field) border border-(--c-line) rounded-lg p-3 text-xs text-(--c-text) overflow-x-auto">
                   {JSON.stringify(selectedLog.response, null, 2)}
                 </pre>
               </div>

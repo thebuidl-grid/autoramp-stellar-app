@@ -1,0 +1,1 @@
+Transaction state is stored by the backend, not in the browser. I reload the real transaction, and the same status, amounts, and history load again. The same is true after logging out and back in.

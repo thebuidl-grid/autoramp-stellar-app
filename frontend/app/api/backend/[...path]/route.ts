@@ -21,6 +21,8 @@ const REQUEST_HEADERS = [
   "accept",
   "accept-language",
   "x-api-key",
+  // the mainnet/testnet toggle, so the backend can record which network each transaction ran on
+  "x-chain-network",
   "user-agent",
 ];
 const RESPONSE_HEADERS = [
@@ -42,6 +44,18 @@ function clientIp(req: NextRequest): string | undefined {
   return req.headers.get("x-real-ip")?.trim() || undefined;
 }
 
+/**
+ * Visitor's country from the edge (Cloudflare, or Vercel as a fallback), forwarded to the backend
+ * as `x-visitor-country` for analytics. A client-sent `x-visitor-country` is never forwarded
+ * (headers are allowlisted), so only the edge's value can reach the backend through this proxy.
+ */
+function visitorCountry(req: NextRequest): string | undefined {
+  const raw = (req.headers.get("cf-ipcountry") ?? req.headers.get("x-vercel-ip-country") ?? "")
+    .trim()
+    .toUpperCase();
+  return /^[A-Z]{2}$/.test(raw) && raw !== "XX" && raw !== "T1" ? raw : undefined;
+}
+
 function error(status: number, message: string) {
   return NextResponse.json({ statusCode: status, message }, { status });
 }
@@ -50,7 +64,13 @@ async function proxy(req: NextRequest, ctx: Ctx): Promise<Response> {
   const base = backendBaseUrl();
   if (!base) {
     console.error("[api proxy] API_URL is not configured");
-    return error(500, "Service is not configured");
+    // Outside production, say exactly what to fix. In production keep it generic.
+    return error(
+      500,
+      process.env.NODE_ENV === "production"
+        ? "Service is not configured"
+        : "API_URL is not set. Add API_URL=<backend url> (for example http://localhost:3003) to .env.local and reload the dev server.",
+    );
   }
 
   const { path } = await ctx.params;
@@ -67,6 +87,8 @@ async function proxy(req: NextRequest, ctx: Ctx): Promise<Response> {
     const value = req.headers.get(name);
     if (value) headers.set(name, value);
   }
+  const country = visitorCountry(req);
+  if (country) headers.set("x-visitor-country", country);
   const ip = clientIp(req);
   if (ip) {
     headers.set("cf-connecting-ip", ip);

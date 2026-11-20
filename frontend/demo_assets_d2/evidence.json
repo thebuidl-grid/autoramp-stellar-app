@@ -1,0 +1,44 @@
+{
+  "amount_usdc": "5.00",
+  "source_chain": "Ethereum Sepolia (CCTP domain 0)",
+  "destination_chain": "Stellar testnet (CCTP domain 27)",
+  "source_wallet": "0x0E8B686CAe938D913a94C06620D9f4303c8112B3",
+  "stellar_recipient": "GDBF75E64FXBMVWHJCLVRFD3NT2ROV4CIB53F3G26IDO4WNM4QMJ4LEB",
+  "cctp_forwarder": "CA66Q2WFBND6V4UEB7RD4SAXSVIWMD6RA4X3U32ELVFGXV5PJK4T4VSZ",
+  "approve_tx": "0xfadfdcc504a7dfc5ae6e6efcc3487745618637c952be48137bdbe9768bc99373",
+  "source_burn_tx": "0xf0d5c01a3e82860cba694bbde76f5b1cb74a0bc5a82a66fad351edc9f4730ce2",
+  "source_burn_url": "https://sepolia.etherscan.io/tx/0xf0d5c01a3e82860cba694bbde76f5b1cb74a0bc5a82a66fad351edc9f4730ce2",
+  "burn_block": 12103697,
+  "balances_before": {
+    "ethereum_sepolia": {
+      "address": "0x0E8B686CAe938D913a94C06620D9f4303c8112B3",
+      "eth": "0.05",
+      "usdc": "20"
+    },
+    "stellar_testnet": {
+      "address": "GDBF75E64FXBMVWHJCLVRFD3NT2ROV4CIB53F3G26IDO4WNM4QMJ4LEB",
+      "xlm": "9999.9999900",
+      "usdc_trustline": true,
+      "usdc": "0.0000000"
+    }
+  },
+  "updated_at": "2026-11-10T19:11:43.583Z",
+  "state": "error",
+  "stellar_mint_tx": "1bb44fc6f4e5ee9a7427d3506ea4e1f9ab809ed99a597841935104289a248aa7",
+  "stellar_mint_ledger": 5655742,
+  "stellar_mint_url": "https://stellar.expert/explorer/testnet/tx/1bb44fc6f4e5ee9a7427d3506ea4e1f9ab809ed99a597841935104289a248aa7",
+  "balances_after": {
+    "ethereum_sepolia": {
+      "address": "0x0E8B686CAe938D913a94C06620D9f4303c8112B3",
+      "eth": "0.049999999980976283",
+      "usdc": "15"
+    },
+    "stellar_testnet": {
+      "address": "GDBF75E64FXBMVWHJCLVRFD3NT2ROV4CIB53F3G26IDO4WNM4QMJ4LEB",
+      "xlm": "9999.9959571",
+      "usdc_trustline": true,
+      "usdc": "4.9995000"
+    }
+  },
+  "error": "fetch failed"
+}

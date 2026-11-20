@@ -55,6 +55,7 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
     ...(isAuthenticated && user?.isMerchant
       ? [{ label: "Merchant Dashboard", href: "/merchant/dashboard" }]
       : []),
+    { label: "Guide", href: "/guide" },
     { label: "API Docs", href: "/docs" },
     { label: "Support", href: "mailto:dev@thebuidlgrid.org", external: true },
   ];
@@ -202,18 +203,16 @@ export function Header({ onOpenAuthModal }: HeaderProps) {
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
-                <Link href="/auth/signup" onClick={handleGetStarted}>
-                  <Button
-                    asChild
-                    size="sm"
-                    className="h-10 px-4 sm:px-6 text-sm font-normal rounded-full whitespace-nowrap"
-                  >
-                    <Link href="/auth/signup" onClick={handleGetStarted}>
-                      <span className="sm:hidden">Log in</span>
-                      <span className="hidden sm:inline">Login/Sign up</span>
-                    </Link>
-                  </Button>
-                </Link>
+                <Button
+                  asChild
+                  size="sm"
+                  className="h-10 px-4 sm:px-6 text-sm font-normal rounded-full whitespace-nowrap"
+                >
+                  <Link href="/auth/signup" onClick={handleGetStarted}>
+                    <span className="sm:hidden">Log in</span>
+                    <span className="hidden sm:inline">Login/Sign up</span>
+                  </Link>
+                </Button>
               )}
             </div>
           </div>

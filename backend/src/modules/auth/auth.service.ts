@@ -12,6 +12,28 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../database/prisma.service';
 import { SignUpDto, SignInDto, AdminLoginDto } from './dto';
 import { OtpService } from './services/otp.service';
+import { randomBytes } from 'crypto';
+import { AttemptLimiter } from '../../common/security/attempt-limiter';
+
+/**
+ * Failed password logins per account, independent of IP (IP throttling alone does not stop
+ * distributed guessing). 10 failures lock the account's login for 15 minutes.
+ */
+export const loginAttemptLimiter = new AttemptLimiter(
+  10,
+  15 * 60 * 1000,
+  15 * 60 * 1000,
+);
+
+/**
+ * A real bcrypt hash of a random value. Logins for unknown accounts still run a bcrypt
+ * comparison against it, so a missing account takes as long as a wrong password and response
+ * time cannot be used to find out which emails are registered.
+ */
+const DUMMY_PASSWORD_HASH = bcrypt.hash(randomBytes(16).toString('hex'), 10);
+
+const TOO_MANY_LOGINS =
+  'Too many failed login attempts. Please try again later.';
 
 /**
  * Auth Service
@@ -126,32 +148,33 @@ export class AuthService {
    */
   async signIn(signInDto: SignInDto) {
     const { email, password } = signInDto;
+    const limitKey = `user:${email.toLowerCase()}`;
+
+    if (loginAttemptLimiter.lockedFor(limitKey) > 0) {
+      throw new HttpException(TOO_MANY_LOGINS, HttpStatus.TOO_MANY_REQUESTS);
+    }
 
     // Find user
     const user = await this.prisma.user.findUnique({
       where: { email },
     });
 
-    if (!user) {
+    // Always run one bcrypt comparison (real hash, or a dummy for unknown / password-less
+    // accounts) so timing and error text never reveal whether the account exists.
+    const hash = user?.password || (await DUMMY_PASSWORD_HASH);
+    const isPasswordValid = await bcrypt.compare(password, hash);
+
+    if (!user || !user.password || !isPasswordValid) {
+      loginAttemptLimiter.recordFailure(limitKey);
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    // Only someone who proved the password is told the account state.
     if (user.suspended) {
       throw new UnauthorizedException('Your account has been suspended');
     }
 
-    // Verify password (only if password exists)
-    if (!user.password) {
-      throw new UnauthorizedException(
-        'Please use email verification to sign in',
-      );
-    }
-
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid email or password');
-    }
+    loginAttemptLimiter.reset(limitKey);
 
     // Generate JWT token
     const token = this.generateToken(user.id, user.email, user.role);
@@ -175,17 +198,27 @@ export class AuthService {
    */
   async adminLogin(adminLoginDto: AdminLoginDto) {
     const { email, password } = adminLoginDto;
+    const limitKey = `admin:${email.toLowerCase()}`;
+
+    if (loginAttemptLimiter.lockedFor(limitKey) > 0) {
+      throw new HttpException(TOO_MANY_LOGINS, HttpStatus.TOO_MANY_REQUESTS);
+    }
 
     // Find admin
     const admin = await this.prisma.admin.findUnique({
       where: { email },
     });
 
-    if (!admin) {
+    // Same constant-work comparison as signIn (see DUMMY_PASSWORD_HASH).
+    const hash = admin?.password || (await DUMMY_PASSWORD_HASH);
+    const isPasswordValid = await bcrypt.compare(password, hash);
+
+    if (!admin || !isPasswordValid) {
+      loginAttemptLimiter.recordFailure(limitKey);
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    // Check if admin is active
+    // Only someone who proved the password is told the account is deactivated.
     if (!admin.isActive) {
       throw new HttpException(
         'Admin account is deactivated',
@@ -193,12 +226,7 @@ export class AuthService {
       );
     }
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, admin.password);
-
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid email or password');
-    }
+    loginAttemptLimiter.reset(limitKey);
 
     // Generate JWT token with ADMIN role
     const token = this.generateToken(admin.id, admin.email, 'ADMIN');

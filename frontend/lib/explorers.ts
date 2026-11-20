@@ -14,6 +14,9 @@ export function explorerTxUrl(chain: string, hash: string): string | null {
   if (c.includes("ethereum")) {
     return `https://${testnet ? "sepolia." : ""}etherscan.io/tx/${hash}`;
   }
+  if (c.includes("bsc") || c.includes("bnb")) {
+    return `https://${testnet ? "testnet." : ""}bscscan.com/tx/${hash}`;
+  }
   if (c.includes("solana")) {
     return `https://solscan.io/tx/${hash}${testnet ? "?cluster=devnet" : ""}`;
   }

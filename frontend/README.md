@@ -13,6 +13,7 @@ Docs WIP. Auto deploy on dokploy. Test dokploy!
 The browser never calls the backend directly. All API calls go to the same-origin proxy
 `/api/backend/*` (`app/api/backend/[...path]/route.ts`), which forwards to the real backend.
 
+- Copy `.env.example` to `.env.local` for local development; it lists every variable. If `API_URL` is missing, the dev server's proxy answers with a message telling you to set it.
 - Set **`API_URL`** (server-only, read at runtime) to the backend base URL, e.g. `https://api.example.com`.
 - **Remove `NEXT_PUBLIC_API_URL`** from the build and runtime env. Anything prefixed `NEXT_PUBLIC_` is inlined
   into client JS; the proxy still falls back to it only as a transition aid for deployments that haven't set `API_URL`.

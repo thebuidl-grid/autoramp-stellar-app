@@ -1,0 +1,21 @@
+{
+  "wallet_evm": "0x6d07c4f69578DF665b21d1296aF2D3D482F4D819",
+  "wallet_stellar": "GAPF7GOEVDR7BOQVBSJNKLDECIYZ2HGHOUFLV5QSW6UB7THKESPYEDR5",
+  "inbound": {
+    "amount": "2",
+    "source_tx": "0x4266ef56a833f4df90a5731326e2c018b0c1fc5855b9e4f422d2d2fe16c5e301",
+    "dest_tx": "b43391d68d3a6ea1073be895f4d1594fae50f6aed6f676c954b289759e5b1a4e",
+    "reference": "BRG-1794345504873-qrn1v8"
+  },
+  "bridges": [
+    {
+      "ref": "BRG-1794345504873-qrn1v8",
+      "fromChain": null,
+      "toChain": null,
+      "amount": null,
+      "source": "0x4266ef56a833f4df90a5731326e2c018b0c1fc5855b9e4f422d2d2fe16c5e301",
+      "dest": "b43391d68d3a6ea1073be895f4d1594fae50f6aed6f676c954b289759e5b1a4e",
+      "createdAt": "2026-11-10T21:18:37.000Z"
+    }
+  ]
+}

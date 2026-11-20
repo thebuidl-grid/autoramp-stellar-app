@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { Trash2, Key, Shield, Calendar, Activity, AlertCircle, Loader2, Plus, Copy, Check } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminApi, ApiKey, CreateApiKeyResponse } from "@/lib/api";
+import { merchantApi } from "@/lib/merchant";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,7 +52,8 @@ export function MerchantApiKeys({ merchantId, userId }: MerchantApiKeysProps) {
     });
 
     const revokeMutation = useMutation({
-        mutationFn: (id: string) => adminApi.revokeApiKey(id),
+        // /merchants/api-keys accepts an admin, who may act on any merchant's key
+        mutationFn: (id: string) => merchantApi.revokeApiKey(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["merchant-api-keys", merchantId] });
             toast({
@@ -70,7 +72,7 @@ export function MerchantApiKeys({ merchantId, userId }: MerchantApiKeysProps) {
     });
 
     const createMutation = useMutation({
-        mutationFn: (data: { name: string }) => adminApi.createApiKeyForUser(userId, data),
+        mutationFn: (data: { name: string }) => merchantApi.createApiKey({ merchantId, name: data.name }) as Promise<{ data: CreateApiKeyResponse }>,
         onSuccess: (response) => {
             queryClient.invalidateQueries({ queryKey: ["merchant-api-keys", merchantId] });
             setNewKeyData(response.data);

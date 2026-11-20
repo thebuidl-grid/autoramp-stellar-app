@@ -1,0 +1,1 @@
+Now I click Send USDC from wallet. The wallet signs a real Stellar testnet payment of one USDC to the funding address.

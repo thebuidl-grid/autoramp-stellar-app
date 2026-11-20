@@ -7,6 +7,8 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { TransactionStatus } from '@prisma/client';
 import { OfframpStateService } from './offramp-state.service';
+import { PayoutOrderRepository } from './payout-order.repository';
+import { PayoutPollService } from './payout-poll.service';
 import { isTimedOut, timeoutMsFor } from './offramp-state-machine';
 
 interface ExpirableOrder {
@@ -72,6 +74,8 @@ export class OfframpExpiryService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly offrampState: OfframpStateService,
+    private readonly payoutOrders: PayoutOrderRepository,
+    private readonly poller: PayoutPollService,
   ) {}
 
   onModuleInit(): void {
@@ -108,36 +112,11 @@ export class OfframpExpiryService implements OnModuleInit, OnModuleDestroy {
         Number(process.env.OFFRAMP_EXPIRY_FALLBACK_MS) || 24 * 60 * 60 * 1000;
       const fallbackCutoff = new Date(now.getTime() - fallbackTtlMs);
 
-      const orders = await this.prisma.offrampProviderOrder.findMany({
-        where: {
-          provider: 'bitnob',
-          AND: [
-            {
-              OR: [
-                { expiresAt: { lt: now } },
-                { expiresAt: null, createdAt: { lt: fallbackCutoff } },
-              ],
-            },
-            {
-              // Sweep only orders with no bridge leg, or one that definitively
-              // failed. In-flight/stuck (PENDING/PROCESSING/DELAYED/STUCK/
-              // WAITING) and delivered (SUCCESS) bridge legs are held open.
-              OR: [
-                { bridgeReference: null },
-                {
-                  bridgeStatus: { in: EXPIRABLE_BRIDGE_FAILURE_STATUSES },
-                },
-              ],
-            },
-          ],
-        },
-        select: {
-          id: true,
-          reference: true,
-          offrampTransactionId: true,
-          merchantOfframpTransactionId: true,
-        },
-      });
+      const orders = await this.payoutOrders.findExpirable(
+        now,
+        fallbackCutoff,
+        EXPIRABLE_BRIDGE_FAILURE_STATUSES,
+      );
 
       let expired = 0;
       for (const order of orders) {
@@ -168,11 +147,12 @@ export class OfframpExpiryService implements OnModuleInit, OnModuleDestroy {
     if (!windows.length) return 0;
     const cutoff = new Date(now.getTime() - Math.min(...windows));
 
-    const candidates = await this.prisma.offrampTransaction.findMany({
-      where: { status: { in: STATE_TIMEOUT_STATUSES }, updatedAt: { lt: cutoff } },
-      include: { providerOrder: true },
-      take: 200,
-    });
+    const candidates = await this.payoutOrders.attachMany(
+      await this.prisma.offrampTransaction.findMany({
+        where: { status: { in: STATE_TIMEOUT_STATUSES }, updatedAt: { lt: cutoff } },
+        take: 200,
+      }),
+    );
 
     let expired = 0;
     for (const tx of candidates) {
@@ -184,6 +164,7 @@ export class OfframpExpiryService implements OnModuleInit, OnModuleDestroy {
         continue; // bridge leg in flight / delivered: hold open
       }
       if (!isTimedOut(tx.status, tx.updatedAt, now)) continue;
+      if (!(await this.safeToExpire(tx.id, tx.status, tx.reference))) continue;
 
       const result = await this.offrampState.apply(tx.id, 'EXPIRED', {
         actor: 'expiry-sweeper',
@@ -209,6 +190,23 @@ export class OfframpExpiryService implements OnModuleInit, OnModuleDestroy {
     return expired;
   }
 
+  /**
+   * Never give up on an order without asking Bitnob first. Our timeout only means we have not heard back; it does not mean the
+   * customer was not paid (that is how paid KES payouts ended up shown as expired). Not safe to expire when Bitnob could not be
+   * reached (we cannot rule out that it was paid), when Bitnob's answer just changed the order, or while Bitnob says the payout is
+   * being processed. Safe when the order never reached Bitnob or Bitnob has nothing newer.
+   */
+  private async safeToExpire(transactionId: string, status: string, reference: string): Promise<boolean> {
+    const result = await this.poller.pollTransaction(transactionId, status);
+    if (result.outcome === 'unreachable') {
+      this.logger.warn(`[offramp-expiry] ${reference}: could not confirm with Bitnob; not expiring it yet`);
+      return false;
+    }
+    if (result.outcome === 'applied') return false;
+    if (String(result.providerStatus ?? '').toUpperCase() === 'PROCESSING') return false;
+    return true;
+  }
+
   private async expireOrder(order: ExpirableOrder): Promise<boolean> {
     const expiredAt = new Date();
 
@@ -217,6 +215,7 @@ export class OfframpExpiryService implements OnModuleInit, OnModuleDestroy {
         where: { id: order.offrampTransactionId },
       });
       if (!tx || !EXPIRABLE_STATUSES.includes(tx.status)) return false;
+      if (!(await this.safeToExpire(tx.id, tx.status, tx.reference))) return false;
 
       // D1: expiry goes through the state machine (validated, logged, reason + timestamp recorded).
       const result = await this.offrampState.apply(tx.id, 'EXPIRED', {
@@ -249,6 +248,7 @@ export class OfframpExpiryService implements OnModuleInit, OnModuleDestroy {
         where: { id: order.merchantOfframpTransactionId },
       });
       if (!tx || !EXPIRABLE_STATUSES.includes(tx.status)) return false;
+      if (!(await this.safeToExpire(tx.id, tx.status, tx.reference))) return false;
 
       await this.prisma.merchantOfframpTransaction.update({
         where: { id: tx.id },
@@ -277,10 +277,7 @@ export class OfframpExpiryService implements OnModuleInit, OnModuleDestroy {
       return false;
     }
 
-    await this.prisma.offrampProviderOrder.update({
-      where: { id: order.id },
-      data: { failureReason: 'timeout' },
-    });
+    await this.payoutOrders.update(order, { failureReason: 'timeout' });
 
     this.logger.log(
       `[offramp-expiry] order ${order.reference} expired (failureReason=timeout)`,

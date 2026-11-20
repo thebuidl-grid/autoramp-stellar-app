@@ -21,6 +21,10 @@ import { parseUnits } from "viem";
 import { switchChain, writeContract, waitForTransactionReceipt } from "wagmi/actions";
 import { wagmiConfig } from "@/lib/wagmi-config";
 import { IS_TESTNET } from "@/lib/constants/networks";
+import { bridgeApi } from "@/lib/api";
+import { completeMint, pollRelay } from "@/lib/cctp-complete";
+import { explainStellarAccountError, parseRelayBridge } from "@/lib/stellar-offramp-relay";
+import { checkStellarFunds, fetchStellarFunds } from "@/lib/stellar-balance";
 import {
   CCTP_EVM_DOMAIN,
   EVM_MESSAGE_TRANSMITTER_V2,
@@ -53,6 +57,8 @@ export interface BridgeStellarToEvmParams {
   onSourceTx?: (hash: string) => void | Promise<void>;
   onStage?: (stage: StellarSourceStage) => void;
   timeoutMs?: number;
+  /** The wallet could not finish the mint (closed, rejected, failed), so our relayer is finishing it. */
+  onFallback?: (reason: string) => void;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -79,7 +85,12 @@ export async function invokeSoroban(
   args: xdr.ScVal[],
   signXdr: (xdr: string) => Promise<string>,
 ): Promise<string> {
-  const account = await server.getAccount(source);
+  let account;
+  try {
+    account = await server.getAccount(source);
+  } catch (error) {
+    throw explainStellarAccountError(error, IS_TESTNET ? "testnet" : "mainnet") ?? error;
+  }
   const tx = new TransactionBuilder(account, { fee: "10000000", networkPassphrase: passphrase })
     .addOperation(new Contract(contractId).call(method, ...args))
     .setTimeout(180)
@@ -103,6 +114,117 @@ export async function invokeSoroban(
   return sent.hash;
 }
 
+export interface BurnStellarUsdcParams {
+  /** Connected Stellar account (G…) that owns the USDC. */
+  stellarAddress: string;
+  /** USDC to burn, in Stellar base units (7 dp). */
+  amountUnits: bigint;
+  /** Fee ceiling for the fast transfer, in Stellar base units (7 dp). */
+  maxFeeUnits: bigint;
+  /** CCTP destination domain (e.g. 6 = Base). */
+  destDomain: number;
+  /** 32-byte mint recipient on the destination chain. */
+  mintRecipient: Buffer;
+  signXdr: (xdr: string) => Promise<string>;
+  onStage?: (stage: "approving" | "burning") => void;
+}
+
+/** Setup shared by the two Soroban calls of a burn. */
+function burnContext(p: BurnStellarUsdcParams) {
+  const cfg = stellarConfig();
+  return {
+    cfg,
+    tokenMessenger: STELLAR_TOKEN_MESSENGER_MINTER[cfg.network],
+    server: new rpc.Server(cfg.rpcUrl),
+    from: new Address(p.stellarAddress).toScVal(),
+  };
+}
+
+/**
+ * Step 1 of the Stellar burn: USDC.approve(TokenMessengerMinter). One wallet prompt. Checks the wallet can cover
+ * the burn first, so the user never signs an approval for a burn that is certain to fail.
+ */
+export async function approveStellarUsdcForCctp(p: BurnStellarUsdcParams): Promise<string> {
+  const { cfg, tokenMessenger, server, from } = burnContext(p);
+
+  // Approving never checks the balance, so without this the user signs the approval and only then hits
+  // "deposit_for_burn failed in simulation".
+  const funds = await fetchStellarFunds(p.stellarAddress);
+  if (funds) {
+    const check = checkStellarFunds(funds, p.amountUnits);
+    if (!check.ok) throw new Error(check.message);
+  }
+
+  p.onStage?.("approving");
+  const expiration = (await server.getLatestLedger()).sequence + 2000;
+  return invokeSoroban(server, cfg.passphrase, p.stellarAddress, cfg.usdcContract, "approve", [
+    from,
+    new Address(tokenMessenger).toScVal(),
+    nativeToScVal(p.amountUnits, { type: "i128" }),
+    nativeToScVal(expiration, { type: "u32" }),
+  ], p.signXdr);
+}
+
+/**
+ * Step 2: TokenMessengerMinter.deposit_for_burn(...) with fast finality. One wallet prompt. Run it from its own
+ * button tap: on a phone the wallet app only comes to the front for a request the user just started.
+ * Returns the burn transaction hash. The mint on the destination chain is a separate step.
+ */
+export async function burnStellarUsdcOnly(p: BurnStellarUsdcParams): Promise<string> {
+  const { cfg, tokenMessenger, server, from } = burnContext(p);
+  p.onStage?.("burning");
+  return invokeSoroban(server, cfg.passphrase, p.stellarAddress, tokenMessenger, "deposit_for_burn", [
+    from,
+    nativeToScVal(p.amountUnits, { type: "i128" }),
+    nativeToScVal(p.destDomain, { type: "u32" }),
+    xdr.ScVal.scvBytes(p.mintRecipient),
+    new Address(cfg.usdcContract).toScVal(),
+    xdr.ScVal.scvBytes(Buffer.alloc(32)), // destination_caller: anyone may mint
+    nativeToScVal(p.maxFeeUnits, { type: "i128" }),
+    nativeToScVal(1000, { type: "u32" }), // fast transfer
+  ], p.signXdr);
+}
+
+/** Both steps back to back (used by the bridge, which has no phone-return problem to solve here). */
+export async function burnStellarUsdcViaCctp(p: BurnStellarUsdcParams): Promise<string> {
+  await approveStellarUsdcForCctp(p);
+  return burnStellarUsdcOnly(p);
+}
+
+function offrampBurnParams(p: {
+  stellarAddress: string;
+  bridge: unknown;
+  signXdr: (xdr: string) => Promise<string>;
+  onStage?: (stage: "approving" | "burning") => void;
+}): BurnStellarUsdcParams {
+  const bridge = parseRelayBridge(p.bridge); // validated before any wallet prompt
+  return {
+    stellarAddress: p.stellarAddress,
+    amountUnits: BigInt(bridge.burnAmountUnits),
+    maxFeeUnits: BigInt(bridge.maxFeeUnits),
+    destDomain: bridge.destinationDomain,
+    mintRecipient: evmAddressToBytes32(bridge.mintRecipient),
+    signXdr: p.signXdr,
+    onStage: p.onStage,
+  };
+}
+
+type OfframpStep = Parameters<typeof offrampBurnParams>[0];
+
+/**
+ * Stellar off-ramp over CCTP + Base, in two taps. The backend gave the exact burn and the Bitnob Base address; the
+ * user never sees or types that address. The Base mint is done by the backend relayer.
+ *   tap 1: approveStellarOfframp   tap 2: burnForStellarOfframp
+ */
+export async function approveStellarOfframp(p: OfframpStep): Promise<string> {
+  return approveStellarUsdcForCctp(offrampBurnParams(p));
+}
+
+/** Tap 2: the burn itself (run after approveStellarOfframp). Returns the burn transaction hash. */
+export async function burnForStellarOfframp(p: OfframpStep): Promise<string> {
+  return burnStellarUsdcOnly(offrampBurnParams(p));
+}
+
 export async function bridgeStellarToEvmViaCctp(
   p: BridgeStellarToEvmParams,
 ): Promise<{ sourceTxHash: string; destinationTxHash: string }> {
@@ -114,61 +236,56 @@ export async function bridgeStellarToEvmViaCctp(
   const mintRecipient = evmAddressToBytes32(p.evmRecipient);
   const amount = parseUnits(p.amount, 7); // Stellar USDC has 7 decimals
   const maxFee = BigInt(50_000); // 0.005 USDC (7 dp)
-  const tokenMessenger = STELLAR_TOKEN_MESSENGER_MINTER[cfg.network];
 
-  const server = new rpc.Server(cfg.rpcUrl);
-  const from = new Address(p.stellarAddress).toScVal();
-
-  p.onStage?.("approving");
-  const expiration = (await server.getLatestLedger()).sequence + 2000;
-  await invokeSoroban(server, cfg.passphrase, p.stellarAddress, cfg.usdcContract, "approve", [
-    from,
-    new Address(tokenMessenger).toScVal(),
-    nativeToScVal(amount, { type: "i128" }),
-    nativeToScVal(expiration, { type: "u32" }),
-  ], p.signXdr);
-
-  p.onStage?.("burning");
-  const burnHash = await invokeSoroban(server, cfg.passphrase, p.stellarAddress, tokenMessenger, "deposit_for_burn", [
-    from,
-    nativeToScVal(amount, { type: "i128" }),
-    nativeToScVal(destDomain, { type: "u32" }),
-    xdr.ScVal.scvBytes(mintRecipient),
-    new Address(cfg.usdcContract).toScVal(),
-    xdr.ScVal.scvBytes(Buffer.alloc(32)), // destination_caller: anyone may mint
-    nativeToScVal(maxFee, { type: "i128" }),
-    nativeToScVal(1000, { type: "u32" }), // fast transfer
-  ], p.signXdr);
+  const burnHash = await burnStellarUsdcViaCctp({
+    stellarAddress: p.stellarAddress,
+    amountUnits: amount,
+    maxFeeUnits: maxFee,
+    destDomain,
+    mintRecipient,
+    signXdr: p.signXdr,
+    onStage: (stage) => p.onStage?.(stage),
+  });
   await p.onSourceTx?.(burnHash);
 
   p.onStage?.("attesting");
-  const deadline = Date.now() + (p.timeoutMs ?? 30 * 60_000);
-  let att: { message: string; attestation: string } | null = null;
-  while (Date.now() < deadline && !att) {
-    const r = await fetch(
-      `/api/bridge/attestation?domain=${STELLAR_CCTP_DOMAIN}&tx=${burnHash}&network=${cfg.network}`,
-      { cache: "no-store" },
-    );
-    const b = (await r.json().catch(() => ({}))) as { status?: string; message?: string; attestation?: string };
-    if (b.status === "complete" && b.message && b.attestation) att = { message: b.message, attestation: b.attestation };
-    else await sleep(5000);
-  }
-  if (!att) {
-    throw new Error(`Timed out waiting for Circle's attestation. Stellar burn ${burnHash} is safe; the mint can be completed later.`);
-  }
+  const window = p.timeoutMs ?? 30 * 60_000;
 
-  p.onStage?.("minting");
-  await switchChain(wagmiConfig, { chainId: p.destChainId } as never);
-  const mintHash = await writeContract(wagmiConfig, {
-    address: EVM_MESSAGE_TRANSMITTER_V2[cfg.network],
-    abi: RECEIVE_MESSAGE_ABI,
-    functionName: "receiveMessage",
-    args: [att.message as `0x${string}`, att.attestation as `0x${string}`],
-    chainId: p.destChainId,
-  } as never);
-  const receipt = await waitForTransactionReceipt(wagmiConfig, { hash: mintHash, chainId: p.destChainId });
-  if (receipt.status !== "success") throw new Error("Mint transaction reverted on the destination chain");
+  // First choice: the user's own EVM wallet mints (they pay the destination gas, nothing touches our relayer).
+  const walletMint = async () => {
+    const deadline = Date.now() + window;
+    let att: { message: string; attestation: string } | null = null;
+    while (Date.now() < deadline && !att) {
+      const r = await fetch(`/api/bridge/attestation?domain=${STELLAR_CCTP_DOMAIN}&tx=${burnHash}&network=${cfg.network}`, { cache: "no-store" });
+      const b = (await r.json().catch(() => ({}))) as { status?: string; message?: string; attestation?: string };
+      if (b.status === "complete" && b.message && b.attestation) att = { message: b.message, attestation: b.attestation };
+      else await sleep(5000);
+    }
+    if (!att) throw new Error(`Timed out waiting for Circle's attestation. Stellar burn ${burnHash} is safe; the mint can be completed later.`);
 
+    p.onStage?.("minting");
+    await switchChain(wagmiConfig, { chainId: p.destChainId } as never);
+    const mintHash = await writeContract(wagmiConfig, {
+      address: EVM_MESSAGE_TRANSMITTER_V2[cfg.network],
+      abi: RECEIVE_MESSAGE_ABI,
+      functionName: "receiveMessage",
+      args: [att.message as `0x${string}`, att.attestation as `0x${string}`],
+      chainId: p.destChainId,
+    } as never);
+    const receipt = await waitForTransactionReceipt(wagmiConfig, { hash: mintHash, chainId: p.destChainId });
+    if (receipt.status !== "success") throw new Error("Mint transaction reverted on the destination chain");
+    return mintHash;
+  };
+
+  // Safety net: if the wallet is closed, rejects, or fails, our relayer mints on Base so the money is never left stuck.
+  const relayMint = () =>
+    pollRelay({
+      call: async () => (await bridgeApi.relayToEvm({ burnTxHash: burnHash })).data,
+      onMinting: () => p.onStage?.("minting"),
+      deadline: Date.now() + window,
+    });
+
+  const { hash } = await completeMint({ walletMint, relayMint, onFallback: p.onFallback });
   p.onStage?.("done");
-  return { sourceTxHash: burnHash, destinationTxHash: mintHash };
+  return { sourceTxHash: burnHash, destinationTxHash: hash };
 }

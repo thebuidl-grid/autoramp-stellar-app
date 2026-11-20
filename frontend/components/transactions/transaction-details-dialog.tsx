@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/ui/badge";
+import { depositBankName } from "@/lib/deposit-bank";
 import {
   formatCurrency,
   formatDate,
@@ -228,8 +229,8 @@ export function TransactionDetailsDialog({
                     Bank Account
                   </p>
                   <div className="space-y-2">
-                    {transaction?.depositAccount?.bankName && (
-                      <p className="font-medium">{transaction?.depositAccount?.bankName}</p>
+                    {transaction?.depositAccount?.accountNumber && (
+                      <p className="font-medium">{depositBankName(transaction?.depositAccount)}</p>
                     )}
                     <div className="flex items-center gap-2">
                       <p className="font-mono">{transaction?.depositAccount?.accountNumber}</p>

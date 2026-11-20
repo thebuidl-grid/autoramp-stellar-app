@@ -40,4 +40,27 @@ describe('CustomThrottlerGuard.getTracker', () => {
       track({ ip: '127.0.0.1', headers: { 'cf-connecting-ip': '  ' } }),
     ).resolves.toBe('127.0.0.1');
   });
+
+  it('ignores a cf-connecting-ip that is not a real IP, so junk cannot mint unlimited buckets', async () => {
+    for (const junk of [
+      'not-an-ip',
+      '1.2.3',
+      "'; DROP TABLE x;--",
+      'a'.repeat(500),
+      '999.999.999.999',
+    ]) {
+      expect(
+        await track({ ip: '10.0.1.5', headers: { 'cf-connecting-ip': junk } }),
+      ).toBe('10.0.1.5');
+    }
+  });
+
+  it('accepts IPv6 visitors', async () => {
+    expect(
+      await track({
+        ip: '10.0.1.5',
+        headers: { 'cf-connecting-ip': '2606:4700::1111' },
+      }),
+    ).toBe('2606:4700::1111');
+  });
 });

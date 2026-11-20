@@ -1,0 +1,1 @@
+This is a real off-ramp from this account, loaded live from the AutoRamp API. Its status is Completed. The page shows the source asset, the deposit amount, the expected and actual payout in naira, and the conversion rate. It also shows the Stellar transaction hash of the deposit, and the full status history with a timestamp for every step.

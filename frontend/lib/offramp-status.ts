@@ -86,6 +86,42 @@ export const STATUS_META: Record<OfframpStatus, StatusMeta> = {
   },
 };
 
+/**
+ * What the sell screen should say once the order moves past "waiting for the USDC".
+ * null = keep the screen's own wording (INITIATED / AWAITING_DEPOSIT / unknown).
+ * phase "done" = paid out, "failed" = did not pay out or needs attention (the screen stops spinning).
+ */
+export interface SellProgress {
+  phase: "progress" | "done" | "failed";
+  title: string;
+  subtitle: string;
+}
+
+export function sellProgress(raw: string | null | undefined): SellProgress | null {
+  const status = normalizeOfframpStatus(raw);
+  switch (status) {
+    case "DEPOSIT_DETECTED":
+      return { phase: "progress", title: "We received your USDC", subtitle: "Your payout is being prepared now." };
+    case "PROCESSING":
+      return { phase: "progress", title: "Processing your payment", subtitle: "This usually takes a few minutes." };
+    case "CONVERSION_PENDING":
+      return { phase: "progress", title: "Converting your USDC", subtitle: "Your payout will be sent right after." };
+    case "PAYOUT_PENDING":
+      return { phase: "progress", title: "Sending your payout", subtitle: "Your money is on its way to your account." };
+    case "COMPLETED":
+      return { phase: "done", title: "Payout sent", subtitle: "Your money has been sent to your account." };
+    case "PARTIALLY_SETTLED":
+    case "FAILED":
+    case "REJECTED":
+    case "REVERSED":
+    case "EXPIRED":
+    case "INSUFFICIENT_LIQUIDITY":
+      return { phase: "failed", title: STATUS_META[status].label, subtitle: STATUS_META[status].message };
+    default:
+      return null;
+  }
+}
+
 /** Pre-existing TransactionStatus values mapped onto the new model (same mapping as the backend). */
 const LEGACY: Record<string, OfframpStatus> = {
   PENDING: "AWAITING_DEPOSIT",

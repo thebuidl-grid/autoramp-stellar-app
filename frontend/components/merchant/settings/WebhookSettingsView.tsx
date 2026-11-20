@@ -234,7 +234,7 @@ export default function WebhookSettingsView() {
 
       {/* Add Form */}
       {showAddForm && (
-        <div className="border border-white/10 rounded-lg p-4 space-y-3 bg-white/5">
+        <div className="border border-(--c-line) rounded-lg p-4 space-y-3 bg-(--c-field)">
           <div className="flex items-center justify-between">
             <Label className="text-sm font-medium">New Webhook</Label>
             <Button variant="ghost" size="sm" onClick={resetAddForm} disabled={createMutation.isPending}>
@@ -243,13 +243,13 @@ export default function WebhookSettingsView() {
           </div>
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-              URL <span className="text-red-500">*</span>
+              URL <span className="text-(--c-danger)">*</span>
             </Label>
             <Input
               placeholder="https://your-app.com/webhooks/autoramp"
               value={newUrl}
               onChange={(e) => setNewUrl(e.target.value)}
-              className="bg-black/40 border-white/10 font-mono"
+              className="bg-(--c-field) border-(--c-line) font-mono"
             />
           </div>
           <div className="space-y-2">
@@ -258,7 +258,7 @@ export default function WebhookSettingsView() {
               placeholder="e.g. Production, Staging"
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
-              className="bg-black/40 border-white/10"
+              className="bg-(--c-field) border-(--c-line)"
             />
           </div>
           <div className="flex justify-end gap-2 pt-1">
@@ -289,7 +289,7 @@ export default function WebhookSettingsView() {
           {webhooks.map((wh) => (
             <div
               key={wh.id}
-              className="border border-white/10 rounded-lg p-4 bg-white/5 space-y-3"
+              className="border border-(--c-line) rounded-lg p-4 bg-(--c-field) space-y-3"
             >
               {editingId === wh.id ? (
                 /* Edit Mode */
@@ -299,7 +299,7 @@ export default function WebhookSettingsView() {
                     <Input
                       value={editUrl}
                       onChange={(e) => setEditUrl(e.target.value)}
-                      className="bg-black/40 border-white/10 font-mono"
+                      className="bg-(--c-field) border-(--c-line) font-mono"
                     />
                   </div>
                   <div className="space-y-2">
@@ -307,7 +307,7 @@ export default function WebhookSettingsView() {
                     <Input
                       value={editLabel}
                       onChange={(e) => setEditLabel(e.target.value)}
-                      className="bg-black/40 border-white/10"
+                      className="bg-(--c-field) border-(--c-line)"
                     />
                   </div>
                   <div className="flex justify-end gap-2">
@@ -333,7 +333,7 @@ export default function WebhookSettingsView() {
                         onClick={() => handleToggle(wh)}
                         disabled={updateMutation.isPending}
                         className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                          wh.active ? "bg-primary" : "bg-white/20"
+                          wh.active ? "bg-primary" : "bg-(--c-field)"
                         }`}
                         title={wh.active ? "Disable" : "Enable"}
                       >
@@ -392,7 +392,7 @@ export default function WebhookSettingsView() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setDeleteTarget(wh)}
-                        className="h-8 w-8 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        className="h-8 w-8 p-0 text-(--c-danger) hover:text-red-300 hover:bg-red-500/10"
                         title="Delete"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -408,10 +408,10 @@ export default function WebhookSettingsView() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <DialogContent className="bg-black/90 border-white/10">
+        <DialogContent className="bg-black/90 border-(--c-line)">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-400" />
+              <AlertTriangle className="w-5 h-5 text-(--c-danger)" />
               Delete Webhook
             </DialogTitle>
             <DialogDescription>
@@ -419,7 +419,7 @@ export default function WebhookSettingsView() {
             </DialogDescription>
           </DialogHeader>
           {deleteTarget && (
-            <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 font-mono text-xs break-all">
+            <div className="bg-(--c-field) border border-(--c-line) rounded-lg px-3 py-2 font-mono text-xs break-all">
               {deleteTarget.url}
             </div>
           )}
@@ -442,7 +442,7 @@ export default function WebhookSettingsView() {
 
       {/* Secret Display Dialog */}
       <Dialog open={!!secretModal} onOpenChange={(open) => !open && setSecretModal(null)}>
-        <DialogContent className="bg-black/90 border-white/10">
+        <DialogContent className="bg-black/90 border-(--c-line)">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <KeyRound className="w-5 h-5 text-primary" />
@@ -453,7 +453,7 @@ export default function WebhookSettingsView() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 bg-(--c-field) border border-(--c-line) rounded-lg px-3 py-2">
               <code className="flex-1 text-xs font-mono break-all text-primary">
                 {secretModal?.secret}
               </code>
@@ -464,7 +464,7 @@ export default function WebhookSettingsView() {
                 className="shrink-0 h-8 w-8 p-0"
               >
                 {copied ? (
-                  <Check className="w-4 h-4 text-green-400" />
+                  <Check className="w-4 h-4 text-(--c-ok)" />
                 ) : (
                   <Copy className="w-4 h-4" />
                 )}

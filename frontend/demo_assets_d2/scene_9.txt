@@ -1,0 +1,1 @@
+Now for the return trip: sending USDC from Stellar back to Base. I start on the same Bridge tab, with the route from the previous transfer still showing.

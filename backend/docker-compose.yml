@@ -1,0 +1,39 @@
+# DATABASE_URL and REDIS_URL come from .env (external Postgres/Redis).
+services:
+  migrate:
+    build:
+      context: .
+      target: migrate
+    env_file: [.env]
+    restart: 'no'
+
+  api:
+    build: .
+    command: ['node', 'dist/main']
+    env_file: [.env]
+    environment:
+      PORT: 4000
+    ports:
+      - '4000:4000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker-webhook:
+    build: .
+    command: ['node', 'dist/workers/webhook.worker.js']
+    env_file: [.env]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker-audit:
+    build: .
+    command: ['node', 'dist/workers/audit.worker.js']
+    env_file: [.env]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped

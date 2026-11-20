@@ -1,6 +1,8 @@
+import type { AttentionCounts, HealthPage, TraceResult, WebhookDetail, WebhookPage } from "@/lib/tracker";
 import axios, { AxiosError } from "axios";
 import type { OfframpView, ReconciliationRecord } from "@/lib/offramp-status";
 import { useAuthStore } from "./store";
+import { getActiveNetwork } from "./network";
 
 /**
  * API Configuration
@@ -52,6 +54,8 @@ api.interceptors.request.use(
         );
       }
     }
+    // Tell the backend which network the toggle is on, so each transaction records whether it was a test or real.
+    config.headers?.set?.("X-Chain-Network", getActiveNetwork());
     return config;
   },
   (error) => Promise.reject(error),
@@ -325,6 +329,8 @@ export interface UnifiedTransaction {
   createdAt: string;
   reference: string;
   details: Record<string, any>;
+  /** Fees we charged on this transaction. Older backends do not send it. */
+  fees?: Array<{ type: string; amount: string; currency: string }>;
 }
 
 export interface UnifiedTransactionsResponse {
@@ -356,32 +362,6 @@ export interface TransactionAnalyticsDataPoint {
   totalFees: number;
 }
 
-export interface ApiKeysResponse {
-  apiKeys: ApiKey[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-}
-
-export interface ApiKeysSummaryResponse {
-  totalKeys: number;
-  activeKeys: number;
-  totalRequests: number;
-  averageRequestsPerKey: number;
-}
-
-export interface ApiKeyAnalyticsDataPoint {
-  date: string;
-  requestCount: number;
-  uniqueKeys: number;
-  successCount: number;
-  errorCount: number;
-  successRate: number;
-}
-
 export interface UserApiKeyStatsResponse {
   totalKeys: number;
   activeKeys: number;
@@ -411,6 +391,8 @@ export interface OnRampDto {
   network: string;
   type?: string;
   amount: number;
+  /** ISO alpha-2 fiat country (stellar network only): NG (default), GH, KE. */
+  country?: string;
   destination: {
     address: string;
   };
@@ -420,6 +402,10 @@ export interface OffRampDto {
   network: string;
   type?: string;
   amount: number;
+  /** ISO alpha-2 fiat country (stellar network only): NG (default), GH, KE. */
+  country?: string;
+  /** The app's network toggle. The backend builds Stellar CCTP off-ramps for this network (default: mainnet). */
+  chainNetwork?: "mainnet" | "testnet";
   destination: {
     bankCode: string;
     accountNumber: string;
@@ -506,9 +492,10 @@ export interface PlatformTransaction {
   id: string;
   reference: string;
   amount: number;
+  currency?: string | null;
   status: string;
   createdAt: string;
-  type: "onramp" | "offramp" | "swap" | "otc" | "merchant_onramp" | "merchant_offramp" | "merchant_swap";
+  type: "onramp" | "offramp" | "swap" | "otc" | "merchant_onramp" | "merchant_offramp" | "merchant_swap" | "bank_transfer" | "vas";
   user: string | null;
   merchant: string | null;
 }
@@ -579,13 +566,16 @@ export interface ResolveAccountResponse {
 }
 
 export const stablestackApi = {
-  getBanks: () =>
-    api.get<{ status: string; message: string; data: Bank[] }>("/misc/banks"),
+  getBanks: (country?: string) =>
+    api.get<{ status: string; message: string; data: Bank[] }>(
+      `/misc/banks${country && country !== "NG" ? `?country=${encodeURIComponent(country)}` : ""}`,
+    ),
 
-  resolveAccount: (bankCode: string, accountNumber: string) => {
+  resolveAccount: (bankCode: string, accountNumber: string, country?: string) => {
     const params = new URLSearchParams();
     params.append("bankCode", bankCode);
     params.append("accountNumber", accountNumber);
+    if (country && country !== "NG") params.append("country", country);
     return api.get<ResolveAccountResponse>(
       `/misc/resolve-account?${params.toString()}`,
     );
@@ -594,6 +584,15 @@ export const stablestackApi = {
   onRamp: (data: OnRampDto) => api.post("/ramp/onramp", data),
 
   offRamp: (data: OffRampDto) => api.post("/ramp/offramp", data),
+
+  /** Stellar off-ramp over CCTP: ask the backend to mint the burned USDC on Base. Idempotent; poll until "minted". */
+  relayOfframp: (reference: string) =>
+    api.post<{
+      reference: string;
+      state: "awaiting_burn" | "attesting" | "minting" | "minted";
+      mintTxHash?: string;
+      message?: string;
+    }>(`/ramp/offramp/${encodeURIComponent(reference)}/relay`),
 
   confirmOfframp: (reference: string, stellarTxHash: string) =>
     api.post(`/ramp/offramp/${reference}/confirm`, { stellarTxHash }),
@@ -859,6 +858,15 @@ export interface WaitlistEntry {
   name: string | null;
   phoneNumber: string | null;
   userType: string | null;
+  /** country picked in the phone selector (ISO) */
+  phoneCountry: string | null;
+  /** country the signup request came from (ISO, from the edge; unverified) */
+  country: string | null;
+  /** referring site hostname; null = direct / unknown */
+  referrer: string | null;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
   source: string | null;
   createdAt: string;
 }
@@ -880,7 +888,11 @@ export interface WaitlistStatsResponse {
   heatmap: number[][];
   bySource: { source: string; count: number }[];
   /** all-time; always the four types plus `unknown` for older signups */
-  byType: { type: string; count: number }[];
+  byType: { type: string; count: number; percent: number }[];
+  /** all-time, top 15; key is an ISO code or "unknown" */
+  byCountry: { key: string; count: number; percent: number }[];
+  /** all-time, top 15; key is a hostname or "direct" */
+  byReferrer: { key: string; count: number; percent: number }[];
   conversion: { registered: number; total: number; rate: number };
 }
 
@@ -919,6 +931,11 @@ export const waitlistApi = {
     email: string;
     phoneNumber: string;
     userType: string;
+    phoneCountry?: string;
+    referrer?: string;
+    utmSource?: string;
+    utmMedium?: string;
+    utmCampaign?: string;
     source?: string;
   }) => api.post<{ status: string; message: string }>("/waitlist", input),
 };
@@ -984,27 +1001,9 @@ export const adminApi = {
     },
   ) => api.patch<AdminUser>(`/admin/users/${userId}/flags`, data),
 
-  // API Key Management
-  getAllApiKeys: (page: number = 1, limit: number = 10) =>
-    api.get<ApiKeysResponse>(`/admin/api-keys?page=${page}&limit=${limit}`),
-
+  // A merchant's API keys, as an admin sees them. Create and revoke go through /merchants/api-keys (see lib/merchant.ts).
   getMerchantApiKeys: (merchantId: string) =>
     api.get<ApiKey[]>(`/merchants/api-keys/?merchantId=${merchantId}`),
-
-  createApiKeyForUser: (userId: string, data: CreateApiKeyDto) =>
-    api.post<CreateApiKeyResponse>(`/admin/users/${userId}/api-keys`, data),
-
-  revokeApiKey: (id: string) =>
-    api.delete<{ message: string }>(`/admin/api-keys/${id}`),
-
-  // Admin API Keys Management
-  getApiKeysSummary: () =>
-    api.get<ApiKeysSummaryResponse>("/admin/api-keys/summary"),
-
-  getApiKeysAnalytics: (period: "daily" | "weekly" | "monthly" = "daily") =>
-    api.get<ApiKeyAnalyticsDataPoint[]>(
-      `/admin/api-keys/analytics?period=${period}`,
-    ),
 
   getTransactions: (
     page: number,
@@ -1012,6 +1011,7 @@ export const adminApi = {
     status?: string,
     type?: string,
     search?: string,
+    currency?: string,
   ) => {
     const params = new URLSearchParams();
     params.append("page", page.toString());
@@ -1019,6 +1019,7 @@ export const adminApi = {
     if (status) params.append("status", status);
     if (search) params.append("search", search);
     if (type) params.append("type", type);
+    if (currency) params.append("currency", currency);
     return api.get<AdminPlatformTransactionsResponse>(
       `/admin/platform-transactions?${params.toString()}`,
     );
@@ -1028,6 +1029,36 @@ export const adminApi = {
     const qs = period ? `?period=${period}` : "";
     return api.get<TransactionsSummaryResponse>(`/admin/transactions/summary${qs}`);
   },
+
+  // Transaction tracker and payout reconciliation
+  getTrace: (reference: string) => api.get<TraceResult>(`/admin/transactions/${encodeURIComponent(reference)}/trace`),
+  reconcileOfframp: (reference: string) => api.post<{ reference: string; kind: "offramp"; status: string; progressed: boolean; message: string }>(`/admin/transactions/${encodeURIComponent(reference)}/reconcile`),
+
+  getStuckTransactions: (params: { type?: string; provider?: string; includeAbandoned?: boolean; limit?: number; offset?: number } = {}) =>
+    api.get<HealthPage>("/admin/transactions/stuck", { params }),
+
+  getFailedTransactions: (params: { type?: string; provider?: string; limit?: number; offset?: number } = {}) =>
+    api.get<HealthPage>("/admin/transactions/failed", { params }),
+
+  getAttentionCounts: () => api.get<AttentionCounts>("/admin/transactions/attention"),
+
+  getWebhooks: (params: { provider?: string; matched?: boolean; processed?: boolean; limit?: number; offset?: number } = {}) =>
+    api.get<WebhookPage>("/admin/webhooks", { params }),
+
+  getWebhook: (id: string) => api.get<WebhookDetail>(`/admin/webhooks/${id}`),
+
+  // Safehaven and CCTP (read-only)
+  getSafehavenAccounts: (params: { kind?: string; q?: string; limit?: number; offset?: number } = {}) =>
+    api.get<import("@/lib/safehaven").AdminPage<import("@/lib/safehaven").SafehavenAccount>>("/admin/safehaven/accounts", { params }),
+
+  getSafehavenAccount: (accountNumber: string) =>
+    api.get<{ account: import("@/lib/safehaven").SafehavenAccount; events: import("@/lib/safehaven").SafehavenEvent[] }>(`/admin/safehaven/accounts/${encodeURIComponent(accountNumber)}`),
+
+  getSafehavenTransactions: (params: { status?: string; matched?: boolean; q?: string; limit?: number; offset?: number } = {}) =>
+    api.get<import("@/lib/safehaven").AdminPage<import("@/lib/safehaven").SafehavenTransaction>>("/admin/safehaven/transactions", { params }),
+
+  getCctpTransfers: (params: { status?: string; q?: string; limit?: number; offset?: number } = {}) =>
+    api.get<import("@/lib/safehaven").AdminPage<import("@/lib/safehaven").CctpTransfer>>("/admin/cctp/transactions", { params }),
 
   getTransactionsAnalytics: (
     period: "daily" | "weekly" | "monthly" = "daily",
@@ -1511,6 +1542,8 @@ export interface InitializeSwapDto {
     bankCode: string;
     accountNumber: string;
   };
+  /** Wallet the USDC is sent from (0x address for base/bsc). Required by the backend. */
+  sourceAddress: string;
   network?: string;
 }
 
@@ -1646,7 +1679,19 @@ export interface BridgeHistoryResponse {
   transactions: BridgeHistoryItem[];
 }
 
+export interface StellarRelayResponse {
+  status: "pending" | "minting" | "complete";
+  mintTxHash?: string;
+}
+
 export const bridgeApi = {
+  /** Backend relays a CCTP burn to Stellar (it holds the relayer key; the client only polls). */
+  relayToStellar: (data: { burnTxHash: string; sourceDomain: number }) =>
+    api.post<StellarRelayResponse>("/bridge/stellar-relay", data),
+
+  /** Backend mints a Stellar burn on Base when the user's own wallet did not (the relayer pays the gas; the client only polls). */
+  relayToEvm: (data: { burnTxHash: string }) => api.post<StellarRelayResponse>("/bridge/evm-relay", data),
+
   getHistory: () => api.get<BridgeHistoryResponse>("/bridge/history"),
 
   initiate: (data: InitiateBridgeDto) =>
@@ -1670,14 +1715,15 @@ export const miscApi = {
    */
   getUsdNgnRate: (
     amount?: number,
-    opts?: { network?: string; direction?: "onramp" | "offramp" },
+    opts?: { network?: string; direction?: "onramp" | "offramp"; country?: string },
   ) => {
     const q = new URLSearchParams();
     if (amount) q.set("amount", String(amount));
     if (opts?.network) q.set("network", opts.network);
     if (opts?.direction) q.set("direction", opts.direction);
+    if (opts?.country && opts.country !== "NG") q.set("country", opts.country);
     const qs = q.toString();
-    return api.get<{ rate: number; source?: string }>(
+    return api.get<{ rate: number; source?: string; country?: string; currency?: string }>(
       `/rates/usd-ngn-rate${qs ? `?${qs}` : ""}`,
     );
   },

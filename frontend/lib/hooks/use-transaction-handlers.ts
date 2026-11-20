@@ -153,6 +153,7 @@ export function useTransactionHandlers({
           slippage: 0.05,
           network: "base",
           offrampDestination: { bankCode, accountNumber },
+          sourceAddress: address,
         },
         {
           onSuccess: (response) => {

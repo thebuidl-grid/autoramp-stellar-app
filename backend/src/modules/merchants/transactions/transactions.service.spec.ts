@@ -15,6 +15,7 @@ describe('TransactionsService', () => {
   };
 
   const mockPrisma = {
+    transactionFee: { findMany: jest.fn().mockResolvedValue([]) },
     merchantOnrampTransaction: {
       findMany: jest.fn(),
       count: jest.fn(),

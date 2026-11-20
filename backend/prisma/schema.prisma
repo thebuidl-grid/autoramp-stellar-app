@@ -33,8 +33,6 @@ model User {
   offrampTransactions OfframpTransaction[]
   swapTransactions    SwapTransaction[]
   transactionLogs     TransactionLog[]
-  apiKeys             ApiKey[]
-  apiRequestLogs      ApiRequestLog[]
   wallets             UserWallet[]
   bankAccounts        UserBankAccount[]
   virtualAccounts     VirtualAccount[]
@@ -127,6 +125,9 @@ model OnrampTransaction {
   completedAt        DateTime?         @map("completed_at") @db.Timestamp(6)
   user               User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  /// Which chain network the website was on (its mainnet/testnet toggle) when this was created. Null = not said (older rows, webhooks).
+  chainNetwork String? @map("chain_network")
+
   @@index([userId])
   @@index([reference])
   @@index([status])
@@ -146,7 +147,6 @@ model OfframpTransaction {
   status             TransactionStatus @default(PENDING)
   flintTransactionId String?           @map("flint_transaction_id")
   // Provider-specific details (Bitnob) — one row, null for legacy Flint orders
-  providerOrder      OfframpProviderOrder?
   swapId             String?           @unique @map("swap_id") @db.Uuid
   bankCode           String            @map("bank_code")
   accountNumber      String            @map("account_number")
@@ -169,6 +169,9 @@ model OfframpTransaction {
   reconciliation     OfframpReconciliation?
   reversal           OfframpReversal?
   events             OfframpEvent[]
+
+  /// Which chain network the website was on (its mainnet/testnet toggle) when this was created. Null = not said (older rows, webhooks).
+  chainNetwork String? @map("chain_network")
 
   @@index([userId])
   @@index([reference])
@@ -205,6 +208,9 @@ model SwapTransaction {
   user               User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
   offrampTransaction OfframpTransaction? @relation("SwapToOfframp")
 
+  /// Which chain network the website was on (its mainnet/testnet toggle) when this was created. Null = not said (older rows, webhooks).
+  chainNetwork String? @map("chain_network")
+
   @@index([userId])
   @@index([reference])
   @@index([status])
@@ -226,9 +232,15 @@ model WebhookEvent {
   processed       Boolean         @default(false)
   processedAt     DateTime?       @map("processed_at") @db.Timestamp(6)
   errorMessage    String?         @map("error_message")
+  /// The provider leg (transaction_providers.id) this event belongs to.
+  legId           String?         @map("leg_id") @db.Uuid
+  /// The raw receipt (inbound_webhooks.id) this processed event came from.
+  inboundWebhookId String?        @map("inbound_webhook_id") @db.Uuid
   createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamp(6)
 
   @@index([transactionId])
+  @@index([legId])
+  @@index([inboundWebhookId])
   @@index([reference])
   @@index([transactionType])
   @@index([provider])
@@ -247,10 +259,19 @@ model TransactionLog {
   newStatus       String?         @map("new_status")
   description     String?
   metadata        Json?
+  /// Which parent table `transactionId` points into: transactions (USER) or merchant_transactions (MERCHANT).
+  scope           LedgerScope     @default(USER)
+  /// The provider leg (transaction_providers.id) this step belongs to, if any.
+  legId           String?         @map("leg_id") @db.Uuid
+  provider        ProviderName?
+  /// Machine-readable step name, e.g. "burn_submitted", "attestation_ready", "payout_initiated".
+  step            String?
+  outcome         LogOutcome?
   createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamp(6)
   user            User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([transactionId])
+  @@index([legId])
   @@index([transactionType])
   @@index([userId])
   @@index([action])
@@ -273,68 +294,6 @@ model TransactionFee {
   @@index([feeType])
   @@index([createdAt])
   @@map("transaction_fees")
-}
-
-model SupportedToken {
-  id           String   @id @default(uuid()) @db.Uuid
-  tokenSymbol  String   @unique @map("token_symbol")
-  tokenName    String   @map("token_name")
-  tokenAddress String?  @map("token_address")
-  network      String
-  decimals     Int      @default(18)
-  isActive     Boolean  @default(true) @map("is_active")
-  logoUrl      String?  @map("logo_url")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
-
-  @@index([tokenSymbol])
-  @@index([network])
-  @@index([isActive])
-  @@map("supported_tokens")
-}
-
-model ApiKey {
-  id             String          @id @default(uuid()) @db.Uuid
-  userId         String          @map("user_id") @db.Uuid
-  key            String          @unique
-  keyPrefix      String          @map("key_prefix")
-  name           String?
-  isActive       Boolean         @default(true) @map("is_active")
-  lastUsedAt     DateTime?       @map("last_used_at") @db.Timestamp(6)
-  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamp(6)
-  expiresAt      DateTime?       @map("expires_at") @db.Timestamp(6)
-  metadata       Json?
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  apiRequestLogs ApiRequestLog[]
-
-  @@index([userId])
-  @@index([key])
-  @@index([isActive])
-  @@map("api_keys")
-}
-
-model ApiRequestLog {
-  id           String   @id @default(uuid()) @db.Uuid
-  apiKeyId     String?  @map("api_key_id") @db.Uuid
-  userId       String?  @map("user_id") @db.Uuid
-  method       String
-  path         String
-  statusCode   Int      @map("status_code")
-  ipAddress    String?  @map("ip_address")
-  userAgent    String?  @map("user_agent")
-  requestBody  Json?    @map("request_body")
-  responseBody Json?    @map("response_body")
-  errorMessage String?  @map("error_message")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
-  apiKey       ApiKey?  @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
-  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([apiKeyId])
-  @@index([userId])
-  @@index([createdAt])
-  @@index([statusCode])
-  @@map("api_request_logs")
 }
 
 model Merchant {
@@ -484,6 +443,9 @@ model MerchantOnrampTransaction {
   completedAt        DateTime?         @map("completed_at") @db.Timestamp(6)
   merchant           Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
+  /// Which chain network the website was on (its mainnet/testnet toggle) when this was created. Null = not said (older rows, webhooks).
+  chainNetwork String? @map("chain_network")
+
   @@index([merchantId])
   @@index([reference])
   @@index([status])
@@ -503,7 +465,6 @@ model MerchantOfframpTransaction {
   status           TransactionStatus @default(PENDING)
   paymentReference String?           @map("payment_reference")
   // Provider-specific details (Bitnob) — one row, null for legacy Flint orders
-  providerOrder    OfframpProviderOrder?
   bankCode         String            @map("bank_code")
   accountNumber    String            @map("account_number")
   accountName      String?           @map("account_name")
@@ -518,6 +479,9 @@ model MerchantOfframpTransaction {
   completedAt      DateTime?         @map("completed_at") @db.Timestamp(6)
   merchant         Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
+  /// Which chain network the website was on (its mainnet/testnet toggle) when this was created. Null = not said (older rows, webhooks).
+  chainNetwork String? @map("chain_network")
+
   @@index([merchantId])
   @@index([reference])
   @@index([status])
@@ -529,56 +493,6 @@ model MerchantOfframpTransaction {
 
 /// Provider-specific details for an offramp (Bitnob payout order),
 /// normalized out of the user/merchant offramp tables.
-/// Exactly one of the two foreign keys is set (1:1, emulated by relationMode = "prisma").
-model OfframpProviderOrder {
-  id                           String    @id @default(uuid()) @db.Uuid
-  offrampTransactionId         String?   @unique @map("offramp_transaction_id") @db.Uuid
-  merchantOfframpTransactionId String?   @unique @map("merchant_offramp_transaction_id") @db.Uuid
-  /// Our own off_ reference — also sent to Bitnob as the payout `reference`
-  reference                    String    @unique
-  /// e.g. "bitnob"
-  provider                     String    @default("bitnob")
-  /// Bitnob payout quote/order id
-  providerOrderId              String?   @map("provider_order_id")
-  /// Bank payout receipt / narration returned by Bitnob at settlement
-  paymentReference             String?   @map("payment_reference")
-  /// User's Stellar wallet that funds the payout
-  sourceAddress                String?   @map("source_address")
-  /// Raw provider lifecycle event (payout.settled, ...)
-  providerStatus               String?   @map("provider_status")
-  /// Funding address the user sends USDC to (payment_address from Bitnob)
-  fundingAddress               String?   @map("funding_address")
-  /// USDC the user must deposit to settle the payout (amount_to_pay)
-  expectedAmount               Decimal?  @map("expected_amount") @db.Decimal(20, 7)
-  /// USDC actually detected as deposited (partial settlement = received < expected)
-  receivedAmount               Decimal?  @map("received_amount") @db.Decimal(20, 7)
-  /// Stellar memo/tag required on the deposit
-  memo                         String?
-  /// Payout funding window expiry (order expires if USDC not deposited by then)
-  expiresAt                    DateTime? @map("expires_at") @db.Timestamp(6)
-  /// Normalized failure reason (timeout, partial_settlement, rejected, reversal, insufficient_liquidity, ...)
-  failureReason                String?   @map("failure_reason")
-  /// Stellar transaction hash of the funding deposit (deposit_for_burn)
-  depositTxHash                String?   @map("deposit_tx_hash")
-  /// Bridge leg that delivered the funding USDC (cross-chain deposit route)
-  bridgeReference              String?   @map("bridge_reference")
-  /// Bridge delivery state (PENDING, PROCESSING, SUCCESS, FAILED, DELAYED, STUCK, ...)
-  bridgeStatus                 String?   @map("bridge_status") @default("PENDING")
-  /// expected - received when under-funded (partial settlement), else 0
-  outstandingAmount            Decimal?  @map("outstanding_amount") @db.Decimal(20, 7)
-  /// Structured detail behind failureReason: rejection response, liquidity shortfall, timeout window, ...
-  failureDetail                Json?     @map("failure_detail")
-  createdAt                    DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt                    DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
-
-  offrampTransaction           OfframpTransaction?      @relation(fields: [offrampTransactionId], references: [id])
-  merchantOfframpTransaction   MerchantOfframpTransaction? @relation(fields: [merchantOfframpTransactionId], references: [id])
-
-  @@index([providerOrderId])
-  @@index([bridgeReference])
-  @@map("offramp_provider_orders")
-}
-
 /// One structured reconciliation record per cash-out attempt (created at INITIATED, updated on every transition).
 model OfframpReconciliation {
   id                   String   @id @default(uuid()) @db.Uuid
@@ -671,6 +585,9 @@ model MerchantSwapTransaction {
   updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamp(6)
   completedAt        DateTime?         @map("completed_at") @db.Timestamp(6)
   merchant           Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  /// Which chain network the website was on (its mainnet/testnet toggle) when this was created. Null = not said (older rows, webhooks).
+  chainNetwork String? @map("chain_network")
 
   @@index([merchantId])
   @@index([reference])
@@ -911,6 +828,9 @@ model BridgeTransaction {
   user               User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
   merchant           Merchant?         @relation(fields: [merchantId], references: [id], onDelete: SetNull)
 
+  /// Which chain network the website was on (its mainnet/testnet toggle) when this was created. Null = not said (older rows, webhooks).
+  chainNetwork String? @map("chain_network")
+
   @@index([userId])
   @@index([merchantId])
   @@index([reference])
@@ -983,6 +903,9 @@ model OtcTransaction {
   user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   otcUser     OtcUser            @relation(fields: [otcUserId], references: [id], onDelete: Cascade)
 
+  /// Which chain network the website was on (its mainnet/testnet toggle) when this was created. Null = not said (older rows, webhooks).
+  chainNetwork String? @map("chain_network")
+
   @@index([userId])
   @@index([reference])
   @@index([otcUserId])
@@ -1015,6 +938,149 @@ enum TransactionStatus {
   PAYOUT_PENDING
   PARTIALLY_SETTLED
   INSUFFICIENT_LIQUIDITY
+}
+
+/// Parent row for every user transaction. The matching detail row (onramp_transactions, offramp_transactions, ...) has the SAME id.
+/// Core facts only; provider specifics live on the legs (transaction_providers.details).
+model Transaction {
+  id          String            @id @default(uuid()) @db.Uuid
+  type        TransactionKind
+  /// Unique per type, not globally: a crypto-to-fiat swap and its fiat off-ramp share one reference (they are linked by relatedId).
+  reference   String
+  userId      String?           @map("user_id") @db.Uuid
+  status      TransactionStatus @default(PENDING)
+  /// Amount in `currency`, exactly as recorded on the detail row (copied by the backfill; not recomputed).
+  amount      Decimal?          @db.Decimal(28, 8)
+  currency    String?
+  network     String?
+  /// Request context: ipAddress, userAgent, transactionLocation, notifyUrl.
+  context     Json?
+  /// Off-ramp payout destination: bankCode, accountNumber, accountName, bankName.
+  destination Json?
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamp(6)
+  completedAt DateTime?         @map("completed_at") @db.Timestamp(6)
+  /// The other half of a swap + off-ramp pair (swap <-> its fiat off-ramp). Null for everything else.
+  relatedId   String?           @map("related_id") @db.Uuid
+
+  @@unique([type, reference])
+  @@index([reference])
+  @@index([relatedId])
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+/// Same as Transaction, for merchant-initiated transactions (including VAS).
+model MerchantTransaction {
+  id          String            @id @default(uuid()) @db.Uuid
+  type        TransactionKind
+  reference   String
+  merchantId  String            @map("merchant_id") @db.Uuid
+  status      TransactionStatus @default(PENDING)
+  amount      Decimal?          @db.Decimal(28, 8)
+  currency    String?
+  network     String?
+  context     Json?
+  destination Json?
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamp(6)
+  completedAt DateTime?         @map("completed_at") @db.Timestamp(6)
+  relatedId   String?           @map("related_id") @db.Uuid
+
+  @@unique([type, reference])
+  @@index([reference])
+  @@index([relatedId])
+  @@index([merchantId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@map("merchant_transactions")
+}
+
+/// One row per provider that touched a transaction (CCTP bridge, Bitnob payout, Safehaven deposit, ...).
+/// `transactionId` points at transactions.id or merchant_transactions.id depending on `scope` (no DB foreign key).
+model TransactionLeg {
+  id                String       @id @default(uuid()) @db.Uuid
+  transactionId     String       @map("transaction_id") @db.Uuid
+  scope             LedgerScope  @default(USER)
+  /// Copy of the transaction's reference, so webhooks and lookups find a leg without joining the parent tables.
+  reference         String?
+  role              LegRole
+  provider          ProviderName
+  /// The provider's own id for this leg: Bitnob order id, Flint id, CCTP burn/message hash, ...
+  providerReference String?      @map("provider_reference")
+  /// The provider's own status text for this leg.
+  status            String?
+  /// Provider-specific data that has no column of its own (deposit account, attestation, legacy provider name, ...).
+  details           Json?
+  /// What the payout provider expects the user to deposit, and what was actually received (partial settlement = received < expected).
+  expectedAmount    Decimal?     @map("expected_amount") @db.Decimal(20, 7)
+  receivedAmount    Decimal?     @map("received_amount") @db.Decimal(20, 7)
+  /// expected - received when under-funded, else 0.
+  outstandingAmount Decimal?     @map("outstanding_amount") @db.Decimal(20, 7)
+  /// Where the user sends funds for this leg, with the required memo/tag, and when that window closes.
+  fundingAddress    String?      @map("funding_address")
+  memo              String?
+  expiresAt         DateTime?    @map("expires_at") @db.Timestamp(6)
+  /// On-chain hash of the funding deposit, and the user's source wallet.
+  depositTxHash     String?      @map("deposit_tx_hash")
+  sourceAddress     String?      @map("source_address")
+  /// Receipt / narration the provider returned at settlement.
+  paymentReference  String?      @map("payment_reference")
+  /// Structured detail behind failureReason: rejection response, liquidity shortfall, timeout window, ...
+  failureDetail     Json?        @map("failure_detail")
+  lastEventAt       DateTime?    @map("last_event_at") @db.Timestamp(6)
+  failedStep        String?      @map("failed_step")
+  failureReason     String?      @map("failure_reason")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@unique([transactionId, role, provider])
+  @@index([reference])
+  @@index([provider, providerReference])
+  @@index([transactionId])
+  @@map("transaction_providers")
+}
+
+enum TransactionKind {
+  ONRAMP
+  OFFRAMP
+  SWAP
+  OTC
+  BRIDGE
+  VAS
+}
+
+enum LedgerScope {
+  USER
+  MERCHANT
+}
+
+enum ProviderName {
+  BITNOB
+  SAFEHAVEN
+  PULSE_MFB
+  BLOCKRADAR
+  FLINT
+  CCTP
+}
+
+enum LegRole {
+  FUNDING
+  BRIDGE
+  CONVERSION
+  PAYOUT
+  SETTLEMENT
+}
+
+enum LogOutcome {
+  OK
+  FAILED
+  RETRY
+  SKIPPED
 }
 
 enum TransactionType {
@@ -1128,10 +1194,13 @@ model InboundWebhook {
   error            String? // Reason for failure / processing note
   receivedAt       DateTime @default(now()) @map("received_at") @db.Timestamp(6)
   processedAt      DateTime? @map("processed_at") @db.Timestamp(6)
+  /// Set once the webhook is matched to one of our transactions; null + status "unmatched" when it cannot be.
+  transactionId    String?   @map("transaction_id") @db.Uuid
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamp(6)
 
   @@index([provider])
   @@index([status])
   @@index([receivedAt])
+  @@index([transactionId])
   @@map("inbound_webhooks")
 }

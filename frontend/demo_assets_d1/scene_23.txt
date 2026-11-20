@@ -1,0 +1,1 @@
+I confirm the sale. One caveat: the live backend could not create this order today. Its exchange-rate service is failing, and its minimum-amount rule expects a naira amount. So the order response here is simulated, and the banner says so. The funding details are rendered by the real interface.
