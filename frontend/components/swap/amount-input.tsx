@@ -8,33 +8,37 @@ interface AmountInputProps {
   usdValue?: number;
   disabled?: boolean;
   isLoading?: boolean;
+  /** Accessible name, e.g. "You'll send". */
+  label?: string;
 }
 
 export function AmountInput({
   value,
   onChange,
-  placeholder = "0.00",
+  placeholder = "0",
   disabled = false,
   isLoading = false,
+  label,
 }: AmountInputProps) {
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center">
-        <div className="w-48 h-12 bg-white/10 rounded-lg animate-pulse" />
+        <div className="w-40 h-10 rounded-lg bg-white/10 animate-pulse" />
       </div>
     );
   }
 
   return (
-    <div className="flex-1">
+    <div className="flex-1 min-w-0">
       <input
         type="text"
         inputMode="decimal"
+        aria-label={label}
         placeholder={placeholder}
         value={value}
         onChange={onChange}
         disabled={disabled}
-        className="w-full text-2xl md:text-4xl font-light text-white bg-transparent border-none outline-none placeholder:text-white/30 disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        className="ramp-amount w-full min-w-0 text-4xl md:text-5xl text-(--r-text) bg-transparent border-none outline-none placeholder:text-(--r-muted)/50 disabled:cursor-default [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
       />
     </div>
   );

@@ -1,0 +1,48 @@
+---
+title: "Transfer"
+description: "Initiate bank transfer"
+openapi: POST /merchants/api/transfer
+---
+
+## Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `beneficiaryBankCode` | string | Yes | Bank code of the recipient |
+| `beneficiaryAccountNumber` | string | Yes | Account number of the recipient |
+| `amount` | number | Yes | Amount in NGN (minimum 1) |
+| `narration` | string | Yes | Transfer description |
+| `paymentReference` | string | Yes | Your unique reference |
+| `saveBeneficiary` | boolean | No | Save beneficiary for future transfers (SafeHaven only) |
+| `debitAccountNumber` | string | No | Account to debit (defaults to your main account) |
+
+## Example
+
+```bash
+curl -X POST 	
+ https://api-autoramp.thebuidl.xyz/merchants/api/transfer \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "beneficiaryBankCode": "058",
+    "beneficiaryAccountNumber": "0123456789",
+    "amount": 5000,
+    "narration": "Payment for services",
+    "paymentReference": "ref-123456"
+  }'
+```
+
+## What Happens Under the Hood
+
+AutoRamp handles the provider-specific flow internally:
+
+- **SafeHaven** — Performs a name enquiry first to get a `sessionId`, then executes the transfer using that session reference. You don't need to do this manually.
+- **Pulse MFB** — Executes the transfer directly in a single call.
+
+## Provider Differences
+
+| Field | SafeHaven | Pulse MFB |
+|-------|-----------|-----------|
+| `debitAccountNumber` | Optional (uses default) | Optional (uses default) |
+| `saveBeneficiary` | Supported | Ignored |
+| `callbackUrl` | Not exposed | Not exposed |

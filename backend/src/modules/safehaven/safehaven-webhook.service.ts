@@ -61,6 +61,12 @@ export class MFBWebhookService {
       return this.handlers.handleDebit(payload);
     }
 
+    // Payments into SafeHaven virtual accounts that belong to NGN SafeHaven-settled orders
+    if (eventType === 'virtualAccount.transfer') {
+      const settled = await this.handlers.handleVirtualAccountTransfer(payload);
+      if (settled) return settled;
+    }
+
     // VAS events
     if (eventType?.startsWith('vas.')) {
       return this.handlers.handleVasEvent(payload);
@@ -191,6 +197,15 @@ export class MFBWebhookService {
         },
       });
       return { status: 'error', message: 'Transaction not found' };
+    }
+
+    // Orders settled through SafeHaven + Bitnob trading are handled by the settlement services only.
+    // The legacy auto-settle below would send our own money to the order's deposit account.
+    if ((transaction.metadata as any)?.safehaven?.accountNumber) {
+      this.logger.warn(
+        `Ignoring ${eventType} for ${paymentReference}: order is settled via SafeHaven NGN settlement`,
+      );
+      return { status: 'ignored', message: 'Handled by SafeHaven NGN settlement' };
     }
 
     const oldStatus = transaction.status;

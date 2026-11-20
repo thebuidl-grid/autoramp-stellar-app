@@ -1,0 +1,35 @@
+---
+title: "Get Account"
+description: "Get merchant bank account balance and details"
+openapi: GET /merchants/api/account
+---
+
+## Response
+
+The response includes your provider in the `fiatProvider` field. This tells you which banking provider your account uses.
+
+```json
+{
+  "accountId": "acc_123",
+  "accountNumber": "0123456789",
+  "bankCode": "058",
+  "accountBalance": 150000,
+  "accountName": "My Business",
+  "status": "ACTIVE",
+  "fiatProvider": "SAFEHAVEN"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `accountId` | Your unique account ID |
+| `accountNumber` | Your bank account number |
+| `bankCode` | Bank code |
+| `accountBalance` | Current balance in NGN |
+| `accountName` | Account holder name |
+| `status` | Account status |
+| `fiatProvider` | Your banking provider: `SAFEHAVEN` or `PULSE_MFB` |
+
+<Note>
+Use `fiatProvider` to check which features are available to you. See [Provider Limitations](/provider-limitations) for details.
+</Note>

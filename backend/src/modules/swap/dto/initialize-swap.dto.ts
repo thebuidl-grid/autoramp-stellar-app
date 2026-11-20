@@ -5,6 +5,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Matches,
   ValidateNested,
   Min,
 } from 'class-validator';
@@ -59,6 +60,17 @@ export class InitializeSwapDto {
   @Type(() => OfframpDestinationDto)
   @IsObject()
   offrampDestination: OfframpDestinationDto;
+
+  @ApiProperty({
+    example: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
+    description:
+      'Wallet the USDC is sent from (0x address for base/bsc, Stellar public key for stellar). Required by the Bitnob off-ramp to match the deposit.',
+  })
+  @IsString()
+  @Matches(/^(G[A-Z2-7]{55}|0x[a-fA-F0-9]{40})$/, {
+    message: 'sourceAddress must be a valid Stellar or EVM address',
+  })
+  sourceAddress: string;
 
   @ApiPropertyOptional({
     example: 'base',

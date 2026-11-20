@@ -1,60 +1,89 @@
 "use client";
 
+import Image from "next/image";
 import { ChevronRight } from "lucide-react";
 
 interface CurrencySelectorProps {
-  type: string;
+  type: "NGN" | "GHS" | "KES" | "CNGN" | "USDC" | "USDT" | "USDCX";
   onClick?: () => void;
   showBaseLogo?: boolean;
+  /** Always-visible second line, e.g. the network ("Base"). Replaces the currency name. */
+  detail?: string;
 }
 
-// Known logo/label overrides — anything not listed here (e.g. a newly
-// seeded corridor's stablecoin or fiat code) falls back to a generic
-// badge showing the code itself, so the UI never needs a new asset
-// before a corridor can be selected.
-const KNOWN: Record<string, { logo: string; label: string }> = {
-  NGN: { logo: "/ngn-logo.png", label: "Naira" },
-  CNGN: { logo: "/cngn-logo.png", label: "CNGN" },
-  USDC: { logo: "/usdc-logo.png", label: "USDC" },
-};
+export function CurrencySelector({ type, onClick, detail }: CurrencySelectorProps) {
+  const getLogo = () => {
+    switch (type) {
+      case "NGN":
+        return "/ngn-logo.png";
+      case "GHS":
+        return "/ghs-flag.svg";
+      case "KES":
+        return "/kes-flag.svg";
+      case "CNGN":
+        return "/cngn-logo.png";
+      case "USDC":
+        return "/usdc-logo.png";
+      case "USDT":
+        return "/usdt-logo.png";
+      case "USDCX":
+        return "/usdc-logo.png";
+    }
+  };
 
-export function CurrencySelector({ type, onClick }: CurrencySelectorProps) {
-  const known = KNOWN[type.toUpperCase()];
-  const logo = known?.logo;
-  const label = known?.label ?? type.toUpperCase();
+  const getLabel = () => {
+    switch (type) {
+      case "NGN":
+        return "Naira";
+      case "GHS":
+        return "Cedi";
+      case "KES":
+        return "Shilling";
+      case "CNGN":
+        return "CNGN";
+      case "USDC":
+        return "USDC";
+      case "USDT":
+        return "USDT";
+      case "USDCX":
+        return "USDCx · Stacks";
+    }
+  };
 
   const isClickable = onClick !== undefined;
+  const logo = getLogo();
+  const name = getLabel();
 
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={!isClickable}
-      className={`flex items-center gap-3 px-3 py-1.5 md:px-4 md:py-2.5 rounded-xl border border-white/10 bg-white/5 transition-colors ${isClickable
-          ? "hover:bg-white/10 cursor-pointer"
+      aria-label={isClickable ? `Change currency, now ${type}` : type}
+      className={`flex shrink-0 items-center gap-2 rounded-full border border-(--r-line) bg-(--r-raised) py-1.5 pl-1.5 pr-3 transition-colors ${
+        isClickable
+          ? "cursor-pointer hover:border-(--r-muted)/40"
           : "cursor-default"
-        }`}
+      }`}
     >
-      <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
+      <span className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-(--r-field)">
         {logo ? (
-          <img
-            src={logo}
-            alt={type}
-            className="w-6 h-6 md:w-8 md:h-8 object-contain"
-          />
+          <Image src={logo} alt="" fill sizes="28px" className="object-contain" />
         ) : (
-          <span className="text-[9px] font-semibold text-white/70">
-            {type.toUpperCase().slice(0, 4)}
-          </span>
+          <span className="text-[9px] font-bold text-(--r-muted)">{type}</span>
         )}
-      </div>
-      <div className="text-left">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-white/50">{label}</span>
-        </div>
-        <div className="text-sm font-medium text-white">{type.toUpperCase()}</div>
-      </div>
-      {isClickable && <ChevronRight size={16} className="text-white/40" />}
+      </span>
+      <span className="text-left leading-tight">
+        <span className="block text-sm font-semibold text-(--r-text)">{type}</span>
+        {detail ? (
+          <span className="block text-[11px] text-(--r-muted)">{detail}</span>
+        ) : (
+          name !== type && (
+            <span className="hidden text-[11px] text-(--r-muted) sm:block">{name}</span>
+          )
+        )}
+      </span>
+      {isClickable && <ChevronRight size={14} className="text-(--r-muted)" />}
     </button>
   );
 }

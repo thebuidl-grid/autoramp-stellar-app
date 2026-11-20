@@ -1,0 +1,170 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "AutoRamp API Documentation",
+  "colors": {
+    "primary": "#0D6EFD",
+    "light": "#0D6EFD",
+    "dark": "#0D6EFD"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "anchors": [
+      {
+        "anchor": "Documentation",
+        "icon": "book-open",
+        "tabs": [
+          {
+            "tab": "Documentation",
+            "groups": [
+              {
+                "group": "Getting Started",
+                "pages": [
+                  "introduction",
+                  "quickstart",
+                  "authentication",
+                  "errors",
+                  "rate-limits"
+                ]
+              },
+              {
+                "group": "On-Ramp / Off-Ramp",
+                "pages": [
+                  "provider-limitations"
+                ]
+              },
+              {
+                "group": "Identity Verification",
+                "pages": [
+                  "identity-verification"
+                ]
+              },
+              {
+                "group": "Webhooks",
+                "pages": [
+                  "webhooks/overview",
+                  "webhooks/events",
+                  "webhooks/verify"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "API Reference",
+            "groups": [
+              {
+                "group": "On-Ramp / Off-Ramp",
+                "pages": [
+                  "api-reference/onramp",
+                  "api-reference/offramp"
+                ]
+              },
+              {
+                "group": "Swap",
+                "pages": [
+                  "api-reference/swap-init",
+                  "api-reference/swap-complete",
+                  "api-reference/swap-create"
+                ]
+              },
+              {
+                "group": "Merchant Banking",
+                "pages": [
+                  "api-reference/merchant-account",
+                  "api-reference/merchant-transfer",
+                  "api-reference/merchant-get-transfer-status",
+                  "api-reference/merchant-name-enquiry",
+                  "api-reference/merchant-transactions",
+                  "api-reference/merchant-sub-accounts",
+                  "api-reference/merchant-get-sub-account",
+                  "api-reference/merchant-create-sub-account",
+                  "api-reference/merchant-virtual-account",
+                  "api-reference/merchant-banks"
+                ]
+              },
+              {
+                "group": "Identity Verification",
+                "pages": [
+                  "api-reference/merchant-verify-identity",
+                  "api-reference/merchant-validate-identity"
+                ]
+              },
+              {
+                "group": "Value-Added Services (VAS)",
+                "pages": [
+                  "api-reference/vas-services",
+                  "api-reference/vas-categories",
+                  "api-reference/vas-products",
+                  "api-reference/vas-verify",
+                  "api-reference/vas-pay-airtime",
+                  "api-reference/vas-pay-data",
+                  "api-reference/vas-pay-cable-tv",
+                  "api-reference/vas-pay-utility",
+                  "api-reference/vas-transactions",
+                  "api-reference/vas-get-transaction",
+                  "api-reference/vas-sync-transaction"
+                ]
+              },
+              {
+                "group": "General",
+                "pages": [
+                  "api-reference/rates",
+                  "api-reference/resolve-account",
+                  "api-reference/banks"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "anchor": "Dashboard",
+        "href": "https://t.me/+PJfVLZUFylFjZDhk",
+        "icon": "chart-line"
+      },
+      {
+        "anchor": "Support",
+        "href": "mailto:dev@thebuidlgrid.org",
+        "icon": "envelope"
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "api": {
+    "openapi": "openapi.yaml",
+    "playground": {
+      "display": "interactive"
+    },
+    "mdx": {
+      "server": "https://api-autoramp.thebuidl.xyz",
+      "auth": {
+        "method": "key",
+        "name": "x-api-key"
+      }
+    }
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Dashboard",
+        "href": "https://t.me/+PJfVLZUFylFjZDhk"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Contact Sales",
+      "href": "mailto:dev@thebuidlgrid.org"
+    }
+  },
+  "footer": {
+    "socials": {
+      "twitter": "https://twitter.com/ ",
+      "github": "https://github.com/thebuidl-grid/autoramp-backend",
+      "linkedin": "https://www.linkedin.com/company/thebuidlgrid/"
+    }
+  },
+  "integrations": {}
+}

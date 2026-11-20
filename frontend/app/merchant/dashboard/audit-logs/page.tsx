@@ -6,8 +6,8 @@ export default function AuditLogsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-white">Audit Logs</h1>
-        <p className="text-zinc-400">
+        <h1 className="text-3xl font-bold tracking-tight text-(--c-text)">Audit Logs</h1>
+        <p className="text-(--c-muted)">
           Track all API requests and banking operations for your account.
         </p>
       </div>

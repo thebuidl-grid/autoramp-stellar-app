@@ -1,31 +1,178 @@
 ---
-title: Authentication
-description: "How to authenticate your API requests"
+title: "Authentication"
+description: "Learn how to authenticate with the AutoRamp API"
 ---
 
-All API requests to AutoRamp must be authenticated using an API key. Your API key should be kept secret and never shared or exposed in client-side code.
+AutoRamp supports two authentication methods depending on your integration type.
 
-## API Keys
+## API Key Authentication (Recommended for Merchants)
 
-Authentication is handled via the `x-api-key` header. You can obtain your API key from the AutoRamp Admin Portal.
+For server-to-server integrations, use API key authentication.
 
-### Admin-Generated Keys
-Administrators generate API keys for businesses. Once a key is generated, you will be provided with a Secret Key (e.g., `sk_live_...`).
+### Header
 
-> [!WARNING]
-> Your API key is only shown once during generation. If you lose it, you will need to request a new one and revoke the old key.
-
-## Header Format
-
-Include the `x-api-key` in the header of all your HTTP requests:
-
-```bash
-curl -X GET "https://api.autoramp.com/v1/user/profile" \
-     -H "x-api-key: sk_live_your_api_key_here"
+```
+x-api-key: your_api_key_here
 ```
 
-## Security Best Practices
+### Example
 
-1. **Keep it Secret**: Never commit API keys to version control. Use environment variables.
-2. **Server-Side Only**: Use API keys only in server-to-server communication. Do not use them in frontend applications or mobile apps directly.
-3. **Revocation**: If you suspect your key has been compromised, revoke it immediately via the admin portal or contact support.
+<CodeGroup>
+
+```bash cURL
+curl -X POST 	
+ https://api-autoramp.thebuidl.xyz/ramp/onramp \
+  -H "x-api-key: sk_live_abc123def456" \
+  -H "Content-Type: application/json" \
+  -d '{ ... }'
+```
+
+```javascript JavaScript
+const response = await fetch('	
+ https://api-autoramp.thebuidl.xyz/ramp/onramp', {
+  method: 'POST',
+  headers: {
+    'x-api-key': 'sk_live_abc123def456',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ ... }),
+});
+```
+
+</CodeGroup>
+
+### How It Works
+
+1. Your API key is SHA-256 hashed and looked up in our database
+2. We validate the key is active and not expired
+3. We verify your merchant account is in `VERIFIED` status
+4. We check that API access is approved for your account
+
+### Key Validation Rules
+
+| Check | Requirement |
+|-------|-------------|
+| Key format | Any non-JWT string (cannot start with `eyJ`) |
+| Key status | Must be `active` |
+| Merchant status | Must be `VERIFIED` |
+| API access | Must be approved by admin |
+| User status | Must not be suspended |
+
+<Warning>
+If you accidentally pass a JWT token (starts with `eyJ`) to an API-key-only endpoint, it will be rejected with a 401 error. The API key guard explicitly rejects JWT tokens.
+</Warning>
+
+## JWT Authentication (For Dashboard/Frontend)
+
+For frontend applications and dashboard integrations, use JWT token authentication.
+
+### Header
+
+```
+Authorization: Bearer your_jwt_token_here
+```
+
+### Obtaining a JWT Token
+
+1. Sign up or sign in via the auth endpoints:
+
+<CodeGroup>
+
+```bash cURL
+# Sign up (requires OTP verification)
+curl -X POST 	
+ https://api-autoramp.thebuidl.xyz/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "otpCode": "123456"
+  }'
+
+# Sign in
+curl -X POST 	
+ https://api-autoramp.thebuidl.xyz/auth/signin \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "your_password"
+  }'
+```
+
+```javascript JavaScript
+// Sign up
+const signupResponse = await fetch('	
+ https://api-autoramp.thebuidl.xyz/auth/signup', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email: 'user@example.com',
+    otpCode: '123456',
+  }),
+});
+
+const { accessToken } = await signupResponse.json();
+```
+
+</CodeGroup>
+
+2. The response includes an `accessToken` — use this as your JWT token
+
+## Dual Authentication (JWT or API Key)
+
+Some endpoints accept either authentication method:
+
+| Endpoint | Auth Method |
+|----------|-------------|
+| `POST /ramp/onramp` | JWT or API Key |
+| `POST /ramp/offramp` | JWT or API Key |
+| `GET /ramp/transactions` | JWT or API Key |
+| `POST /swap/initialize` | JWT or API Key |
+| `POST /swap/:reference/complete` | JWT or API Key |
+| `POST /swap/create` | JWT or API Key |
+| `GET /rates/usd-ngn-rate` | JWT or API Key |
+| `GET /misc/resolve-account` | JWT or API Key |
+
+## API Key Endpoints (API Key Only)
+
+These endpoints only accept API key authentication:
+
+| Endpoint | Auth Method |
+|----------|-------------|
+| `GET /merchants/api/account` | API Key |
+| `GET /merchants/api/sub-accounts` | API Key |
+| `POST /merchants/api/transfer` | API Key |
+| `POST /merchants/api/name-enquiry` | API Key |
+| `POST /merchants/api/virtual-account` | API Key |
+| All `/merchants/api/*` routes | API Key |
+
+## Error Responses
+
+### Missing Authentication
+
+```json
+{
+  "statusCode": 401,
+  "message": "Unauthorized",
+  "error": "Unauthorized"
+}
+```
+
+### Invalid API Key
+
+```json
+{
+  "statusCode": 401,
+  "message": "Invalid or expired API key",
+  "error": "Unauthorized"
+}
+```
+
+### Suspended Account
+
+```json
+{
+  "statusCode": 403,
+  "message": "Your account has been suspended",
+  "error": "Forbidden"
+}
+```

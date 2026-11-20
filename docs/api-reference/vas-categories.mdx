@@ -1,0 +1,41 @@
+---
+title: "VAS Categories"
+description: "Get service categories/providers for a VAS service (e.g., MTN, Airtel, DSTV)"
+openapi: GET /vas/services/{serviceId}/categories
+---
+
+## Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `serviceId` | string | Yes | The `_id` of the service from [GET /vas/services](/api-reference/vas-services) |
+
+## Response
+
+Returns all providers/categories under the specified service.
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "64f1a2b3c4d5e6f7a8b9c0e1",
+      "name": "MTN",
+      "slug": "mtn",
+      "serviceId": "64f1a2b3c4d5e6f7a8b9c0d1"
+    },
+    {
+      "_id": "64f1a2b3c4d5e6f7a8b9c0e2",
+      "name": "Glo",
+      "slug": "glo",
+      "serviceId": "64f1a2b3c4d5e6f7a8b9c0d1"
+    }
+  ]
+}
+```
+
+Use the `_id` from the response to [get products](/api-reference/vas-products) or make purchases.
+
+## For Cable TV & Utility
+
+For Cable TV and Utility services, you must first [verify](/api-reference/vas-verify) the customer's meter number or smartcard ID before making a purchase.

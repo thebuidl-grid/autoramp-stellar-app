@@ -1,6 +1,6 @@
 # Contributing to AutoRamp Stellar App
 
-Thanks for taking the time to contribute. This document covers the development workflow, conventions, and pull request process for all packages in this monorepo.
+Thanks for taking the time to contribute. This document covers the development workflow, conventions, and pull request process for the backend, frontend and docs in this repo.
 
 ---
 
@@ -15,7 +15,6 @@ Thanks for taking the time to contribute. This document covers the development w
 - [Code conventions](#code-conventions)
 - [Adding a new feature](#adding-a-new-feature)
 - [Environment variables](#environment-variables)
-- [Working with the stellar-cctp package](#working-with-the-stellar-cctp-package)
 
 ---
 
@@ -23,12 +22,12 @@ Thanks for taking the time to contribute. This document covers the development w
 
 ```
 autoramp-stellar-app/
-├── autoramp-frontend/    Next.js app — main product
-├── stellar-cctp/         Circle CCTP Stellar package
-└── docs/                 Mintlify API docs
+├── backend/     NestJS API (Prisma, Postgres): ramps, swaps, bridge, admin, webhooks
+├── frontend/    Next.js app: the product, the admin console and the merchant dashboard
+└── docs/        Mintlify API docs (docs.json, MDX pages, openapi.yaml)
 ```
 
-Each package is independent — there is no shared root `package.json`. Changes to one package do not automatically affect the others.
+`backend/` and `frontend/` are independent packages with their own `package.json`. There is no shared root `package.json`, so a change in one does not affect the other. They are kept in step with the `autoramp-backend` and `autoramp-frontend` repos.
 
 ---
 
@@ -38,6 +37,7 @@ Each package is independent — there is no shared root `package.json`. Changes 
 
 - Node.js 20 or later
 - npm 10 or later
+- PostgreSQL (for the backend)
 - Git
 
 ### Clone and install
@@ -46,42 +46,61 @@ Each package is independent — there is no shared root `package.json`. Changes 
 git clone https://github.com/thebuidl-grid/autoramp-stellar-app.git
 cd autoramp-stellar-app
 
-# Frontend
-cd autoramp-frontend
-npm install
+# Backend
+cd backend
+npm ci
 
-# Stellar CCTP package
-cd ../stellar-cctp
-npm install
+# Frontend
+cd ../frontend
+npm ci
 ```
 
 ### Environment
 
-Copy the example env file and fill in the values:
+**Backend.** Copy the example env file and fill in the values (database URL, provider keys, JWT secret):
 
 ```bash
-cd autoramp-frontend
-cp .env.example .env.local
+cd backend
+cp .env.example .env
 ```
 
-Minimum vars needed to run locally:
+Run it on a port other than 3000 so it does not clash with the frontend:
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:4000        # backend URL
+PORT=4000
+```
+
+**Frontend.** Create `frontend/.env.local`. Minimum vars needed to run locally:
+
+```env
+API_URL=http://localhost:4000                    # backend URL, used by the server-side proxy
 NEXT_PUBLIC_NETWORK=testnet
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=<your-id>
 ```
 
-See the [README](README.md#environment-variables) for the full list.
+The browser never calls the backend directly: it goes through the Next.js proxy at `/api/backend`, which forwards to `API_URL`. See the [README](README.md#environment-variables) for the full list.
 
-### Start the dev server
+### Start the dev servers
 
 ```bash
-cd autoramp-frontend
+# Terminal 1
+cd backend
+npx prisma migrate deploy      # apply migrations to your local database
+npm run start:dev
+
+# Terminal 2
+cd frontend
 npm run dev
 ```
 
-The app will be at `http://localhost:3000`.
+The app will be at `http://localhost:3000` and the API at `http://localhost:4000`.
+
+### Run the tests
+
+```bash
+cd backend && npm test
+cd frontend && npm test
+```
 
 ---
 
@@ -135,12 +154,12 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/). The format 
 | `test` | Test additions or changes |
 | `style` | Formatting, whitespace — no logic change |
 
-**Scope** (optional) — the package or area affected: `frontend`, `stellar-cctp`, `docs`, `bridge`, `swap`, `auth`, etc.
+**Scope** (optional) — the package or area affected: `frontend`, `backend`, `docs`, `bridge`, `swap`, `auth`, etc.
 
 Examples:
 
 ```
-feat(stellar-cctp): add waitForAttestation polling helper
+feat(bridge): add an attestation polling helper
 fix(bridge): handle chain switch failure gracefully
 chore(frontend): upgrade wagmi to v2.19
 docs: update CCTP integration notes in README
@@ -207,71 +226,51 @@ One logical change per commit. Avoid "WIP" commits in PRs — squash or rebase b
 
 ### New page route
 
-1. Create `app/<route>/page.tsx`.
-2. If the page should be protected, wrap it with `AdminProtected` or `MerchantProtected` from `components/auth/`.
-3. Add a link to it in the relevant sidebar component (`AdminSidebar`, `MerchantSidebar`, `OtcSidebar`).
+1. Create `frontend/app/<route>/page.tsx`.
+2. If the page should be protected, wrap it with `AdminProtected` or `MerchantProtected` from `frontend/components/auth/`.
+3. Add a link to it in the relevant navigation: the admin sidebar (`frontend/components/admin/layout/nav.ts`), the merchant top navigation (`frontend/components/merchant/layout/nav.ts`) or the OTC sidebar.
 
 ### New API namespace
 
-1. Add typed DTOs and a namespace object to `lib/api.ts`.
-2. Create a corresponding hook file in `lib/hooks/use-<domain>.ts`.
-3. Export the hook from `lib/hooks/index.ts`.
+1. Add typed DTOs and a namespace object to `frontend/lib/api.ts`.
+2. Create a corresponding hook file in `frontend/lib/hooks/use-<domain>.ts`.
+3. Export the hook from `frontend/lib/hooks/index.ts`.
 
 ### New chain support
 
-1. Add the chain to `SUPPORTED_CHAINS` in `lib/constants/networks.ts`.
-2. Add its USDC address to `USDC_ADDRESSES` in `lib/constants/bridge-constants.ts`.
+1. Add the chain to `SUPPORTED_CHAINS` in `frontend/lib/constants/networks.ts`.
+2. Add its USDC address to `USDC_ADDRESSES` in `frontend/lib/constants/bridge-constants.ts`.
 3. Add its chain metadata (name, logo) to `CHAIN_METADATA`.
 4. Update `getChainId` and `getRpcUrl` to handle the new chain.
 
 ### New supported token
 
-1. Add the address and decimals to `SWAP_CONSTANTS` in `lib/constants/swap-constants.ts`.
-2. Add the token to the `CryptoType` union in `lib/store.ts`.
-3. Add a logo to `autoramp-frontend/public/` and wire it up in the crypto selection modal.
+1. Add the address and decimals to `SWAP_CONSTANTS` in `frontend/lib/constants/swap-constants.ts`.
+2. Add the token to the `CryptoType` union in `frontend/lib/store.ts`.
+3. Add a logo to `frontend/public/` and wire it up in the crypto selection modal.
 
 ---
 
 ## Environment variables
 
-Never commit real secrets or private keys. Keep `.env.local` in `.gitignore` (it already is).
+Never commit real secrets or private keys. `.env` (backend) and `.env.local` (frontend) are in `.gitignore`.
 
 If you need to add a new environment variable:
 
-1. Add it to `.env.example` with a placeholder value and a short comment.
-2. Document it in the [README environment variables table](README.md#environment-variables).
-3. For client-side vars, prefix with `NEXT_PUBLIC_`.
-4. For server-only vars (API keys, Cloudinary secrets), do **not** prefix with `NEXT_PUBLIC_`.
+1. Backend: add it to `backend/.env.example` with a placeholder value and a short comment, and validate it in `backend/src/config/env.validation.ts`.
+2. Frontend: document it in the [README environment variables table](README.md#environment-variables).
+3. For client-side frontend vars, prefix with `NEXT_PUBLIC_`.
+4. For server-only vars (API keys, secrets), do **not** prefix with `NEXT_PUBLIC_`.
+
+### Database changes
+
+Schema changes go through a Prisma migration in `backend/prisma/migrations/`. Keep migrations additive where you can, write a rollback in `backend/prisma/rollbacks/` for anything destructive, and test them on a copy of the data before they run against a real database.
 
 ---
 
-## Working with the stellar-cctp package
+## Docs
 
-The `stellar-cctp/` package is consumed by the frontend as a local file dependency. When you make changes to it, the frontend picks them up immediately (no build step needed in dev).
-
-**Key files**
-
-| File | What to touch when… |
-|---|---|
-| `src/constants.ts` | Updating contract addresses or adding a new network |
-| `src/hook-data.ts` | The CCTP hook data layout changes upstream |
-| `src/decimals.ts` | Circle changes decimal handling for Stellar |
-| `src/attestation.ts` | Changing poll interval or attestation API base URL |
-| `src/send.ts` | Modifying outbound burn argument encoding |
-| `src/receive.ts` | Modifying inbound `mint_and_forward` call or event parsing |
-
-**Testing locally**
-
-There is no test suite yet. To verify CCTP changes manually:
-
-1. Set `NEXT_PUBLIC_NETWORK=testnet`.
-2. Get testnet USDC on Stellar via Circle's testnet faucet.
-3. Use the bridge tab in the frontend (or write a one-off script) to exercise `burnUsdcOnStellar` and `receiveCctpMessage`.
-4. Verify the attestation is fetched via Circle's [Iris API sandbox](https://iris-api-sandbox.circle.com).
-
-**Adding a test suite**
-
-Add a `test/` directory under `stellar-cctp/` and use Vitest or Jest. Unit-test the pure functions in `decimals.ts` and `hook-data.ts` first — they have no external dependencies.
+`docs/` is a Mintlify site (`docs.json` for the navigation, one MDX page per topic, `openapi.yaml` for the API reference). Update it in the same PR as the API change it describes.
 
 ---
 

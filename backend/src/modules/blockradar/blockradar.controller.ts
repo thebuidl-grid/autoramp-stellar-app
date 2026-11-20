@@ -7,14 +7,18 @@ import {
   Body,
   Param,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
 import { BlockRadarService } from './blockradar.service';
 import { GenerateAddressDto } from './dto/generate-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
@@ -35,6 +39,8 @@ import { SwapQuoteDto } from './dto/swap-quote.dto';
 import { SwapExecuteDto } from './dto/swap-execute.dto';
 
 @ApiTags('BlockRadar')
+@ApiBearerAuth('JWT-auth')
+@UseGuards(JwtAuthGuard, AdminGuard)
 @Controller('blockradar')
 export class BlockRadarController {
   constructor(private readonly blockRadarService: BlockRadarService) {}

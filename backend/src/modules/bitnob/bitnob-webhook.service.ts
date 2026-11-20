@@ -1,3 +1,9 @@
+import { PayoutOrderRepository } from '../ramp/payout-order.repository';
+import {
+  BitnobCountryConfig,
+  countryFromVirtualAccountReference,
+  resolveCountry,
+} from './bitnob-countries';
 import { createHmac, timingSafeEqual } from 'crypto';
 import {
   forwardRef,
@@ -11,7 +17,10 @@ import { BitNobService } from './bitnob.service';
 import { SwapGateway } from '../swap/swap.gateway';
 import { NotificationsService } from '../merchants/notifications/notifications.service';
 import { OfframpStateService } from '../ramp/offramp-state.service';
-import { OfframpState, computeSettlement } from '../ramp/offramp-state-machine';
+import { OfframpState, canRecoverToCompleted, computeSettlement } from '../ramp/offramp-state-machine';
+import { ONRAMP_NETWORK_IDS } from '../ramp/ramp-chains';
+
+const ONRAMP_NETWORKS = ONRAMP_NETWORK_IDS;
 
 type MappedStatus =
   | 'PENDING'
@@ -30,10 +39,11 @@ export function verifyBitnobSignature(
   signature: string | undefined | null,
   secret: string | undefined | null,
 ): boolean {
-  if (!rawBody || !signature || !secret) return false;
+  const key = secret?.trim().replace(/^['"]|['"]$/g, '');
+  if (!rawBody || !signature || !key) return false;
   const provided = signature.trim().toLowerCase();
   if (!/^[0-9a-f]+$/.test(provided)) return false;
-  const expected = createHmac('sha512', secret).update(rawBody).digest('hex');
+  const expected = createHmac('sha512', key).update(rawBody).digest('hex');
   const expectedBuf = Buffer.from(expected, 'utf8');
   const providedBuf = Buffer.from(provided, 'utf8');
   if (expectedBuf.length !== providedBuf.length) return false;
@@ -245,6 +255,7 @@ export class BitNobWebhookService {
     private readonly swapGateway: SwapGateway,
     private readonly notificationsService: NotificationsService,
     private readonly offrampState: OfframpStateService,
+    private readonly payoutOrders: PayoutOrderRepository,
   ) {}
 
   async processWebhook(raw: Record<string, any>) {
@@ -321,7 +332,9 @@ export class BitNobWebhookService {
     if (
       mapped &&
       (!isTerminal(transaction.status) ||
-        statusRank(mapped) >= statusRank(transaction.status))
+        statusRank(mapped) >= statusRank(transaction.status) ||
+        // a settled payout recovers an order we had expired or failed
+        (mapped === 'COMPLETED' && canRecoverToCompleted(transaction.status)))
     ) {
       let finalStatus: MappedStatus = mapped;
       let failureReason: string | null = resolveFailureReason(
@@ -377,15 +390,12 @@ export class BitNobWebhookService {
             data: updateData,
           });
 
-      await this.prisma.offrampProviderOrder.update({
-        where: { id: providerOrder.id },
-        data: {
-          providerStatus: event,
-          providerOrderId: payoutId || providerOrder.providerOrderId,
-          ...(receivedRaw != null ? { receivedAmount: receivedRaw } : {}),
-          ...(failureReason ? { failureReason } : {}),
-          ...(depositTxHash ? { depositTxHash } : {}),
-        },
+      await this.payoutOrders.update(providerOrder, {
+        providerStatus: event,
+        providerOrderId: payoutId || providerOrder.providerOrderId,
+        ...(receivedRaw != null ? { receivedAmount: receivedRaw } : {}),
+        ...(failureReason ? { failureReason } : {}),
+        ...(depositTxHash ? { depositTxHash } : {}),
       });
 
       this.emitUpdate(
@@ -449,8 +459,14 @@ export class BitNobWebhookService {
       failureReason = 'partial_settlement';
     }
 
-    const target = toOfframpTarget(finalStatus, failureReason);
+    let target = toOfframpTarget(finalStatus, failureReason);
     if (!target) return { status: 'ignored', reason: 'unmapped_status', event };
+
+    // SafeHaven-settled NGN: Bitnob "completed" only means the NGN reached our SafeHaven virtual account.
+    // The order completes when the onward transfer to the user's bank is confirmed.
+    if (target === 'COMPLETED' && (transaction.metadata as any)?.safehaven?.accountNumber) {
+      target = 'PAYOUT_PENDING';
+    }
 
     // Same provider event + status + amount => same key => applied at most once.
     const eventKey = [
@@ -471,6 +487,8 @@ export class BitNobWebhookService {
       receivedAmount: receivedRaw,
       txHash: depositTxHash,
       reason: failureReason,
+      // Bitnob itself says the payout settled: that outranks an earlier timeout or failure we recorded.
+      providerConfirmed: target === 'COMPLETED',
       detail: failureReason ? { providerEvent: event, providerResponse: data } : undefined,
       settledFiatAmount:
         target === 'COMPLETED' && transaction.fiatAmount != null
@@ -581,7 +599,8 @@ export class BitNobWebhookService {
       return { status: 'ignored', reason: 'not_onramp_va' };
     }
 
-    const tx = await this.findPendingOnrampForVa(va);
+    const country = countryFromVirtualAccountReference(va.reference);
+    const tx = await this.findPendingOnrampForVa(va, country.currency);
     if (!tx) {
       throw new NotFoundException(
         `Onramp transaction not found for VA ${vaId}`,
@@ -596,6 +615,30 @@ export class BitNobWebhookService {
       };
     }
 
+    return this.processOnramp(tx, payload, country);
+  }
+
+  /**
+   * NGN on-ramp where the fiat already arrived elsewhere (SafeHaven per-order account): run the
+   * Bitnob trading pipeline against Autoramp's own balance. No Bitnob customer / virtual account involved.
+   */
+  async startOnrampFromFiat(tx: any, amountMajor: number) {
+    const country = resolveCountry('NG');
+    if (tx.status !== 'PENDING') {
+      return { status: 'ignored', reason: 'not_pending', currentStatus: tx.status };
+    }
+    const payload = {
+      source: 'safehaven',
+      amount: Math.round(amountMajor * country.minorUnits),
+    };
+    return this.processOnramp(tx, payload, country);
+  }
+
+  private async processOnramp(
+    tx: any,
+    payload: any,
+    country: BitnobCountryConfig,
+  ) {
     try {
       await this.prisma.onrampTransaction.update({
         where: { id: tx.id },
@@ -608,7 +651,7 @@ export class BitNobWebhookService {
         },
       });
 
-      await this.runOnrampPipeline(tx, payload);
+      await this.runOnrampPipeline(tx, payload, country);
       return { status: 'processed', reference: tx.reference };
     } catch (error) {
       this.logger.error(`Onramp pipeline failed: ${(error as Error).message}`);
@@ -628,19 +671,25 @@ export class BitNobWebhookService {
     }
   }
 
-  private async runOnrampPipeline(tx: any, payload: any) {
-    const amountKobo = Number(payload?.amount || payload?.settled_amount || 0);
-    const naira = amountKobo / 100;
-    this.logger.log(`Onramp pipeline for ${tx.reference}: naira=${naira}`);
+  private async runOnrampPipeline(
+    tx: any,
+    payload: any,
+    country: BitnobCountryConfig,
+  ) {
+    const minor = Number(payload?.amount || payload?.settled_amount || 0);
+    const naira = minor / country.minorUnits;
+    this.logger.log(
+      `Onramp pipeline for ${tx.reference}: ${country.currency}=${naira}`,
+    );
 
-    if (naira < 500 || naira > 10_000_000) {
+    if (naira < country.minDeposit || naira > country.maxDeposit) {
       throw new Error(
-        `Deposit amount ${naira} NGN outside Bitnob trading bounds`,
+        `Deposit amount ${naira} ${country.currency} outside Bitnob trading bounds`,
       );
     }
 
     const quote = await this.bitnobService.tradingQuote({
-      baseCurrency: 'NGN',
+      baseCurrency: country.currency,
       quoteCurrency: 'USDC',
       side: 'sell',
       quantity: naira,
@@ -653,7 +702,7 @@ export class BitNobWebhookService {
     }
 
     const order = await this.bitnobService.tradingOrder({
-      baseCurrency: 'NGN',
+      baseCurrency: country.currency,
       quoteCurrency: 'USDC',
       side: 'sell',
       quantity: naira,
@@ -681,7 +730,8 @@ export class BitNobWebhookService {
       toAddress: tx.destinationAddress,
       amount: usdcAmount,
       reference: `WDR_${tx.reference}`,
-      memo: '',
+      chain: String(tx.network || 'stellar').toLowerCase(),
+      memo: tx.network === 'stellar' ? '' : undefined,
       description: `Onramp settlement for ${tx.reference}`,
     });
 
@@ -701,10 +751,15 @@ export class BitNobWebhookService {
     this.logger.log(`Onramp withdrawal created for ${tx.reference}`);
   }
 
-  private async findPendingOnrampForVa(va: any) {
+  private async findPendingOnrampForVa(va: any, currency = 'NGN') {
     if (va.userId) {
       return this.prisma.onrampTransaction.findFirst({
-        where: { userId: va.userId, network: 'stellar', status: 'PENDING' },
+        where: {
+          userId: va.userId,
+          network: { in: ONRAMP_NETWORKS },
+          currency,
+          status: 'PENDING',
+        },
         orderBy: { createdAt: 'asc' },
       });
     }
@@ -712,7 +767,8 @@ export class BitNobWebhookService {
       return this.prisma.merchantOnrampTransaction.findFirst({
         where: {
           merchantId: va.merchantId,
-          network: 'stellar',
+          network: { in: ONRAMP_NETWORKS },
+          currency,
           status: 'PENDING',
         },
         orderBy: { createdAt: 'asc' },
@@ -723,15 +779,11 @@ export class BitNobWebhookService {
 
   private async findProviderOrder(payoutId?: string, reference?: string) {
     if (payoutId) {
-      const byId = await this.prisma.offrampProviderOrder.findFirst({
-        where: { providerOrderId: String(payoutId) },
-      });
+      const byId = await this.payoutOrders.findByProviderOrderId(String(payoutId));
       if (byId) return byId;
     }
     if (reference) {
-      return this.prisma.offrampProviderOrder.findUnique({
-        where: { reference },
-      });
+      return this.payoutOrders.findByReference(reference);
     }
     return null;
   }

@@ -18,7 +18,6 @@ lerna-debug.log*
 # Tests
 /coverage
 /.nyc_output
-/test/.pglite-data
 
 # IDEs and editors
 /.idea
@@ -57,3 +56,27 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 /generated/prisma
+
+package-lock.json
+._dumps/
+
+yarn.lock
+
+.kiro/
+hello.json
+
+# Local Redis dump and one-off result files can contain customer data
+*.rdb
+results-*.json
+subaccount-update-results.json
+scripts/generate-token.ts
+.env.old
+
+# Local SOW / proposal docs (kept out of the repo)
+docs/Instawards_SOW_Autoramp.pdf
+
+docs/INSTAWARDS_TEST_REPORT.md
+results-20261107.json
+scripts/fetch-safehaven-transaction-history.ts
+subaccount-update-results.json
+docs/DEMO.md

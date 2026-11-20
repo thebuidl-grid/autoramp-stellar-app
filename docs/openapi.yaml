@@ -1,0 +1,2338 @@
+openapi: "3.0.3"
+info:
+  title: AutoRamp API
+  version: 1.0.0
+  description: Fiat-to-crypto on-ramp and off-ramp API for merchants in Nigeria
+
+servers:
+  - url: https://api-autoramp.thebuidl.xyz
+    description: Production
+
+security:
+  - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: Merchant API key
+
+  schemas:
+    OnRampRequest:
+      type: object
+      required: [network, amount, destination]
+      properties:
+        type:
+          type: string
+          default: "on"
+        network:
+          type: string
+          description: "base/bsc use the legacy rail. stellar funds a Bitnob NGN virtual account, trades NGN→USDC, then withdraws USDC to the destination address."
+          enum: [base, bsc, stellar]
+        amount:
+          type: number
+          minimum: 1000
+        destination:
+          type: object
+          required: [address]
+          properties:
+            address:
+              type: string
+              description: "Wallet address that receives the stablecoin. For stellar, a Stellar G... address."
+
+    OffRampRequest:
+      type: object
+      required: [network, amount, destination]
+      properties:
+        type:
+          type: string
+          default: "off"
+        network:
+          type: string
+          description: "base/bsc use the legacy rail. stellar pays out NGN via the Bitnob payouts rail."
+          enum: [base, bsc, stellar]
+        amount:
+          type: number
+          minimum: 1000
+        sourceAddress:
+          type: string
+          description: "Required when network is stellar — the Stellar G... wallet that funds the payout."
+        destination:
+          type: object
+          required: [bankCode, accountNumber]
+          properties:
+            bankCode:
+              type: string
+            accountNumber:
+              type: string
+
+    InitializeSwapRequest:
+      type: object
+      required: [amount, usdcAmount, slippage, offrampDestination]
+      properties:
+        amount:
+          type: number
+        usdcAmount:
+          type: number
+        slippage:
+          type: number
+        offrampDestination:
+          type: object
+          required: [bankCode, accountNumber]
+          properties:
+            bankCode:
+              type: string
+            accountNumber:
+              type: string
+        network:
+          type: string
+          default: base
+
+    CompleteSwapRequest:
+      type: object
+      required: [transactionHash, sourceAddress]
+      properties:
+        transactionHash:
+          type: string
+        sourceAddress:
+          type: string
+
+    CreateSwapRequest:
+      type: object
+      required: [fromTokenType, toTokenType, fromAmount, toAmount, exchangeRate, sourceAddress, destinationAddress]
+      properties:
+        fromTokenType:
+          type: string
+        toTokenType:
+          type: string
+        fromAmount:
+          type: number
+        toAmount:
+          type: number
+        exchangeRate:
+          type: number
+        sourceAddress:
+          type: string
+        destinationAddress:
+          type: string
+        network:
+          type: string
+        slippage:
+          type: number
+
+    TransferRequest:
+      type: object
+      required: [beneficiary_bank_code, beneficiary_account_number, amount, narration, payment_reference]
+      properties:
+        beneficiary_bank_code:
+          type: string
+        beneficiary_account_number:
+          type: string
+        amount:
+          type: number
+        narration:
+          type: string
+        payment_reference:
+          type: string
+        save_beneficiary:
+          type: boolean
+        debit_account_number:
+          type: string
+
+    NameEnquiryRequest:
+      type: object
+      required: [bank_code, account_number]
+      properties:
+        bank_code:
+          type: string
+        account_number:
+          type: string
+
+    VirtualAccountRequest:
+      type: object
+      required: [amount, external_reference]
+      properties:
+        amount:
+          type: number
+        valid_for:
+          type: integer
+        external_reference:
+          type: string
+        amount_control:
+          type: string
+        callback_url:
+          type: string
+
+    TransactionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+        amount:
+          type: number
+        status:
+          type: string
+        type:
+          type: string
+        createdAt:
+          type: string
+
+    MerchantAccount:
+      type: object
+      properties:
+        accountId:
+          type: string
+        accountNumber:
+          type: string
+        bankCode:
+          type: string
+        accountBalance:
+          type: number
+        accountName:
+          type: string
+        status:
+          type: string
+        fiatProvider:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        message:
+          type: string
+        error:
+          type: string
+
+    TransactionItem:
+      type: object
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+        amount:
+          type: number
+        fiatAmount:
+          type: number
+        tokenAmount:
+          type: number
+        fromAmount:
+          type: number
+        toAmount:
+          type: number
+        fromTokenType:
+          type: string
+        toTokenType:
+          type: string
+        exchangeRate:
+          type: number
+        tokenType:
+          type: string
+        status:
+          type: string
+        type:
+          type: string
+          enum: [onramp, offramp, swap, transfer]
+        network:
+          type: string
+        transactionHash:
+          type: string
+        destinationAddress:
+          type: string
+        bankCode:
+          type: string
+        accountNumber:
+          type: string
+        accountName:
+          type: string
+        bankName:
+          type: string
+        currency:
+          type: string
+        beneficiaryBankCode:
+          type: string
+        beneficiaryAccountNumber:
+          type: string
+        beneficiaryAccountName:
+          type: string
+        narration:
+          type: string
+        debitAccountNumber:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+
+    TransactionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionItem'
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+            limit:
+              type: integer
+            total:
+              type: integer
+            totalPages:
+              type: integer
+
+    TransferFee:
+      type: object
+      properties:
+        id:
+          type: string
+        feeAmount:
+          type: number
+        feeType:
+          type: string
+        feeCurrency:
+          type: string
+
+    TransferItem:
+      type: object
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string
+        beneficiaryBankCode:
+          type: string
+        beneficiaryAccountNumber:
+          type: string
+        beneficiaryAccountName:
+          type: string
+        narration:
+          type: string
+        status:
+          type: string
+        fees:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferFee'
+        totalFees:
+          type: number
+        netAmount:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+
+    TransferListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferItem'
+        meta:
+          type: object
+          properties:
+            total:
+              type: integer
+            page:
+              type: integer
+            limit:
+              type: integer
+            totalPages:
+              type: integer
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+    OnRampResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            transactionId:
+              type: string
+            depositAccount:
+              type: object
+              properties:
+                accountName:
+                  type: string
+                accountNumber:
+                  type: string
+                bankName:
+                  type: string
+                bankCode:
+                  type: string
+        deposit:
+          type: object
+          description: "Stellar on-ramp only: the Bitnob NGN virtual account to fund."
+          properties:
+            provider:
+              type: string
+            id:
+              type: string
+            accountNumber:
+              type: string
+            accountName:
+              type: string
+            bankName:
+              type: string
+            bankCode:
+              type: string
+        databaseRecord:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            reference:
+              type: string
+            status:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+    OffRampResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            transactionId:
+              type: string
+            depositAddress:
+              type: string
+        deposit:
+          type: object
+          description: "Stellar off-ramp only: the USDC funding instructions for the Bitnob payout."
+          properties:
+            network:
+              type: string
+            sourceAddress:
+              type: string
+            receiveAddress:
+              type: string
+            amount:
+              type: string
+            memo:
+              type: string
+            validUntil:
+              type: string
+        databaseRecord:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            reference:
+              type: string
+            status:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+    RampTransactionListResponse:
+      type: object
+      properties:
+        onramp:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionResponse'
+        offramp:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionResponse'
+        swap:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionResponse'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        totalPages:
+          type: integer
+    SwapInitializeResponse:
+      type: object
+      properties:
+        swap:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            reference:
+              type: string
+            fromAmount:
+              type: number
+            toAmount:
+              type: number
+            exchangeRate:
+              type: number
+            status:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+        offramp:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            reference:
+              type: string
+            status:
+              type: string
+        recipientAddress:
+          type: string
+        swapParams:
+          type: object
+          properties:
+            tokenIn:
+              type: string
+            tokenOut:
+              type: string
+            amountIn:
+              type: string
+            recipient:
+              type: string
+            slippage:
+              type: number
+    SwapResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        fromTokenType:
+          type: string
+        fromAmount:
+          type: number
+        toTokenType:
+          type: string
+        toAmount:
+          type: number
+        exchangeRate:
+          type: number
+        sourceAddress:
+          type: string
+        destinationAddress:
+          type: string
+        status:
+          type: string
+        network:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    MerchantAccountResponse:
+      type: object
+      properties:
+        accountId:
+          type: string
+        accountNumber:
+          type: string
+        bankCode:
+          type: string
+        accountBalance:
+          type: number
+        bookBalance:
+          type: number
+        accountName:
+          type: string
+        status:
+          type: string
+    TransferResponse:
+      type: object
+      properties:
+        reference:
+          type: string
+        providerReference:
+          type: string
+        status:
+          type: string
+        paymentReference:
+          type: string
+        amount:
+          type: number
+        beneficiaryBankCode:
+          type: string
+        beneficiaryAccountNumber:
+          type: string
+    NameEnquiryResponse:
+      type: object
+      properties:
+        accountName:
+          type: string
+        bankCode:
+          type: string
+        accountNumber:
+          type: string
+    SubAccountResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        safehavenId:
+          type: string
+        bankCode:
+          type: string
+        accountNumber:
+          type: string
+        accountName:
+          type: string
+        bankName:
+          type: string
+        accountBalance:
+          type: number
+        bookBalance:
+          type: number
+        status:
+          type: string
+        autoSweep:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    VirtualAccountResponse:
+      type: object
+      properties:
+        accountNumber:
+          type: string
+        bankCode:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        settlementAccount:
+          type: object
+          properties:
+            bankCode:
+              type: string
+            accountNumber:
+              type: string
+    Bank:
+      type: object
+      properties:
+        institutionCode:
+          type: string
+        institutionName:
+          type: string
+        bankCode:
+          type: string
+        name:
+          type: string
+    RateResponse:
+      type: object
+      properties:
+        rate:
+          type: number
+    ResolveAccountResponse:
+      type: object
+      properties:
+        accountName:
+          type: string
+        accountNumber:
+          type: string
+        bankCode:
+          type: string
+        bankName:
+          type: string
+    VerifyIdentityResponse:
+      type: object
+      properties:
+        identityId:
+          type: string
+        status:
+          type: string
+        reference:
+          type: string
+        transferReference:
+          type: string
+    ValidateIdentityResponse:
+      type: object
+      properties:
+        validated:
+          type: boolean
+        identityId:
+          type: string
+    VASService:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+    VASCategory:
+      type: object
+      properties:
+        id:
+          type: string
+        serviceId:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+    VASProduct:
+      type: object
+      properties:
+        id:
+          type: string
+        categoryId:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+        amount:
+          type: number
+        description:
+          type: string
+    VASVerifyResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: object
+    VASPaymentResponse:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        status:
+          type: string
+        providerResponse:
+          type: object
+    VASTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        merchantId:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        serviceType:
+          type: string
+        serviceCategoryId:
+          type: string
+        bundleCode:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string
+        channel:
+          type: string
+        phoneNumber:
+          type: string
+        cardNumber:
+          type: string
+        meterNumber:
+          type: string
+        vendType:
+          type: string
+        debitAccountNumber:
+          type: string
+        status:
+          type: string
+        safehavenId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+    VASTransactionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/VASTransaction'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+paths:
+  /ramp/onramp:
+    post:
+      operationId: initializeOnramp
+      summary: Initialize On-Ramp
+      description: Convert Naira to stablecoins
+      tags: [On-Ramp]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnRampRequest'
+            examples:
+              default:
+                value:
+                  type: "on"
+                  network: base
+                  amount: 50000
+                  destination:
+                    address: "0x1234567890abcdef1234567890abcdef12345678"
+              stellar:
+                value:
+                  type: "on"
+                  network: stellar
+                  amount: 50000
+                  destination:
+                    address: "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+      responses:
+        '201':
+          description: On-ramp initialized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnRampResponse'
+              examples:
+                default:
+                  value:
+                    id: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+                    reference: "ONR-20260628-ABC123"
+                    amount: 50000
+                    status: "INITIALIZED"
+                    type: "onramp"
+                    createdAt: "2026-06-28T10:00:00.000Z"
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /ramp/offramp:
+    post:
+      operationId: initializeOfframp
+      summary: Initialize Off-Ramp
+      description: Convert stablecoins to Naira
+      tags: [Off-Ramp]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OffRampRequest'
+            examples:
+              default:
+                value:
+                  type: "off"
+                  network: base
+                  amount: 50000
+                  destination:
+                    bankCode: "058"
+                    accountNumber: "0123456789"
+              stellar:
+                value:
+                  type: "off"
+                  network: stellar
+                  amount: 50000
+                  sourceAddress: "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+                  destination:
+                    bankCode: "058"
+                    accountNumber: "0123456789"
+      responses:
+        '201':
+          description: Off-ramp initialized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OffRampResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /ramp/transactions:
+    get:
+      operationId: getRampTransactions
+      summary: Get Transactions
+      description: Get onramp and offramp transaction history
+      tags: [On-Ramp, Off-Ramp]
+      parameters:
+        - name: id
+          in: query
+          schema:
+            type: string
+        - name: reference
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RampTransactionListResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /swap/initialize:
+    post:
+      operationId: initializeSwap
+      summary: Initialize Swap
+      description: Initialize USDC to CNGN swap
+      tags: [Swap]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitializeSwapRequest'
+            examples:
+              default:
+                value:
+                  amount: 140196
+                  usdcAmount: 100
+                  slippage: 0.05
+                  offrampDestination:
+                    bankCode: "058"
+                    accountNumber: "1234567890"
+                  network: base
+      responses:
+        '200':
+          description: Swap initialized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SwapInitializeResponse'
+        '400':
+          description: Validation error
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /swap/{reference}/complete:
+    post:
+      operationId: completeSwap
+      summary: Complete Swap
+      description: Confirm swap after on-chain execution
+      tags: [Swap]
+      parameters:
+        - name: reference
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteSwapRequest'
+            examples:
+              default:
+                value:
+                  transactionHash: "0xabc123..."
+                  sourceAddress: "0x1234567890abcdef1234567890abcdef12345678"
+      responses:
+        '200':
+          description: Swap completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SwapResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Swap not found
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /swap/create:
+    post:
+      operationId: createSwap
+      summary: Create Swap
+      description: Record swap transaction
+      tags: [Swap]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSwapRequest'
+      responses:
+        '200':
+          description: Swap created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SwapResponse'
+        '400':
+          description: Validation error
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /merchants/api/account:
+    get:
+      operationId: getMerchantAccount
+      summary: Get Account
+      description: Get merchant bank account balance
+      tags: [Merchant]
+      responses:
+        '200':
+          description: Account details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantAccountResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Merchant not verified
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /merchants/api/transfer:
+    post:
+      operationId: merchantTransfer
+      summary: Transfer
+      description: Initiate bank transfer
+      tags: [Merchant]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+            examples:
+              default:
+                value:
+                  beneficiary_bank_code: "090286"
+                  beneficiary_account_number: "0123456789"
+                  amount: 5000
+                  narration: "Payment for services"
+                  payment_reference: "ref-123456"
+      responses:
+        '201':
+          description: Transfer initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Insufficient funds
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Merchant not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /merchants/api/name-enquiry:
+    post:
+      operationId: nameEnquiry
+      summary: Name Enquiry
+      description: Validate bank account and resolve name
+      tags: [Merchant]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameEnquiryRequest'
+            examples:
+              default:
+                value:
+                  bank_code: "090286"
+                  account_number: "0123456789"
+      responses:
+        '200':
+          description: Account resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NameEnquiryResponse'
+        '400':
+          description: Invalid account
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Merchant not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /merchants/api/transactions:
+    get:
+      operationId: getMerchantTransactions
+      summary: Get Transactions
+      description: Get merchant transaction history across on-ramp, off-ramp, swap and bank transfer transactions.
+      tags: [Merchant]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [onramp, offramp, swap, transfer]
+          description: Filter by transaction type
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Filter by transaction status
+        - name: subAccountId
+          in: query
+          schema:
+            type: string
+          description: Filter by sub-account ID
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter from date (ISO 8601)
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter to date (ISO 8601)
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionListResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Merchant not verified or forbidden
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /merchants/api/transfers:
+    get:
+      operationId: getMerchantTransfers
+      summary: Get Transfers
+      description: Get merchant bank transfer history.
+      tags: [Merchant]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Filter by transfer status
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter by start date (ISO 8601)
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter by end date (ISO 8601)
+        - name: subAccountId
+          in: query
+          schema:
+            type: string
+          description: Filter by sub-account ID
+      responses:
+        '200':
+          description: Transfer list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferListResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Merchant not verified or forbidden
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /merchants/api/sub-accounts:
+    get:
+      operationId: listSubAccounts
+      summary: List Sub-Accounts
+      description: Get all sub-accounts
+      tags: [Merchant]
+      responses:
+        '200':
+          description: Sub-account list
+
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubAccountResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Merchant not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /merchants/api/sub-accounts/{id}:
+    get:
+      operationId: getSubAccount
+      summary: Get Sub-Account
+      description: Get a single sub-account by ID, including live account balance from the provider.
+      tags: [Merchant]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Sub-account ID
+      responses:
+        '200':
+          description: Sub-account details with balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubAccountResponse'
+        '400':
+          description: Sub-account not found or merchant not verified
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Merchant not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Sub-account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /merchants/api/sub-account:
+    post:
+      operationId: createSubAccount
+      summary: Create Sub-Account
+      description: Create a new sub-account. Identity fields are required for SafeHaven, ignored for Pulse MFB.
+      tags: [Merchant]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneNumber, emailAddress, externalReference]
+              properties:
+                phoneNumber:
+                  type: string
+                  description: Account holder phone number
+                emailAddress:
+                  type: string
+                  description: Account holder email
+                externalReference:
+                  type: string
+                  description: Your unique reference for this sub-account
+                identityType:
+                  type: string
+                  enum: [NIN, vNIN, BVN, BVNUSSD, vID]
+                  description: "SafeHaven: required. Pulse MFB: ignored."
+                identityNumber:
+                  type: string
+                  description: The identity number (e.g. BVN or NIN)
+                identityId:
+                  type: string
+                  description: Identity ID from a prior verification
+                otp:
+                  type: string
+                  description: OTP for identity verification. Not required if identityId is provided.
+                autoSweep:
+                  type: boolean
+                  description: "SafeHaven: auto-sweep funds. Pulse MFB: ignored."
+            examples:
+              safehaven:
+                summary: SafeHaven (with identity)
+                value:
+                  phoneNumber: "08012345678"
+                  emailAddress: "user@example.com"
+                  externalReference: "ref-123456"
+                  identityType: "BVN"
+                  identityNumber: "22222222222"
+              pulse:
+                summary: Pulse MFB (no identity)
+                value:
+                  phoneNumber: "08012345678"
+                  emailAddress: "user@example.com"
+                  externalReference: "ref-123456"
+      responses:
+        '201':
+          description: Sub-account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubAccountResponse'
+        '400':
+          description: Validation error or provider mismatch
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Merchant not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /merchants/api/virtual-account:
+    post:
+      operationId: createVirtualAccount
+      summary: Virtual Account
+      description: Create virtual account (SafeHaven only)
+      tags: [Merchant]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VirtualAccountRequest'
+      responses:
+        '201':
+          description: Virtual account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualAccountResponse'
+        '400':
+          description: Provider not supported
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Merchant not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /merchants/api/banks:
+    get:
+      operationId: listBanks
+      summary: List Banks
+      description: Get supported banks (SafeHaven only)
+      tags: [Merchant]
+      responses:
+        '200':
+          description: Bank list
+
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Bank'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Merchant not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /rates/usd-ngn-rate:
+    get:
+      operationId: getUsdNgnRate
+      summary: USD/NGN Rate
+      description: Get current exchange rate
+      tags: [General]
+      responses:
+        '200':
+          description: Exchange rate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /misc/resolve-account:
+    get:
+      operationId: resolveAccount
+      summary: Resolve Account
+      description: Resolve bank account holder name
+      tags: [General]
+      parameters:
+        - name: bankCode
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: accountNumber
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveAccountResponse'
+        '400':
+          description: Invalid account
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /merchants/api/verify-identity:
+    post:
+      operationId: initiateVerification
+      summary: Initiate Identity Verification
+      description: Start BVN/NIN verification (SafeHaven only). OTP sent to account holder.
+      tags: [Merchant]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, number]
+              properties:
+                type:
+                  type: string
+                  enum: [BVN, NIN, vNIN, BVNUSSD, CAC, CREDITCHECK]
+                  description: Identity type to verify
+                number:
+                  type: string
+                  description: The identity number (e.g. BVN or NIN)
+                otp:
+                  type: string
+                  description: Required only for BVNUSSD type
+                verifierId:
+                  type: string
+                  description: Required only for vNIN type
+                provider:
+                  type: string
+                  description: Required only for CREDITCHECK type
+                async:
+                  type: boolean
+                  description: Async mode for CREDITCHECK type
+            examples:
+              bvn:
+                summary: BVN Verification
+                value:
+                  type: BVN
+                  number: "22222222222"
+              nin:
+                summary: NIN Verification
+                value:
+                  type: NIN
+                  number: "12345678901"
+      responses:
+        '201':
+          description: Verification initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyIdentityResponse'
+        '400':
+          description: Provider not supported or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Merchant not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /merchants/api/validate-identity:
+    post:
+      operationId: validateVerification
+      summary: Validate Identity Verification
+      description: Complete identity verification with OTP
+      tags: [Merchant]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identityId, type, otp]
+              properties:
+                identityId:
+                  type: string
+                  description: The identityId from the initiate step
+                type:
+                  type: string
+                  enum: [BVN, NIN]
+                  description: Identity type
+                otp:
+                  type: string
+                  description: OTP received by account holder
+            examples:
+              default:
+                summary: Validate BVN OTP
+                value:
+                  identityId: "id_abc123"
+                  type: BVN
+                  otp: "123456"
+      responses:
+        '200':
+          description: Identity verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidateIdentityResponse'
+        '400':
+          description: Invalid OTP or provider not supported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Merchant not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /misc/banks:
+    get:
+      operationId: listAllBanks
+      summary: List All Banks
+      description: Get all supported banks (public)
+      tags: [General]
+      responses:
+        '200':
+          description: Bank list
+
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Bank'
+  /vas/services:
+    get:
+      operationId: getVasServices
+      summary: Get VAS Services
+      description: Get all available Value-Added Services (Airtime, Data, Cable TV, Utility)
+      tags: [VAS]
+      responses:
+        '200':
+          description: List of VAS services
+
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VASService'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /vas/services/{serviceId}:
+    get:
+      operationId: getVasService
+      summary: Get VAS Service
+      description: Get a specific VAS service by ID
+      tags: [VAS]
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: VAS service details
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VASService'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /vas/services/{serviceId}/categories:
+    get:
+      operationId: getVasCategories
+      summary: Get VAS Categories
+      description: Get service categories/providers for a VAS service
+      tags: [VAS]
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of categories
+
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VASCategory'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Service or categories not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /vas/categories/{categoryId}/products:
+    get:
+      operationId: getVasProducts
+      summary: Get VAS Products
+      description: Get products/bundles for a category
+      tags: [VAS]
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of products
+
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VASProduct'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Category or products not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /vas/verify:
+    post:
+      operationId: verifyVasEntity
+      summary: Verify Power/Cable TV
+      description: Verify a power meter number or cable TV smartcard
+      tags: [VAS]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serviceCategoryId, entityNumber]
+              properties:
+                serviceCategoryId:
+                  type: string
+                entityNumber:
+                  type: string
+      responses:
+        '200':
+          description: Verification result
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VASVerifyResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /vas/pay/airtime:
+    post:
+      operationId: payAirtime
+      summary: Purchase Airtime
+      description: Purchase mobile airtime for any network
+      tags: [VAS]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serviceCategoryId, amount, debitAccountNumber, phoneNumber]
+              properties:
+                serviceCategoryId:
+                  type: string
+                amount:
+                  type: number
+                channel:
+                  type: string
+                  enum: [WEB, POS, ATM]
+                  default: WEB
+                debitAccountNumber:
+                  type: string
+                phoneNumber:
+                  type: string
+                externalReference:
+                  type: string
+                statusUrl:
+                  type: string
+      responses:
+        '200':
+          description: Airtime purchase initiated
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VASPaymentResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /vas/pay/data:
+    post:
+      operationId: payData
+      summary: Purchase Data Bundle
+      description: Purchase a mobile data bundle
+      tags: [VAS]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serviceCategoryId, bundleCode, amount, debitAccountNumber, phoneNumber]
+              properties:
+                serviceCategoryId:
+                  type: string
+                bundleCode:
+                  type: string
+                amount:
+                  type: number
+                channel:
+                  type: string
+                  enum: [WEB, POS, ATM]
+                  default: WEB
+                debitAccountNumber:
+                  type: string
+                phoneNumber:
+                  type: string
+                externalReference:
+                  type: string
+                statusUrl:
+                  type: string
+      responses:
+        '200':
+          description: Data bundle purchase initiated
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VASPaymentResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /vas/pay/cable-tv:
+    post:
+      operationId: payCableTv
+      summary: Purchase Cable TV
+      description: Purchase a cable TV subscription
+      tags: [VAS]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serviceCategoryId, bundleCode, amount, debitAccountNumber, cardNumber]
+              properties:
+                serviceCategoryId:
+                  type: string
+                bundleCode:
+                  type: string
+                amount:
+                  type: number
+                channel:
+                  type: string
+                  enum: [WEB, POS, ATM]
+                  default: WEB
+                debitAccountNumber:
+                  type: string
+                cardNumber:
+                  type: string
+                externalReference:
+                  type: string
+      responses:
+        '200':
+          description: Cable TV subscription initiated
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VASPaymentResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /vas/pay/utility:
+    post:
+      operationId: payUtility
+      summary: Pay Utility Bill
+      description: Pay electricity and other utility bills
+      tags: [VAS]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serviceCategoryId, amount, debitAccountNumber, meterNumber, vendType]
+              properties:
+                serviceCategoryId:
+                  type: string
+                amount:
+                  type: number
+                channel:
+                  type: string
+                  enum: [WEB, POS, ATM]
+                  default: WEB
+                debitAccountNumber:
+                  type: string
+                meterNumber:
+                  type: string
+                vendType:
+                  type: string
+                externalReference:
+                  type: string
+      responses:
+        '200':
+          description: Utility payment initiated
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VASPaymentResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /vas/transactions:
+    get:
+      operationId: getVasTransactions
+      summary: Get VAS Transactions
+      description: Get paginated list of VAS transaction history
+      tags: [VAS]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: List of VAS transactions
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VASTransactionListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /vas/transactions/{transactionId}:
+    get:
+      operationId: getVasTransaction
+      summary: Get VAS Transaction
+      description: Get a specific VAS transaction by ID
+      tags: [VAS]
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: VAS transaction details
+
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VASTransaction'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /vas/transactions/{transactionId}/sync:
+    post:
+      operationId: syncVasTransaction
+      summary: Sync VAS Transaction
+      description: Sync VAS transaction status from SafeHaven
+      tags: [VAS]
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transaction status synced
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VASTransaction'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

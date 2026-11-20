@@ -7,6 +7,7 @@ import {
   Query,
   UseGuards,
   Req,
+  HttpCode,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -19,6 +20,8 @@ import {
 } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { RampService } from './ramp.service';
+import { PaymentCheckService } from './payment-check.service';
+import { StellarOfframpRelayService } from './stellar-offramp-relay.service';
 import {
   ConfirmStellarOfframpDto,
   offRampDto,
@@ -33,7 +36,11 @@ import { ApiLoggingInterceptor } from '../../common/interceptors/api-logging.int
 @ApiTags('Ramp')
 @Controller('ramp')
 export class RampController {
-  constructor(private readonly rampService: RampService) {}
+  constructor(
+    private readonly rampService: RampService,
+    private readonly paymentCheck: PaymentCheckService,
+    private readonly stellarRelay: StellarOfframpRelayService,
+  ) {}
 
   @Get('resolve-account')
   @ApiOperation({
@@ -60,6 +67,12 @@ export class RampController {
     description:
       "Set to 'stellar' to resolve via Bitnob. Defaults to Flint for base/bsc.",
   })
+  @ApiQuery({
+    name: 'country',
+    required: false,
+    type: String,
+    description: 'NG (default), GH or KE. Non-NG always resolves via Bitnob.',
+  })
   @ApiResponse({
     status: 200,
     description: 'Account name resolved successfully',
@@ -70,8 +83,14 @@ export class RampController {
     @Query('bankCode') bankCode: string,
     @Query('accountNumber') accountNumber: string,
     @Query('network') network?: string,
+    @Query('country') country?: string,
   ) {
-    return this.rampService.resolveAccount(bankCode, accountNumber, network);
+    return this.rampService.resolveAccount(
+      bankCode,
+      accountNumber,
+      network,
+      country,
+    );
   }
 
   @Post('onramp')
@@ -165,6 +184,57 @@ export class RampController {
     );
   }
 
+  @Post('offramp/:reference/relay')
+  @HttpCode(200)
+  @UseGuards(AuthOrApiKeyGuard)
+  @UseInterceptors(ApiLoggingInterceptor)
+  @Throttle({ medium: { limit: 60, ttl: 600000 } })
+  @ApiBearerAuth('JWT-auth')
+  @ApiSecurity('API-Key')
+  @ApiOperation({
+    summary: 'Relay a Stellar off-ramp burn to Base',
+    description:
+      "For Stellar off-ramps served over CCTP: once the user's burn is confirmed, mints the USDC on Base (relayer pays gas) to the payout provider. Idempotent; clients poll it until state is 'minted'.",
+  })
+  @ApiResponse({ status: 200, description: 'Relay state' })
+  async relayStellarOfframp(@CurrentUser() user: any, @Param('reference') reference: string) {
+    return this.stellarRelay.relay(reference, user.id);
+  }
+
+  @Post('onramp/:reference/check')
+  @HttpCode(200)
+  @UseGuards(AuthOrApiKeyGuard)
+  @UseInterceptors(ApiLoggingInterceptor)
+  @Throttle({ medium: { limit: 20, ttl: 600000 } })
+  @ApiBearerAuth('JWT-auth')
+  @ApiSecurity('API-Key')
+  @ApiOperation({
+    summary: "Check an on-ramp payment now (\"I've made the transfer\")",
+    description:
+      'Asks the provider whether the NGN deposit arrived and, if so, settles the order exactly as the webhook would. Safe to call repeatedly.',
+  })
+  @ApiResponse({ status: 200, description: 'Check result' })
+  async checkOnramp(@CurrentUser() user: any, @Param('reference') reference: string) {
+    return this.paymentCheck.check('onramp', reference, user.id, user.isMerchant);
+  }
+
+  @Post('offramp/:reference/check')
+  @HttpCode(200)
+  @UseGuards(AuthOrApiKeyGuard)
+  @UseInterceptors(ApiLoggingInterceptor)
+  @Throttle({ medium: { limit: 20, ttl: 600000 } })
+  @ApiBearerAuth('JWT-auth')
+  @ApiSecurity('API-Key')
+  @ApiOperation({
+    summary: "Check an off-ramp deposit now (\"I've made the transfer\")",
+    description:
+      'Asks Bitnob / SafeHaven for the latest state of the order and applies it exactly as the webhook would. Safe to call repeatedly.',
+  })
+  @ApiResponse({ status: 200, description: 'Check result' })
+  async checkOfframp(@CurrentUser() user: any, @Param('reference') reference: string) {
+    return this.paymentCheck.check('offramp', reference, user.id, user.isMerchant);
+  }
+
   @Get('offramp/:reference')
   @UseGuards(AuthOrApiKeyGuard)
   @UseInterceptors(ApiLoggingInterceptor)
@@ -214,7 +284,8 @@ export class RampController {
   @ApiSecurity('API-Key')
   @ApiOperation({
     summary: 'List reconciliation records for your cash-outs',
-    description: 'Optional filters: status (off-ramp state), result (e.g. MATCHED, UNDERPAID, TIMED_OUT), limit, skip.',
+    description:
+      'Optional filters: status (off-ramp state), result (e.g. MATCHED, UNDERPAID, TIMED_OUT), limit, skip.',
   })
   async listOfframpReconciliations(
     @CurrentUser() user: any,

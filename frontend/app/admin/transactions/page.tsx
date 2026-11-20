@@ -1,454 +1,256 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { Suspense, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { format } from "date-fns";
-import {
-  Search,
-  ArrowUpRight,
-  ArrowDownLeft,
-  RefreshCcw,
-  CheckCircle2,
-  Clock,
-  XCircle,
-  Activity,
-  Handshake,
-  Building2,
-  Banknote,
-  Zap,
-  TrendingUp,
-  Wallet,
-  AlertTriangle,
-} from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Search, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { adminApi, AdminPlatformTransactionsResponse } from "@/lib/api";
+import { CopyableId, DataTable, FilterBar, Money, PageHeader, Pagination, SegmentedTabs, SelectField, StatusBadge, StatusTrack, TabPanel, type Column } from "@/components/ui-shared";
+import { SummaryStrip } from "@/components/admin/transactions/SummaryStrip";
+import { TransactionPanel } from "@/components/admin/transactions/TransactionPanel";
 import { TransactionsOverview } from "@/components/admin/transactions/TransactionsOverview";
-import { useDebounce } from "@/lib/hooks/use-debounce";
+import { TransferLogsPanel } from "@/components/admin/transactions/TransferLogsPanel";
+import { HealthPanel } from "@/components/admin/tracker/HealthPanel";
+import { FAILED_TAB, FILTER_STATUSES, STUCK_TAB, TRANSFER_LOGS_TAB, amountCurrency, isKnownTab, trackKindFor, transactionTypeLabel } from "@/components/admin/transactions/labels";
+import { adminApi, type PlatformTransaction } from "@/lib/api";
+import { useAdminSummary } from "@/lib/hooks/use-admin-overview";
+import { useAuthStore } from "@/lib/store";
 
-type TabType = "all" | "onramp" | "offramp" | "swap" | "otc" | "bank_transfer" | "vas" | "merchant";
 type SummaryPeriod = "today" | "7d" | "30d" | "90d" | "all";
 
+const PERIODS: Array<{ value: SummaryPeriod; label: string }> = [
+  { value: "today", label: "Today" },
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "90d", label: "Last 90 days" },
+  { value: "all", label: "All time" },
+];
+
+const STATUS_OPTIONS = [{ value: "all", label: "All statuses" }, ...FILTER_STATUSES.map((s) => ({ value: s, label: s.charAt(0) + s.slice(1).toLowerCase() }))];
+const CURRENCY_OPTIONS = ["NGN", "KES", "GHS", "USD", "USDC", "USDT", "CNGN"].map((c) => ({ value: c, label: c }));
+
+const TABS = [
+  { value: "all", label: "All" },
+  { value: "onramp", label: "Onramp" },
+  { value: "offramp", label: "Offramp" },
+  { value: "swap", label: "Swap" },
+  { value: "otc", label: "OTC" },
+  { value: "bank_transfer", label: "Bank transfer" },
+  { value: "vas", label: "VAS" },
+  { value: "merchant", label: "Merchant" },
+  { value: STUCK_TAB, label: "Stuck" },
+  { value: FAILED_TAB, label: "Failed" },
+  { value: TRANSFER_LOGS_TAB, label: "Transfer logs" },
+];
+
+/**
+ * `?q=<reference>` (top-bar Trace search, Bitnob panel), `?status=FAILED` (Needs attention) and `?tab=` open this page already
+ * filtered. The content remounts when they change, so following a link while already here still works.
+ */
 export default function AdminTransactionsPage() {
-  const [searchTerm, setSearchTerm] = useState("");
+  return (
+    <Suspense fallback={null}>
+      <TransactionsFromUrl />
+    </Suspense>
+  );
+}
+
+function TransactionsFromUrl() {
+  const params = useSearchParams();
+  const q = params?.get("q")?.trim() ?? "";
+  const status = (params?.get("status") ?? "").toUpperCase();
+  const tabParam = params?.get("tab") ?? "";
+  const initialStatus = FILTER_STATUSES.includes(status) ? status : "all";
+  const initialTab = isKnownTab(tabParam) ? tabParam : "all";
+  return <TransactionsContent key={`${q}|${initialStatus}|${initialTab}`} initialSearch={q} initialStatus={initialStatus} initialTab={initialTab} />;
+}
+
+function TransactionsContent({ initialSearch, initialStatus, initialTab }: { initialSearch: string; initialStatus: string; initialTab: string }) {
+  const token = useAuthStore((s) => s.token);
+  const [tab, setTab] = useState(initialTab);
+  const [period, setPeriod] = useState<SummaryPeriod>("30d");
+  const [draft, setDraft] = useState(initialSearch);
+  const [search, setSearch] = useState(initialSearch);
+  const [status, setStatus] = useState(initialStatus);
+  const [currency, setCurrency] = useState("all");
   const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [activeTab, setActiveTab] = useState<TabType>("all");
-  const [summaryPeriod, setSummaryPeriod] = useState<SummaryPeriod>("all");
-  const txTableRef = useRef<HTMLDivElement>(null);
-  const limit = 10;
+  const [pageSize, setPageSize] = useState(10);
+  const [selected, setSelected] = useState<PlatformTransaction | null>(null);
 
-  const debouncedSearch = useDebounce(searchTerm, 400);
+  const summary = useAdminSummary(period);
+  const showingLogs = tab === TRANSFER_LOGS_TAB;
+  const showingHealth = tab === STUCK_TAB || tab === FAILED_TAB;
+  const showingList = !showingLogs && !showingHealth;
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin-transactions", page, statusFilter, activeTab, debouncedSearch],
-    queryFn: async () => {
-      const { data } = await adminApi.getTransactions(
-        page,
-        limit,
-        statusFilter === "all" ? undefined : statusFilter,
-        activeTab === "all" ? undefined : activeTab,
-        debouncedSearch || undefined,
-      );
-      return data;
-    },
+  const list = useQuery({
+    queryKey: ["admin-transactions", page, pageSize, status, tab, search, currency],
+    queryFn: async () => (await adminApi.getTransactions(page, pageSize, status === "all" ? undefined : status, tab === "all" ? undefined : tab, search || undefined, currency === "all" ? undefined : currency)).data,
+    enabled: !!token && showingList,
   });
 
-  const { data: summary } = useQuery({
-    queryKey: ["admin-transactions-summary", summaryPeriod],
-    queryFn: async () => {
-      const { data } = await adminApi.getTransactionsSummary(summaryPeriod);
-      return data;
+  const reset = () => setPage(1);
+  const submitSearch = (e: FormEvent) => {
+    e.preventDefault();
+    setSearch(draft.trim());
+    reset();
+  };
+
+  const columns: Column<PlatformTransaction>[] = [
+    { key: "ref", header: "Reference", cell: (t) => <span onClick={(e) => e.stopPropagation()}><CopyableId value={t.reference} label="reference" /></span> },
+    { key: "who", header: "Who", cell: (t) => <span className="block max-w-56 truncate" title={t.user ?? t.merchant ?? undefined}>{t.user ?? t.merchant ?? "System"}</span> },
+    { key: "type", header: "Type", cell: (t) => transactionTypeLabel(t.type) },
+    {
+      key: "amount",
+      header: "Amount",
+      align: "right",
+      cell: (t) => {
+        const amountCurrencyCode = amountCurrency(t);
+        return <Money value={String(t.amount)} currency={amountCurrencyCode} maxFraction={amountCurrencyCode === "NGN" ? 2 : 6} minFraction={2} />;
+      },
     },
-  });
+    { key: "currency", header: "Currency", cell: (t) => t.currency?.toUpperCase() ?? "—" },
+    {
+      key: "status",
+      header: "Status",
+      cell: (t) => {
+        const kind = trackKindFor(t.type);
+        return (
+          <span className="inline-flex items-center gap-3">
+            <StatusBadge status={t.status} />
+            {kind ? <StatusTrack kind={kind} status={t.status} compact /> : null}
+          </span>
+        );
+      },
+    },
+    {
+      key: "date",
+      header: "Date",
+      cell: (t) => {
+        const d = new Date(t.createdAt);
+        return <span className="text-(--c-muted)" title={t.createdAt}>{Number.isNaN(d.getTime()) ? t.createdAt : format(d, "MMM d, HH:mm")}</span>;
+      },
+      className: "whitespace-nowrap",
+    },
+  ];
 
-  const handleTabChange = (val: string) => {
-    setActiveTab(val as TabType);
-    setPage(1);
-  };
-
-  const handleTileClick = useCallback((tab: TabType) => {
-    setActiveTab(tab);
-    setPage(1);
-    setTimeout(() => {
-      txTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
-  }, []);
-
-  const getStatusBadge = (status: string) => {
-    switch (status.toUpperCase()) {
-      case "COMPLETED":
-        return (
-          <Badge className="bg-green-100 text-green-700 hover:bg-green-100 flex items-center gap-1 w-fit">
-            <CheckCircle2 className="h-3 w-3" /> Completed
-          </Badge>
-        );
-      case "PENDING":
-        return (
-          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 flex items-center gap-1 w-fit">
-            <Clock className="h-3 w-3" /> Pending
-          </Badge>
-        );
-      case "FAILED":
-        return (
-          <Badge className="bg-red-100 text-red-700 hover:bg-red-100 flex items-center gap-1 w-fit">
-            <XCircle className="h-3 w-3" /> Failed
-          </Badge>
-        );
-      case "REJECTED":
-      case "REVERSED":
-        return (
-          <Badge className="bg-red-100 text-red-700 hover:bg-red-100 flex items-center gap-1 w-fit">
-            <XCircle className="h-3 w-3" /> {status.toUpperCase() === "REVERSED" ? "Reversed" : "Rejected"}
-          </Badge>
-        );
-      case "EXPIRED":
-        return (
-          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 flex items-center gap-1 w-fit">
-            <Clock className="h-3 w-3" /> Expired
-          </Badge>
-        );
-      case "PARTIAL":
-        return (
-          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 flex items-center gap-1 w-fit">
-            <AlertTriangle className="h-3 w-3" /> Partial
-          </Badge>
-        );
-      case "REFUNDED":
-        return (
-          <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-100 flex items-center gap-1 w-fit">
-            <RefreshCcw className="h-3 w-3" /> Refunded
-          </Badge>
-        );
-      default:
-        return <Badge variant="outline" className="flex items-center gap-1 w-fit">{status}</Badge>;
-    }
-  };
-
-  const getTypeBadge = (type: string) => {
-    switch (type) {
-      case "onramp":
-        return (
-          <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 flex items-center gap-1 w-fit">
-            <ArrowDownLeft className="h-3 w-3" /> Onramp
-          </Badge>
-        );
-      case "offramp":
-        return (
-          <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 flex items-center gap-1 w-fit">
-            <ArrowUpRight className="h-3 w-3" /> Offramp
-          </Badge>
-        );
-      case "swap":
-        return (
-          <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 flex items-center gap-1 w-fit">
-            <RefreshCcw className="h-3 w-3" /> Swap
-          </Badge>
-        );
-      case "otc":
-        return (
-          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 flex items-center gap-1 w-fit">
-            <Handshake className="h-3 w-3" /> OTC
-          </Badge>
-        );
-      case "merchant_onramp":
-        return (
-          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 flex items-center gap-1 w-fit">
-            <Building2 className="h-3 w-3" /> Merchant Onramp
-          </Badge>
-        );
-      case "merchant_offramp":
-        return (
-          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 flex items-center gap-1 w-fit">
-            <Building2 className="h-3 w-3" /> Merchant Offramp
-          </Badge>
-        );
-      case "merchant_swap":
-        return (
-          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 flex items-center gap-1 w-fit">
-            <Building2 className="h-3 w-3" /> Merchant Swap
-          </Badge>
-        );
-      default:
-        return <Badge variant="outline">{type}</Badge>;
-    }
-  };
+  const periodLabel = PERIODS.find((p) => p.value === period)?.label.toLowerCase() ?? period;
+  const hasFilter = !!search || status !== "all" || currency !== "all" || tab !== "all";
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Transactions Oversight</h1>
-          <p className="text-muted-foreground">
-            Monitor and manage all platform-wide onramp, offramp, and swap transactions.
-          </p>
-        </div>
-        <Select value={summaryPeriod} onValueChange={(v) => setSummaryPeriod(v as SummaryPeriod)}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="All time" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="today">Today</SelectItem>
-            <SelectItem value="7d">Last 7 Days</SelectItem>
-            <SelectItem value="30d">Last 30 Days</SelectItem>
-            <SelectItem value="90d">Last 90 Days</SelectItem>
-            <SelectItem value="all">All Time</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Transactions"
+        description="Every payment on the platform, with the summary for the period you pick."
+        actions={<SelectField label="Summary period" value={period} options={PERIODS} onChange={(e) => setPeriod(e.target.value as SummaryPeriod)} />}
+      />
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Volume</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₦{(summary?.netVolume || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Onramp minus Offramp</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{(summary?.totalCount || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Success rate: {summary?.successRate || 0}%</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Fees Collected</CardTitle>
-            <Wallet className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₦{(summary?.fees?.total || 0).toLocaleString()}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Volume</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₦{(summary?.totalVolume || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Across all types</p>
-          </CardContent>
-        </Card>
-      </div>
+      <SummaryStrip summary={summary.data} isLoading={summary.isLoading} isError={summary.isError} periodLabel={periodLabel} />
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="border-l-4 border-l-blue-500 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleTileClick("onramp")}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Onramp</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">₦{(summary?.onramp?.totalAmount || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {summary?.onramp?.count || 0} txns · ₦{(summary?.onramp?.totalFees || 0).toLocaleString()} fees
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-purple-500 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleTileClick("offramp")}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Offramp</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">₦{(summary?.offramp?.totalAmount || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {summary?.offramp?.count || 0} txns · ₦{(summary?.offramp?.totalFees || 0).toLocaleString()} fees
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-indigo-500 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleTileClick("swap")}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Swap</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">₦{(summary?.swap?.totalFromAmount || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {summary?.swap?.count || 0} txns · ₦{(summary?.swap?.totalFees || 0).toLocaleString()} fees
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-orange-500 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleTileClick("bank_transfer")}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Bank Transfer</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">₦{(summary?.bankTransfer?.totalAmount || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {summary?.bankTransfer?.count || 0} txns · ₦{(summary?.bankTransfer?.totalFees || 0).toLocaleString()} fees
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-amber-500 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleTileClick("otc")}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">OTC</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">₦{(summary?.otc?.totalAmount || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {summary?.otc?.count || 0} txns · ₦{(summary?.otc?.totalFees || 0).toLocaleString()} fees
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-cyan-500 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => handleTileClick("vas")}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">VAS</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">₦{(summary?.vas?.totalAmount || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {summary?.vas?.count || 0} txns · ₦{(summary?.vas?.totalFees || 0).toLocaleString()} fees
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <div>
+        <SegmentedTabs
+          label="Transaction type"
+          idPrefix="tx"
+          tabs={TABS}
+          value={tab}
+          onChange={(v) => {
+            setTab(v);
+            reset();
+          }}
+        />
 
-      {summary?.fees && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Fee Breakdown</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Provider Fee</p>
-                <p className="text-lg font-bold">₦{(summary.fees.provider_fee || 0).toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">VAT</p>
-                <p className="text-lg font-bold">₦{(summary.fees.vat || 0).toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Stamp Duty</p>
-                <p className="text-lg font-bold">₦{(summary.fees.stamp_duty || 0).toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Total Fees</p>
-                <p className="text-lg font-bold text-green-600">₦{(summary.fees.total || 0).toLocaleString()}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+        <TabPanel value={TRANSFER_LOGS_TAB} current={tab} idPrefix="tx">
+          <TransferLogsPanel />
+        </TabPanel>
+        <TabPanel value={STUCK_TAB} current={tab} idPrefix="tx">
+          <HealthPanel kind="stuck" />
+        </TabPanel>
+        <TabPanel value={FAILED_TAB} current={tab} idPrefix="tx">
+          <HealthPanel kind="failed" />
+        </TabPanel>
 
-      <TransactionsOverview />
-
-      <div ref={txTableRef} className="scroll-mt-4">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Global Transactions Log</CardTitle>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Search ref or user..."
-                  className="w-[200px] lg:w-[300px] pl-8 h-9"
-                  value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+        {showingList ? (
+          <div role="tabpanel" id={`tx-panel-${tab}`} aria-labelledby={`tx-tab-${tab}`} className="space-y-3 pt-3">
+            <FilterBar label="Filter transactions">
+              <form onSubmit={submitSearch} role="search" className="relative w-full max-w-sm">
+                <Search aria-hidden className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-(--c-muted)" />
+                <input
+                  type="text"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="Find by reference or user"
+                  aria-label="Find by reference or user"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="h-8 w-full rounded-(--c-radius) border border-(--c-line) bg-(--c-field) pr-8 pl-8 placeholder:text-(--c-muted) focus-visible:border-(--c-signal) focus-visible:outline-none"
                 />
-              </div>
-              <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val); setPage(1); }}>
-                <SelectTrigger className="w-[150px] h-9">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="COMPLETED">Completed</SelectItem>
-                  <SelectItem value="PENDING">Pending</SelectItem>
-                  <SelectItem value="PROCESSING">Processing</SelectItem>
-                  <SelectItem value="FAILED">Failed</SelectItem>
-                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-            <TabsList className="mb-4">
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="onramp">Onramp</TabsTrigger>
-              <TabsTrigger value="offramp">Offramp</TabsTrigger>
-              <TabsTrigger value="swap">Swap</TabsTrigger>
-              <TabsTrigger value="otc">OTC</TabsTrigger>
-              <TabsTrigger value="bank_transfer">Bank Transfer</TabsTrigger>
-              <TabsTrigger value="vas">VAS</TabsTrigger>
-              <TabsTrigger value="merchant">Merchant</TabsTrigger>
-            </TabsList>
-          </Tabs>
+                {draft || search ? (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => {
+                      setDraft("");
+                      setSearch("");
+                      reset();
+                    }}
+                    className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-1 text-(--c-muted) hover:text-(--c-text) focus-visible:outline-2 focus-visible:outline-(--c-signal)"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                ) : null}
+              </form>
+              <SelectField
+                label="Status"
+                value={status}
+                options={STATUS_OPTIONS}
+                onChange={(e) => {
+                  setStatus(e.target.value);
+                  reset();
+                }}
+              />
+              <SelectField
+                label="Currency"
+                value={currency}
+                options={[{ value: "all", label: "All currencies" }, ...CURRENCY_OPTIONS]}
+                onChange={(e) => { setCurrency(e.target.value); reset(); }}
+              />
+            </FilterBar>
 
-          <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 border-b">
-                <tr>
-                  <th className="p-4 text-left font-medium">Reference</th>
-                  <th className="p-4 text-left font-medium">User</th>
-                  <th className="p-4 text-left font-medium">Type</th>
-                  <th className="p-4 text-left font-medium">Amount</th>
-                  <th className="p-4 text-left font-medium">Status</th>
-                  <th className="p-4 text-left font-medium">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-muted-foreground animate-pulse">
-                      Loading transactions...
-                    </td>
-                  </tr>
-                ) : !data?.data?.length ? (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                      No transactions found.
-                    </td>
-                  </tr>
-                ) : (
-                  data.data.map((tx) => (
-                    <tr key={tx.id} className="border-b hover:bg-muted/50 transition-colors">
-                      <td className="p-4 font-mono text-xs">{tx.reference}</td>
-                      <td className="p-4">{tx.user ?? tx.merchant ?? "System"}</td>
-                      <td className="p-4">{getTypeBadge(tx.type)}</td>
-                      <td className="p-4 font-medium">₦{tx.amount.toLocaleString()}</td>
-                      <td className="p-4">{getStatusBadge(tx.status)}</td>
-                      <td className="p-4 text-muted-foreground">{format(new Date(tx.createdAt), "MMM d, HH:mm")}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <DataTable
+              caption="Transactions"
+              columns={columns}
+              rows={list.data?.data}
+              getRowId={(t) => `${t.type}-${t.id}`}
+              isLoading={list.isLoading}
+              error={list.error as { message?: string } | null}
+              errorTitle="Couldn't load transactions"
+              onRetry={() => list.refetch()}
+              emptyTitle={hasFilter ? "No transactions match these filters" : "No transactions yet"}
+              emptyHint={hasFilter ? "Try a different status, type or reference." : undefined}
+              onRowClick={setSelected}
+              footer={
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={list.data?.pagination?.total ?? 0}
+                  onPageChange={setPage}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    reset();
+                  }}
+                  disabled={list.isFetching}
+                />
+              }
+            />
           </div>
-
-          {data?.pagination && data.pagination.totalPages > 1 && (
-            <div className="flex items-center justify-end space-x-2 py-4">
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
-                Previous
-              </Button>
-              <div className="text-sm font-medium">Page {page} of {data.pagination.totalPages} ({data.pagination.total} total)</div>
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(data.pagination.totalPages, p + 1))} disabled={page === data.pagination.totalPages}>
-                Next
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        ) : null}
       </div>
+
+      <section aria-label="Volume over time" className="space-y-2">
+        <h2 className="font-medium">Volume over time</h2>
+        <TransactionsOverview />
+      </section>
+
+      <TransactionPanel tx={selected} onClose={() => setSelected(null)} />
     </div>
   );
 }

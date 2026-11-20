@@ -1,0 +1,165 @@
+---
+title: "Error Codes"
+description: "AutoRamp API error codes and handling"
+---
+
+AutoRamp API uses standard HTTP status codes and returns structured error responses.
+
+## Error Response Format
+
+```json
+{
+  "statusCode": 400,
+  "message": "Error description",
+  "error": "Bad Request"
+}
+```
+
+## HTTP Status Codes
+
+| Code | Description |
+|------|-------------|
+| `200` | Success |
+| `201` | Created |
+| `400` | Bad Request — Invalid input or validation error |
+| `401` | Unauthorized — Missing or invalid authentication |
+| `403` | Forbidden — Insufficient permissions |
+| `404` | Not Found — Resource does not exist |
+| `409` | Conflict — Resource already exists |
+| `422` | Unprocessable Entity — Business logic error |
+| `429` | Too Many Requests — Rate limit exceeded |
+| `500` | Internal Server Error |
+| `502` | Bad Gateway — Upstream provider error |
+
+## Common Errors
+
+### 400 — Validation Errors
+
+```json
+{
+  "statusCode": 400,
+  "message": "amount must be a positive number",
+  "error": "Bad Request"
+}
+```
+
+### 401 — Authentication Errors
+
+```json
+{
+  "statusCode": 401,
+  "message": "Unauthorized",
+  "error": "Unauthorized"
+}
+```
+
+### 403 — Permission Errors
+
+```json
+{
+  "statusCode": 403,
+  "message": "Merchant account not verified",
+  "error": "Forbidden"
+}
+```
+
+### 429 — Rate Limiting
+
+```json
+{
+  "statusCode": 429,
+  "message": "Too Many Requests",
+  "error": "Too Many Requests"
+}
+```
+
+## Business Logic Errors
+
+### Insufficient Funds
+
+```json
+{
+  "statusCode": 422,
+  "message": "Insufficient balance for this transfer",
+  "error": "Unprocessable Entity"
+}
+```
+
+### Invalid Bank Details
+
+```json
+{
+  "statusCode": 400,
+  "message": "Invalid bank code or account number",
+  "error": "Bad Request"
+}
+```
+
+### Provider Error
+
+```json
+{
+  "statusCode": 502,
+  "message": "Bank provider is currently unavailable",
+  "error": "Bad Gateway"
+}
+```
+
+## Retry Strategy
+
+<Tabs>
+
+<Tab title="JavaScript">
+
+```javascript
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    const response = await fetch(url, options);
+    
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('Retry-After') || 1;
+      await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+      continue;
+    }
+    
+    if (response.status >= 500) {
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+      continue;
+    }
+    
+    return response;
+  }
+  
+  throw new Error('Max retries exceeded');
+}
+```
+
+</Tab>
+
+<Tab title="Python">
+
+```python
+import time
+import requests
+
+def fetch_with_retry(url, headers, json_data, max_retries=3):
+    for i in range(max_retries):
+        response = requests.post(url, headers=headers, json=json_data)
+        
+        if response.status_code == 429:
+            retry_after = int(response.headers.get('Retry-After', 1))
+            time.sleep(retry_after)
+            continue
+        
+        if response.status_code >= 500:
+            time.sleep(2 ** i)
+            continue
+        
+        return response
+    
+    raise Exception('Max retries exceeded')
+```
+
+</Tab>
+
+</Tabs>

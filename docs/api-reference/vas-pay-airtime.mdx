@@ -1,0 +1,49 @@
+---
+title: "Purchase Airtime"
+description: "Purchase mobile airtime for any network"
+openapi: POST /vas/pay/airtime
+---
+
+## Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `serviceCategoryId` | string | Yes | The `_id` of the airtime provider category (e.g., MTN, Airtel) |
+| `amount` | number | Yes | Amount of airtime to purchase (NGN) |
+| `channel` | string | No | Channel: `WEB` (default), `POS`, or `ATM` |
+| `debitAccountNumber` | string | Yes | Your SafeHaven account number to debit |
+| `phoneNumber` | string | Yes | Beneficiary phone number |
+| `externalReference` | string | No | Your unique reference for tracking |
+| `statusUrl` | string | No | Callback URL for status updates |
+
+### Example
+
+```json
+{
+  "serviceCategoryId": "64f1a2b3c4d5e6f7a8b9c0e1",
+  "amount": 500,
+  "channel": "WEB",
+  "debitAccountNumber": "0123456789",
+  "phoneNumber": "08012345678",
+  "externalReference": "airtime_txn_123456"
+}
+```
+
+## Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "transactionId": "64f1a2b3c4d5e6f7a8b9c0f1",
+    "reference": "txn_ref_abc123def456",
+    "status": "PROCESSING"
+  }
+}
+```
+
+## Notes
+
+- Unlike data bundles, airtime uses a custom `amount` — no `bundleCode` needed.
+- We recommend adding a "Confirm Phone Number" step in your UI to prevent sending airtime to the wrong number.
+- Use [GET /vas/transactions/:id](/api-reference/vas-get-transaction) or [POST /vas/transactions/:id/sync](/api-reference/vas-sync-transaction) to check the final status.

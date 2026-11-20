@@ -1,4 +1,5 @@
 import {
+  HttpException,
   Injectable,
   ExecutionContext,
   UnauthorizedException,
@@ -40,17 +41,26 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   /**
-   * Override handleRequest to provide better error messages
+   * Override handleRequest to provide better error messages.
+   *
+   * A missing/expired/invalid token is normal client behaviour (logged-out
+   * browsers, stale sessions), so it is logged at debug level on one line.
+   * Only genuinely unexpected errors are logged as errors, with a stack.
    */
   handleRequest(err: any, user: any, info: any) {
-    // You can throw an exception based on either "info" or "err" arguments
     if (err || !user) {
-      // Log details to help debug local issues
-      this.logger.error('JWT Auth Guard Error:', {
-        err,
-        info: info?.message || info,
-        user: user ? 'exists' : 'null/false',
-      });
+      const expected =
+        !err || (err instanceof HttpException && err.getStatus() < 500);
+      if (expected) {
+        this.logger.debug(
+          `Request rejected: ${err?.message ?? info?.message ?? info ?? 'no user'}`,
+        );
+      } else {
+        this.logger.error(
+          `JWT auth failed unexpectedly: ${err?.message ?? err}`,
+          err?.stack,
+        );
+      }
 
       throw err || new UnauthorizedException('Invalid or missing token');
     }

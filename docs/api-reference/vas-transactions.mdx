@@ -1,0 +1,49 @@
+---
+title: "Get VAS Transactions"
+description: "Get paginated list of VAS transaction history"
+openapi: GET /vas/transactions
+---
+
+## Query Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `page` | number | No | 1 | Page number |
+| `limit` | number | No | 10 | Items per page (max 100) |
+
+## Response
+
+```json
+{
+  "data": [
+    {
+      "id": "64f1a2b3c4d5e6f7a8b9c0f1",
+      "merchantId": "64f1a2b3c4d5e6f7a8b9c0a1",
+      "reference": "txn_ref_abc123def456",
+      "serviceType": "airtime",
+      "serviceCategoryId": "64f1a2b3c4d5e6f7a8b9c0e1",
+      "amount": 500,
+      "currency": "NGN",
+      "channel": "WEB",
+      "phoneNumber": "08012345678",
+      "debitAccountNumber": "0123456789",
+      "status": "COMPLETED",
+      "safehavenId": "sh_txn_789",
+      "createdAt": "2026-01-20T10:30:00.000Z",
+      "completedAt": "2026-01-20T10:31:15.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 25,
+    "totalPages": 3
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `serviceType` | `airtime`, `data`, `cable_tv`, or `utility` |
+| `status` | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, or `CANCELLED` |
+| `safehavenId` | SafeHaven's transaction ID — use this to sync status |

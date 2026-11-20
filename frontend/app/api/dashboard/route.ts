@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3003";
+import { backendBaseUrl } from "@/lib/server/backend-url";
+
 
 /**
  * Fetch the current USD/NGN rate from a public exchange-rate API.
@@ -36,7 +37,7 @@ function convertNgnToUsd(ngnAmount: number, rate: number | null): number {
 /**
  * AutoRamp Dashboard proxy — GET /api/dashboard
  *
- * Forwards to backend GET /data with the x-admin-email header.
+ * Forwards to backend GET /data with the admin's bearer token.
  * Same-origin, so the browser never hits backend CORS.
  * Backend status codes (including 401) are passed through untouched.
  *
@@ -44,22 +45,25 @@ function convertNgnToUsd(ngnAmount: number, rate: number | null): number {
  * current USD/NGN rate from the backend rate service.
  */
 export async function GET(request: NextRequest) {
-  const adminEmail = request.headers.get("x-admin-email")?.trim();
+  // The backend authorizes this with the admin's own JWT (role ADMIN). An email typed into a
+  // header proves nothing: anyone can send any email.
+  const authorization = request.headers.get("authorization");
 
-  if (!adminEmail) {
+  if (!authorization || !/^Bearer\s+\S+$/i.test(authorization)) {
     return NextResponse.json(
-      { statusCode: 401, message: "Missing x-admin-email header" },
+      { statusCode: 401, message: "Admin login required" },
       { status: 401 },
     );
   }
 
-  const targetUrl = `${BACKEND_URL}/data`;
+  const targetUrl = `${backendBaseUrl() || "http://localhost:3003"}/data`;
 
   try {
     const [dataResponse, usdNgnRate] = await Promise.all([
       axios.get(targetUrl, {
-        headers: { "x-admin-email": adminEmail },
+        headers: { Authorization: authorization },
         timeout: 15000,
+        maxRedirects: 0,
       }),
       fetchUsdNgnRate(),
     ]);
@@ -84,9 +88,15 @@ export async function GET(request: NextRequest) {
     );
   } catch (error: unknown) {
     if (axios.isAxiosError(error) && error.response) {
-      return NextResponse.json(error.response.data, {
-        status: error.response.status,
-      });
+      const status = error.response.status;
+      // Pass auth failures through; never relay arbitrary upstream bodies or internals.
+      if (status === 401 || status === 403) {
+        return NextResponse.json(
+          { statusCode: status, message: status === 401 ? "Admin login required" : "Admin access required" },
+          { status },
+        );
+      }
+      return NextResponse.json({ statusCode: 502, message: "Dashboard data is unavailable" }, { status: 502 });
     }
     console.error("[Data Proxy] Error:", error);
     return NextResponse.json(

@@ -80,7 +80,7 @@ export default function MerchantBankPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20 px-4 text-center space-y-6">
         <div className="h-16 w-16 rounded-full bg-amber-500/10 flex items-center justify-center">
-          <AlertTriangle className="h-8 w-8 text-amber-500" />
+          <AlertTriangle className="h-8 w-8 text-(--c-warn)" />
         </div>
         <div className="space-y-2 max-w-md">
           <h2 className="text-2xl font-bold">Banking Access Not Available</h2>
@@ -303,8 +303,8 @@ function SubAccountsTab() {
                 <div className="col-span-2 text-center">
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                     sub.autoSweep
-                      ? "bg-green-500/10 text-green-500 border border-green-500/20"
-                      : "bg-zinc-500/10 text-zinc-500 border border-zinc-500/20"
+                      ? "bg-green-500/10 text-(--c-ok) border border-green-500/20"
+                      : "bg-(--c-field) text-(--c-muted) border border-zinc-500/20"
                   }`}>
                     {sub.autoSweep ? "ON" : "OFF"}
                   </span>
@@ -563,14 +563,14 @@ interface TransferItem {
 function statusColor(status: string) {
   switch (status) {
     case "COMPLETED":
-      return "bg-green-500/10 text-green-500 border border-green-500/20";
+      return "bg-green-500/10 text-(--c-ok) border border-green-500/20";
     case "PENDING":
     case "PROCESSING":
-      return "bg-amber-500/10 text-amber-500 border border-amber-500/20";
+      return "bg-amber-500/10 text-(--c-warn) border border-amber-500/20";
     case "FAILED":
-      return "bg-red-500/10 text-red-500 border border-red-500/20";
+      return "bg-red-500/10 text-(--c-danger) border border-red-500/20";
     default:
-      return "bg-zinc-500/10 text-zinc-500 border border-zinc-500/20";
+      return "bg-(--c-field) text-(--c-muted) border border-zinc-500/20";
   }
 }
 

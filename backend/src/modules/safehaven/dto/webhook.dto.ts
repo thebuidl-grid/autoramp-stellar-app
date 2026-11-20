@@ -44,7 +44,8 @@ export class MFBWebhookDataDto {
 
   @ApiProperty()
   @IsString()
-  status: string;
+  @IsOptional()
+  status?: string;
 
   @ApiProperty()
   @IsString()

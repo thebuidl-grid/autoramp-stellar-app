@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, dev]
+  pull_request:
+    branches: [main, develop, dev]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: 'postgresql://dummy:dummy@localhost:5432/dummy'
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test -- --no-coverage
+
+      - name: Build
+        run: npm run build

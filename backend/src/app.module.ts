@@ -15,6 +15,8 @@ import { TransactionsModule } from './modules/admin/transactions/transactions.mo
 import { MerchantsModule } from './modules/merchants/merchants.module';
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
 import { MailModule } from './modules/mail/mail.module';
+import { UserAnalyticsModule } from './modules/user-analytics/user-analytics.module';
+import { WaitlistModule } from './modules/waitlist/waitlist.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
 import { SharedModule } from './shared/shared.module';
 import { BridgeModule } from './modules/bridge/bridge.module';
@@ -76,6 +78,8 @@ import { AuditModule } from './common/services/audit.module';
     SwapModule,
     RampModule,
     WebhookModule,
+    UserAnalyticsModule,
+    WaitlistModule,
     MerchantsModule,
     CloudinaryModule,
     MailModule,

@@ -1,0 +1,39 @@
+---
+title: "Get Sub-Account"
+description: "Get a single sub-account with live balance"
+openapi: GET /merchants/api/sub-accounts/{id}
+---
+
+## Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | The sub-account ID |
+
+## Response
+
+Returns the sub-account details including live balance fetched from the banking provider.
+
+```json
+{
+  "id": "sub_abc123",
+  "safehavenId": "64f1a2b3c4d5e6f7a8b9c0d1",
+  "bankCode": "058",
+  "accountNumber": "0123456789",
+  "accountName": "John Doe",
+  "accountBalance": 150000,
+  "bookBalance": 150000,
+  "status": "ACTIVE"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `id` | Sub-account ID |
+| `safehavenId` | Provider account ID |
+| `bankCode` | Bank code |
+| `accountNumber` | Bank account number |
+| `accountName` | Account holder name |
+| `accountBalance` | Current balance in NGN (live from provider) |
+| `bookBalance` | Book balance in NGN |
+| `status` | Account status |

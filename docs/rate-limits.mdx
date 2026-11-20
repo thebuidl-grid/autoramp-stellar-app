@@ -1,0 +1,87 @@
+---
+title: "Rate Limits"
+description: "Understand AutoRamp API rate limiting"
+---
+
+AutoRamp enforces rate limits to ensure fair usage and protect the API from abuse.
+
+## Default Rate Limits
+
+| Tier | Time Window | Max Requests |
+|------|-------------|--------------|
+| Short | 1 minute | 10 requests |
+| Medium | 10 minutes | 100 requests |
+| Long | 1 hour | 1,000 requests |
+
+## Per-Endpoint Limits
+
+| Endpoint | Limit | Window |
+|----------|-------|--------|
+| `POST /auth/signup` | 5 requests | 1 minute |
+| `POST /auth/signin` | 5 requests | 1 minute |
+| `POST /auth/otp/send` | 3 requests | 1 minute |
+| `POST /auth/otp/verify` | 10 requests | 1 minute |
+| `POST /ramp/onramp` | 20 requests | 10 minutes |
+| `POST /ramp/offramp` | 20 requests | 10 minutes |
+| All other endpoints | 100 requests | 10 minutes |
+
+## Handling Rate Limits
+
+When you exceed a rate limit, the API returns a `429 Too Many Requests` response.
+
+```json
+{
+  "statusCode": 429,
+  "message": "Too Many Requests",
+  "error": "Too Many Requests"
+}
+```
+
+## Best Practices
+
+1. **Cache responses** — Cache exchange rates and bank lists to reduce API calls
+2. **Implement exponential backoff** — Wait progressively longer between retries
+3. **Monitor rate limit headers** — Use the response headers to track your usage
+4. **Batch operations** — Where possible, batch multiple operations into single requests
+
+## Retry Strategy
+
+<CodeGroup>
+
+```javascript JavaScript
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    const response = await fetch(url, options);
+    
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('Retry-After') || 1;
+      await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+      continue;
+    }
+    
+    return response;
+  }
+  
+  throw new Error('Max retries exceeded');
+}
+```
+
+```python Python
+import time
+import requests
+
+def fetch_with_retry(url, headers, json_data, max_retries=3):
+    for i in range(max_retries):
+        response = requests.post(url, headers=headers, json=json_data)
+        
+        if response.status_code == 429:
+            retry_after = int(response.headers.get('Retry-After', 1))
+            time.sleep(retry_after)
+            continue
+        
+        return response
+    
+    raise Exception('Max retries exceeded')
+```
+
+</CodeGroup>

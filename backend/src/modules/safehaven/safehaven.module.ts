@@ -8,6 +8,7 @@ import { WebhookHandlers } from './webhook-handlers.service';
 import { NotificationsModule } from '../merchants/notifications/notifications.module';
 import { MailModule } from '../mail/mail.module';
 import { DatabaseModule } from '../../database/database.module';
+import { OfframpStateModule } from '../ramp/offramp-state.module';
 
 @Global()
 @Module({
@@ -18,6 +19,7 @@ import { DatabaseModule } from '../../database/database.module';
     JwtModule.register({}),
     NotificationsModule,
     MailModule,
+    OfframpStateModule,
   ],
   providers: [MFBService, WebhookHandlers, MFBWebhookService],
   exports: [MFBService, WebhookHandlers, MFBWebhookService],

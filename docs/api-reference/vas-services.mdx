@@ -1,0 +1,48 @@
+---
+title: "VAS Services"
+description: "Get all available Value-Added Services (Airtime, Data, Cable TV, Utility)"
+openapi: GET /vas/services
+---
+
+## Response
+
+Returns all available VAS service categories from SafeHaven.
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "64f1a2b3c4d5e6f7a8b9c0d1",
+      "name": "Airtime",
+      "slug": "airtime",
+      "description": "Mobile airtime top-up"
+    },
+    {
+      "_id": "64f1a2b3c4d5e6f7a8b9c0d2",
+      "name": "Data",
+      "slug": "data",
+      "description": "Mobile data bundle purchases"
+    },
+    {
+      "_id": "64f1a2b3c4d5e6f7a8b9c0d3",
+      "name": "Cable TV",
+      "slug": "cable-tv",
+      "description": "Cable TV subscriptions"
+    },
+    {
+      "_id": "64f1a2b3c4d5e6f7a8b9c0d4",
+      "name": "Utility",
+      "slug": "utility",
+      "description": "Electricity and utility bill payments"
+    }
+  ]
+}
+```
+
+Use the `_id` from the response to fetch categories and products for each service.
+
+## Next Steps
+
+1. Use the service `_id` to [get service categories](/api-reference/vas-categories) (providers like MTN, DSTV, etc.)
+2. Then [get products](/api-reference/vas-products) for a specific category (bundles, bouquets)

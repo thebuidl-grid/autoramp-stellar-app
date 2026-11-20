@@ -1,0 +1,51 @@
+---
+title: "Purchase Cable TV"
+description: "Purchase a cable TV subscription (DSTV, GOTV, Startimes)"
+openapi: POST /vas/pay/cable-tv
+---
+
+## Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `serviceCategoryId` | string | Yes | The `_id` of the cable TV provider category |
+| `bundleCode` | string | Yes | The bouquet code from [GET /vas/categories/:id/products](/api-reference/vas-products) |
+| `amount` | number | Yes | Cost of the subscription (NGN) |
+| `channel` | string | No | Channel: `WEB` (default), `POS`, or `ATM` |
+| `debitAccountNumber` | string | Yes | Your SafeHaven account number to debit |
+| `cardNumber` | string | Yes | Customer's smartcard/IUC number |
+| `externalReference` | string | No | Your unique reference for tracking |
+
+### Example
+
+```json
+{
+  "serviceCategoryId": "64f1a2b3c4d5e6f7a8b9c0e2",
+  "bundleCode": "DSTV_PREMIUM",
+  "amount": 24500,
+  "channel": "WEB",
+  "debitAccountNumber": "0123456789",
+  "cardNumber": "12345678901234",
+  "externalReference": "cable_txn_123456"
+}
+```
+
+## Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "transactionId": "64f1a2b3c4d5e6f7a8b9c0f1",
+    "reference": "txn_ref_abc123def456",
+    "status": "PROCESSING"
+  }
+}
+```
+
+## Workflow
+
+1. Select provider → [GET /vas/services/:id/categories](/api-reference/vas-categories)
+2. Verify smartcard → [POST /vas/verify](/api-reference/vas-verify)
+3. Select bouquet → [GET /vas/categories/:id/products](/api-reference/vas-products)
+4. Pay → [POST /vas/pay/cable-tv](/api-reference/vas-pay-cable-tv) (this endpoint)

@@ -22,9 +22,7 @@ import {
 @ApiTags('Rates')
 @Controller('rates')
 export class RatesController {
-  constructor(
-    private readonly chainRates: ChainRateService,
-  ) {}
+  constructor(private readonly chainRates: ChainRateService) {}
 
   @Get('usd-ngn-rate')
   @ApiOperation({
@@ -32,15 +30,19 @@ export class RatesController {
   })
   @ApiQuery({ name: 'network', required: false, enum: RATE_NETWORKS })
   @ApiQuery({ name: 'direction', required: false, enum: ['onramp', 'offramp'] })
-  @ApiResponse({ status: 200, description: 'USD/NGN rate' })
+  @ApiQuery({ name: 'country', required: false, enum: ['NG', 'GH', 'KE'] })
+  @ApiResponse({ status: 200, description: 'USD/local-currency rate' })
   async getUsdNgnRate(
     @Query('network') network?: string,
     @Query('direction') direction?: string,
+    @Query('country') country?: string,
   ): Promise<{
     rate: number;
     network?: RateNetwork;
     direction?: RateDirection;
     source?: string;
+    country?: string;
+    currency?: string;
   }> {
     const net = (network || 'base').toLowerCase();
     if (!(RATE_NETWORKS as readonly string[]).includes(net)) {
@@ -52,7 +54,11 @@ export class RatesController {
     if (dir !== 'onramp' && dir !== 'offramp') {
       throw new BadRequestException('direction must be onramp or offramp');
     }
-    return this.chainRates.getRate(net as RateNetwork, dir as RateDirection);
+    return this.chainRates.getRate(
+      net as RateNetwork,
+      dir as RateDirection,
+      country,
+    );
   }
 
   @Get('estimate-ngn')

@@ -1,0 +1,52 @@
+---
+title: "Virtual Account"
+description: "Create virtual account (SafeHaven only)"
+openapi: POST /merchants/api/virtual-account
+---
+
+<Warning>
+This endpoint is only available for **SafeHaven** merchants. Pulse MFB merchants will receive a `400` error.
+</Warning>
+
+## Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `amount` | number | Yes | Amount in NGN |
+| `validFor` | number | No | Time-to-live in seconds (default: 3600) |
+| `externalReference` | string | No | Your unique reference |
+| `amountControl` | string | No | `Fixed`, `UnderPayment`, or `OverPayment` (default: `OverPayment`) |
+
+## Example
+
+```bash
+curl -X POST 	
+  https://api-autoramp.thebuidl.xyz/merchants/api/virtual-account \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 50000,
+    "validFor": 3600,
+    "externalReference": "ref-123456",
+    "amountControl": "OverPayment"
+  }'
+```
+
+## Amount Control Options
+
+| Value | Behavior |
+|-------|----------|
+| `Fixed` | Accepts only the exact amount |
+| `UnderPayment` | Accepts underpayments |
+| `OverPayment` | Accepts overpayments (default) |
+
+## Response
+
+```json
+{
+  "accountNumber": "1234567890",
+  "accountName": "VA-MyBusiness",
+  "bankName": "Safe Haven MFB",
+  "bankCode": "090286"
+}
+```

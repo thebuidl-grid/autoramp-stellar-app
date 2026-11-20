@@ -3,6 +3,16 @@ import { ConfigService } from '@nestjs/config';
 import * as cloudinary from 'cloudinary';
 import * as streamifier from 'streamifier';
 import axios from 'axios';
+import {
+  assertPublicHttpUrl,
+  createSsrfSafeAgents,
+  UnsafeUrlError,
+} from '../../common/security/ssrf.util';
+
+/** Only documents hosted on Cloudinary may be fetched through this service. */
+export const CLOUDINARY_HOSTS = ['cloudinary.com'];
+const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
+const safeAgents = createSsrfSafeAgents();
 
 @Injectable()
 export class CloudinaryService {
@@ -83,21 +93,39 @@ export class CloudinaryService {
     return this.cloudinaryV2.url(publicId, opts);
   }
 
+  /**
+   * Fetches a document from Cloudinary. The URL is validated as an https Cloudinary host (a
+   * `url.includes('cloudinary.com')` check let `https://evil.com/?x=cloudinary.com` through, which
+   * made this a full-read SSRF), redirects are not followed, the connection can only go to public
+   * addresses, and the size is capped.
+   */
+  private async fetchCloudinary(url: string) {
+    await assertPublicHttpUrl(url, { allowedHostSuffixes: CLOUDINARY_HOSTS });
+    return axios.get(url, {
+      responseType: 'arraybuffer',
+      timeout: 30000,
+      maxRedirects: 0,
+      maxContentLength: MAX_DOWNLOAD_BYTES,
+      maxBodyLength: MAX_DOWNLOAD_BYTES,
+      httpAgent: safeAgents.httpAgent,
+      httpsAgent: safeAgents.httpsAgent,
+    });
+  }
+
   async downloadResource(
     url: string,
   ): Promise<{ buffer: Buffer; contentType: string }> {
     try {
-      const response = await axios.get(url, {
-        responseType: 'arraybuffer',
-        timeout: 30000,
-      });
+      const response = await this.fetchCloudinary(url);
 
       return {
         buffer: Buffer.from(response.data),
-        contentType:
+        contentType: String(
           response.headers['content-type'] || 'application/octet-stream',
+        ),
       };
     } catch (err: any) {
+      if (err instanceof UnsafeUrlError) throw err;
       const status = err.response?.status;
 
       if (
@@ -110,14 +138,11 @@ export class CloudinaryService {
         );
 
         const pngUrl = url.replace('.pdf', '.png');
-        const response = await axios.get(pngUrl, {
-          responseType: 'arraybuffer',
-          timeout: 30000,
-        });
+        const response = await this.fetchCloudinary(pngUrl);
 
         return {
           buffer: Buffer.from(response.data),
-          contentType: response.headers['content-type'] || 'image/png',
+          contentType: String(response.headers['content-type'] || 'image/png'),
         };
       }
 

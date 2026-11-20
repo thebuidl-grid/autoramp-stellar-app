@@ -1,20 +1,37 @@
+import Link from "next/link";
+import { CurrentYear } from "./current-year";
+
+const links = [
+  { label: "Guide", href: "/guide" },
+  { label: "API Docs", href: "/docs" },
+  { label: "Privacy Policy", href: "/privacy-policy" },
+];
+
 function Footer() {
   return (
-    <footer className="py-8 px-6 border-t border-white/10">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center text-white/40 text-sm gap-3">
-          <a href="/api-docs" target="_blank">
-            API Documentation
+    <footer className="border-t border-white/5 px-3 py-6 sm:px-6">
+      <div className="mx-auto flex max-w-4xl flex-col items-center justify-between gap-3 text-sm text-white/40 sm:flex-row">
+        <nav className="flex items-center gap-6">
+          {links.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="transition-colors duration-300 hover:text-secondary"
+            >
+              {l.label}
+            </Link>
+          ))}
+          <a
+            href="https://t.me/+PJfVLZUFylFjZDhk"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition-colors duration-300 hover:text-secondary"
+          >
+            Telegram
           </a>
-          <a href="/terms-of-service" target="_blank">
-            Terms of Service
-          </a>
-          <a href="/privacy-policy" target="_blank">
-            Privacy Policy
-          </a>
-        </div>
-        <p className="text-sm text-white/40">
-          © 2025 AutoRamp. All rights reserved.
+        </nav>
+        <p>
+          © <CurrentYear /> AutoRamp. All rights reserved.
         </p>
       </div>
     </footer>

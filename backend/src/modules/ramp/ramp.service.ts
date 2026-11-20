@@ -1,3 +1,9 @@
+import { relayLegFields } from './cctp-relay-leg';
+import { currentChainNetwork } from '../../common/request-context';
+import {
+  resolveCountry,
+  virtualAccountReference,
+} from '../bitnob/bitnob-countries';
 import {
   Injectable,
   HttpException,
@@ -8,6 +14,11 @@ import {
   ConsoleLogger,
 } from '@nestjs/common';
 import { normalizeBridgeStatus } from '../bridge/bridge-status';
+import {
+  addressLabel,
+  getRampChain,
+  isValidAddressForChain,
+} from './ramp-chains';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
@@ -28,8 +39,16 @@ import { generateTrxReference } from '../../utils/reference.util';
 import { MFBService } from '../safehaven/safehaven.service';
 import { FiatProviderService } from '../providers/fiat-provider.service';
 import { UserLimitsService } from '../../config/user-limits.service';
-import { BitNobService, extractPayoutDeposit } from '../bitnob/bitnob.service';
+import {
+  BitNobService,
+  extractBitnobQuoteId,
+  extractPayoutDeposit,
+} from '../bitnob/bitnob.service';
 import { OfframpStateService } from './offramp-state.service';
+import { PayoutOrderRepository } from './payout-order.repository';
+import { SafehavenOfframpSettlementService } from './safehaven-offramp-settlement.service';
+import { SafehavenOnrampSettlementService } from './safehaven-onramp-settlement.service';
+import { StellarOfframpRelayService } from './stellar-offramp-relay.service';
 
 @Injectable()
 export class RampService {
@@ -54,6 +73,10 @@ export class RampService {
     private readonly userLimitsService: UserLimitsService,
     private readonly bitnobService: BitNobService,
     private readonly offrampState: OfframpStateService,
+    private readonly payoutOrders: PayoutOrderRepository,
+    private readonly safehavenSettlement: SafehavenOfframpSettlementService,
+    private readonly safehavenOnramp: SafehavenOnrampSettlementService,
+    private readonly stellarRelay: StellarOfframpRelayService,
   ) {
     this.apiUrl = (
       this.configService.get<string>('RAMP_API_URL') ||
@@ -99,14 +122,29 @@ export class RampService {
     bankCode: string,
     accountNumber: string,
     network?: string,
+    country?: string,
   ): Promise<any> {
-    if (network === 'stellar') {
-      const lookup = await this.bitnobService.accountLookup(
+    // Stellar, and any non-NG country on any network, resolves via Bitnob.
+    if (
+      network === 'stellar' ||
+      (country && resolveCountry(country).code !== 'NG')
+    ) {
+      const lookupCountry = resolveCountry(country).code;
+      const destinationType = await this.bitnobService.destinationTypeFor(
+        lookupCountry,
         bankCode,
-        accountNumber,
       );
+      // Mobile money (e.g. M-Pesa) has no account-name lookup: best effort, then fall back to the number.
+      const lookup = await this.bitnobService
+        .accountLookup(bankCode, accountNumber, lookupCountry, destinationType)
+        .catch((err) => {
+          if (destinationType === 'mobile_money') return null;
+          throw err;
+        });
       const accountName =
-        lookup?.data?.account_name || lookup?.data?.accountName;
+        lookup?.data?.account_name ||
+        lookup?.data?.accountName ||
+        (destinationType === 'mobile_money' ? accountNumber : undefined);
       if (!accountName) {
         throw new HttpException(
           'Bitnob account lookup did not return an account name',
@@ -154,211 +192,15 @@ export class RampService {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<any> {
-    if (dto.network === 'stellar') {
-      return this.stellarOnRamp(
-        id,
-        email,
-        isMerchant,
-        dto,
-        ipAddress,
-        userAgent,
-      );
-    }
-    if (!isOtcEnabled && !isMerchant) {
+    if (!isOtcEnabled && !isMerchant && dto.network !== 'stellar') {
       try {
         this.userLimitsService.validateAmount(email, dto.amount);
       } catch (error) {
         throw new BadRequestException(error.message);
       }
     }
-    try {
-      const reference = generateTrxReference(16, 'onr');
-
-      const webhookUrl = this.configService.get<string>('FLINT_WEBHOOK_URL');
-      const shWebhookUrl = this.configService.get<string>('SH_WEBHOOK_URL');
-
-      // If merchant, get the owner's user id for internal API calls
-      if (isMerchant) {
-        const merchant = await this.prisma.merchant.findUnique({
-          where: { id },
-          include: { user: true },
-        });
-        if (!merchant || !merchant.user) {
-          throw new HttpException(
-            'Merchant or merchant user not found',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-      }
-
-      const flintRequestBody = {
-        ...dto,
-        type: dto.type ?? 'on',
-        reference,
-        notifyUrl: webhookUrl || undefined,
-      };
-
-      this.logger.log(
-        `Initializing Flint onramp: ${JSON.stringify(flintRequestBody)}`,
-      );
-      this.logger.log(`Flint API URL: ${this.apiUrl}/v1/ramp/initialise`);
-
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.apiUrl}/v1/ramp/initialise`,
-          flintRequestBody,
-          {
-            headers: {
-              ...this.commonHeaders,
-              'Content-Type': 'application/json',
-            },
-            timeout: 30000,
-          },
-        ),
-      );
-
-      const flintData = response.data;
-      this.logger.log(`Flint onramp response: ${JSON.stringify(flintData)}`);
-
-      if (flintData?.status === 'failed' || flintData?.success === false) {
-        const errorMsg =
-          flintData?.message ||
-          flintData?.error?.message ||
-          'Failed to initialize ramp transaction';
-        this.logger.error(`Flint API returned error: ${errorMsg}`);
-        throw new HttpException(
-          `Flint initialization failed: ${errorMsg}`,
-          HttpStatus.BAD_GATEWAY,
-        );
-      }
-
-      // New: Generate MFB Virtual Account
-      let safehavenAccount: any = null;
-
-      if (isMerchant) {
-        // For merchants, use their fixed merchant bank account
-        const merchantAccount =
-          await this.prisma.merchantBankAccount.findUnique({
-            where: { merchantId: id },
-          });
-
-        if (!merchantAccount) {
-          throw new HttpException(
-            'Merchant bank account not found. Please setup your bank account in settings.',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-        safehavenAccount = merchantAccount;
-      } else {
-        // For regular users, create a dynamic virtual account (always MFB)
-        try {
-          const vaResult: any =
-            await this.fiatProviderService.createVirtualAccount({
-              validFor: 3600, // 1 hour
-              callbackUrl: shWebhookUrl || '',
-              amount: Number(dto.amount),
-              amountControl: 'OverPayment',
-            });
-          safehavenAccount = vaResult.data || vaResult;
-        } catch (vaError) {
-          this.logger.error('Virtual Account generation failed', vaError);
-        }
-      }
-
-      let transaction: any;
-      if (isMerchant) {
-        transaction = await this.prisma.merchantOnrampTransaction.create({
-          data: {
-            merchantId: id,
-            reference,
-            amount: dto.amount,
-            currency: 'NGN',
-            tokenType: 'CNGN',
-            status: 'PENDING',
-            paymentReference: flintData?.data?.transactionId || null,
-            destinationAddress: dto.destination.address,
-            network: dto.network,
-            notifyUrl: webhookUrl || null,
-            depositAccount: safehavenAccount?.accountNumber
-              ? {
-                  accountName: safehavenAccount.accountName,
-                  accountNumber: safehavenAccount.accountNumber,
-                  bankName: safehavenAccount.bankName || 'MFB MFB',
-                  bankCode: safehavenAccount.bankCode || '090286',
-                }
-              : flintData?.data?.depositAccount || null,
-            ipAddress: ipAddress || null,
-            userAgent: userAgent || null,
-          },
-        });
-      } else {
-        transaction = await this.prisma.onrampTransaction.create({
-          data: {
-            userId: id,
-            reference,
-            amount: dto.amount,
-            currency: 'NGN',
-            tokenType: 'CNGN',
-            status: 'PENDING',
-            flintTransactionId: flintData?.data?.transactionId || null,
-            destinationAddress: dto.destination.address,
-            network: dto.network,
-            notifyUrl: webhookUrl || null,
-            depositAccount: flintData?.data?.depositAccount || null,
-            safehavenAccount: safehavenAccount,
-            ipAddress: ipAddress || null,
-            userAgent: userAgent || null,
-          },
-        });
-
-        await this.prisma.transactionLog.create({
-          data: {
-            transactionType: 'onramp',
-            transactionId: transaction.id,
-            userId: id,
-            action: 'created',
-            newStatus: 'PENDING',
-            description: 'Onramp transaction initialized with MFB account',
-          },
-        });
-      }
-
-      await this.prisma.safeHavenStablestackLog.create({
-        data: {
-          transactionId: transaction.id,
-          type: 'ONRAMP',
-          stablestackPayload: {
-            request: flintRequestBody,
-            response: flintData,
-          } as any,
-          status: 'PENDING',
-        },
-      });
-
-      // Return MFB account instead of Stablestack account to the user
-      return {
-        ...flintData,
-        data: {
-          ...flintData.data,
-          depositAccount: safehavenAccount?.accountNumber
-            ? {
-                accountName: safehavenAccount.accountName,
-                accountNumber: safehavenAccount.accountNumber,
-                bankName: safehavenAccount.bankName || 'MFB MFB',
-                bankCode: safehavenAccount.bankCode || '999999',
-              }
-            : flintData.data.depositAccount,
-        },
-        databaseRecord: {
-          id: transaction.id,
-          reference: transaction.reference,
-          status: transaction.status,
-          createdAt: transaction.createdAt,
-        },
-      };
-    } catch (error) {
-      this.handleError('Failed to initialise onramp', error);
-    }
+    // base, bsc and stellar onramps are all served by Bitnob virtual accounts.
+    return this.bitnobOnRamp(id, email, isMerchant, dto, ipAddress, userAgent);
   }
 
   private async getOrCreateBitnobAccount(
@@ -368,14 +210,30 @@ export class RampService {
     firstName?: string,
     lastName?: string,
     phoneNumber?: string,
+    countryCode?: string,
   ): Promise<{
     bitnobCustomerId: string;
     bitnobVirtualAccount: any;
     depositAccount: any;
   }> {
-    const stableReference = isMerchant
-      ? `bitnob_merchant_${id}`
-      : `bitnob_user_${id}`;
+    const country = resolveCountry(countryCode);
+    const stableReference = virtualAccountReference(
+      isMerchant ? `bitnob_merchant_${id}` : `bitnob_user_${id}`,
+      country.code,
+    );
+
+    if (country.code !== 'NG') {
+      return this.getOrCreateForeignBitnobAccount(
+        id,
+        email,
+        isMerchant,
+        country,
+        stableReference,
+        firstName,
+        lastName,
+        phoneNumber,
+      );
+    }
 
     if (!isMerchant) {
       const user = await this.prisma.user.findUnique({
@@ -468,6 +326,84 @@ export class RampService {
     return { bitnobCustomerId, bitnobVirtualAccount, depositAccount };
   }
 
+  /**
+   * Non-NG corridors: the user/merchant row only caches the Nigerian virtual
+   * account, so GH/KE accounts live in the VirtualAccount table, keyed by a
+   * country-suffixed reference. The Bitnob customer is created once per country.
+   */
+  private async getOrCreateForeignBitnobAccount(
+    id: string,
+    email: string,
+    isMerchant: boolean,
+    country: ReturnType<typeof resolveCountry>,
+    stableReference: string,
+    firstName?: string,
+    lastName?: string,
+    phoneNumber?: string,
+  ) {
+    const existing = await this.prisma.virtualAccount.findUnique({
+      where: { reference: stableReference },
+    });
+    if (existing) {
+      const depositAccount = {
+        provider: 'bitnob',
+        id: existing.externalReference,
+        accountNumber: existing.accountNumber,
+        accountName: existing.accountName,
+        bankName: existing.bankName,
+        bankCode: existing.bankCode,
+        currency: country.currency,
+      };
+      return {
+        bitnobCustomerId: '',
+        bitnobVirtualAccount: depositAccount,
+        depositAccount,
+      };
+    }
+
+    const customer = await this.bitnobService.createCustomer({
+      email,
+      phoneNumber,
+      firstName,
+      lastName,
+      country: country.code,
+    });
+    const bitnobCustomerId =
+      customer?.data?.id || customer?.id || customer?.data?.customer?.id;
+    if (!bitnobCustomerId) {
+      throw new HttpException(
+        'Bitnob customer creation did not return a customer id',
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    const va = await this.bitnobService.createVirtualAccount({
+      reference: stableReference,
+      customerId: bitnobCustomerId,
+      currency: country.currency,
+    });
+    const bitnobVirtualAccount = va?.data || va;
+    const depositAccount = {
+      ...this.mapBitnobVirtualAccount(bitnobVirtualAccount),
+      currency: country.currency,
+    };
+
+    await this.prisma.virtualAccount.create({
+      data: {
+        reference: stableReference,
+        externalReference: String(depositAccount.id),
+        accountNumber: depositAccount.accountNumber,
+        accountName: depositAccount.accountName,
+        bankName: depositAccount.bankName,
+        bankCode: depositAccount.bankCode || '999999',
+        transactionType: 'onramp',
+        ...(isMerchant ? { merchantId: id } : { userId: id }),
+      },
+    });
+
+    return { bitnobCustomerId, bitnobVirtualAccount, depositAccount };
+  }
+
   private splitName(fullName?: string): [string, string] {
     if (!fullName || !fullName.trim()) return ['', ''];
     const parts = fullName.trim().split(/\s+/);
@@ -488,10 +424,10 @@ export class RampService {
   }
 
   /**
-   * Stellar USDC on-ramp via Bitnob: create customer + virtual account,
-   * persist a pending onramp row, and return the NGN deposit instructions.
+   * USDC on-ramp (base, bsc, stellar) via Bitnob. NGN user orders pay a per-order SafeHaven account and are
+   * settled by Bitnob trading (no customers); other orders use a Bitnob customer + virtual account.
    */
-  private async stellarOnRamp(
+  private async bitnobOnRamp(
     id: string,
     email: string,
     isMerchant: boolean,
@@ -500,6 +436,7 @@ export class RampService {
     userAgent?: string,
   ): Promise<any> {
     const reference = generateTrxReference(16, 'on');
+    const country = resolveCountry(dto.country);
 
     let firstName: string | undefined;
     let lastName: string | undefined;
@@ -510,6 +447,8 @@ export class RampService {
         where: { id },
         include: { user: true },
       });
+      // API-key auth does not carry an email; fall back to the merchant owner's.
+      email = email || merchant?.user?.email || '';
       firstName = merchant?.name;
       lastName = 'Merchant';
       phoneNumber = merchant?.user?.phoneNumber || undefined;
@@ -521,26 +460,53 @@ export class RampService {
       phoneNumber = user?.phoneNumber || undefined;
     }
 
-    const cached = await this.getOrCreateBitnobAccount(
-      id,
-      email,
+    // NGN user orders settle via SafeHaven + Bitnob trading on Autoramp's own balance:
+    // no Bitnob customer or virtual account is created for the user.
+    const useSafehaven = this.safehavenOnramp.isEnabledFor(
+      country.code,
       isMerchant,
-      firstName,
-      lastName,
-      phoneNumber,
     );
-    const vaData = cached.bitnobVirtualAccount;
 
-    const depositAccount = cached.depositAccount;
+    let depositAccount: any;
+    let shDeposit: Awaited<
+      ReturnType<SafehavenOnrampSettlementService['createDepositAccount']>
+    > | null = null;
+    if (useSafehaven) {
+      shDeposit = await this.safehavenOnramp.createDepositAccount(
+        reference,
+        dto.amount,
+      );
+      depositAccount = shDeposit;
+    } else {
+      if (!email) {
+        throw new BadRequestException(
+          'An email address is required to create a Bitnob customer',
+        );
+      }
+      const cached = await this.getOrCreateBitnobAccount(
+        id,
+        email,
+        isMerchant,
+        firstName,
+        lastName,
+        phoneNumber,
+        country.code,
+      );
+      depositAccount = cached.depositAccount;
+    }
+    const shMetadata = shDeposit
+      ? { safehaven: { accountNumber: shDeposit.accountNumber } }
+      : null;
 
     let transaction: any;
     if (isMerchant) {
       transaction = await this.prisma.merchantOnrampTransaction.create({
         data: {
+          chainNetwork: currentChainNetwork(),
           merchantId: id,
           reference,
           amount: dto.amount,
-          currency: 'NGN',
+          currency: country.currency,
           tokenType: 'USDC',
           status: 'PENDING',
           destinationAddress: dto.destination.address,
@@ -553,15 +519,17 @@ export class RampService {
     } else {
       transaction = await this.prisma.onrampTransaction.create({
         data: {
+          chainNetwork: currentChainNetwork(),
           userId: id,
           reference,
           amount: dto.amount,
-          currency: 'NGN',
+          currency: country.currency,
           tokenType: 'USDC',
           status: 'PENDING',
           destinationAddress: dto.destination.address,
           network: dto.network,
           depositAccount,
+          ...(shDeposit ? { safehavenAccount: shDeposit as any, metadata: shMetadata as any } : {}),
           ipAddress: ipAddress || null,
           userAgent: userAgent || null,
         },
@@ -575,14 +543,15 @@ export class RampService {
         userId: isMerchant ? null : id,
         action: 'created',
         newStatus: 'PENDING',
-        description: 'Stellar onramp initialized via Bitnob virtual account',
+        description: shDeposit
+          ? `${dto.network} onramp initialized via SafeHaven virtual account (Bitnob trading settlement)`
+          : `${dto.network} onramp initialized via Bitnob virtual account`,
       },
     });
 
     return {
       status: 'success',
-      message:
-        'Stellar onramp initialized. Deposit NGN to the virtual account.',
+      message: `${dto.network} onramp initialized. Deposit ${country.currency} to the virtual account.`,
       databaseRecord: {
         id: transaction.id,
         reference: transaction.reference,
@@ -613,176 +582,26 @@ export class RampService {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<any> {
+    // All offramps (stellar, base, bsc) are served by Bitnob payouts.
     const offrampChain = this.resolveOffRampChain(dto.network);
-    if (offrampChain) {
-      return this.stellarOffRamp(
-        id,
-        isMerchant,
-        dto,
-        ipAddress,
-        userAgent,
-        offrampChain,
+    if (!offrampChain) {
+      throw new BadRequestException(
+        `Unsupported offramp network: ${dto.network}`,
       );
     }
-    if (!isOtcEnabled && !isMerchant) {
-      try {
-        this.userLimitsService.validateAmount(email, dto.amount);
-      } catch (error) {
-        throw new BadRequestException(error.message);
-      }
-    }
-    try {
-      const reference = generateTrxReference(16, 'off');
-
-      const webhookUrl = this.configService.get<string>('FLINT_WEBHOOK_URL');
-
-      // If merchant, get the owner's user id for internal API calls
-      if (isMerchant) {
-        const merchant = await this.prisma.merchant.findUnique({
-          where: { id },
-          include: { user: true },
-        });
-        if (!merchant || !merchant.user) {
-          throw new HttpException(
-            'Merchant or merchant user not found',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-      }
-
-      const { sourceAddress: _sourceAddress, ...flintRampFields } = dto;
-      const flintRequestBody = {
-        ...flintRampFields,
-        type: dto.type ?? 'off',
-        reference,
-        notifyUrl: webhookUrl || undefined,
-      };
-
-      this.logger.log(
-        `Initializing Flint offramp: ${JSON.stringify(flintRequestBody)}`,
-      );
-      this.logger.log(`Flint API URL: ${this.apiUrl}/v1/ramp/initialise`);
-
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.apiUrl}/v1/ramp/initialise`,
-          flintRequestBody,
-          {
-            headers: {
-              ...this.commonHeaders,
-              'Content-Type': 'application/json',
-            },
-            timeout: 30000,
-          },
-        ),
-      );
-
-      const flintData = response.data;
-      this.logger.log(`Flint offramp response: ${JSON.stringify(flintData)}`);
-
-      if (flintData?.status === 'failed' || flintData?.success === false) {
-        const errorMsg =
-          flintData?.message ||
-          flintData?.error?.message ||
-          'Failed to initialize ramp transaction';
-        this.logger.error(`Flint API returned error: ${errorMsg}`);
-        throw new HttpException(
-          `Flint initialization failed: ${errorMsg}`,
-          HttpStatus.BAD_GATEWAY,
-        );
-      }
-
-      let transaction: any;
-      if (isMerchant) {
-        const depositAccount = flintData?.data?.depositAccount || null;
-        transaction = await this.prisma.merchantOfframpTransaction.create({
-          data: {
-            merchantId: id,
-            reference,
-            amount: dto.amount,
-            currency: 'NGN',
-            tokenType: 'CNGN',
-            status: 'PENDING',
-            paymentReference: flintData?.data?.transactionId || null,
-            bankCode: dto.destination.bankCode,
-            accountNumber: dto.destination.accountNumber,
-            accountName: depositAccount?.accountName || null,
-            bankName: depositAccount?.bankName || null,
-            network: dto.network,
-            notifyUrl: webhookUrl || null,
-            ipAddress: ipAddress || null,
-            userAgent: userAgent || null,
-          },
-        });
-      } else {
-        const depositAccount = flintData?.data?.depositAccount || null;
-        transaction = await this.prisma.offrampTransaction.create({
-          data: {
-            userId: id,
-            reference,
-            amount: dto.amount,
-            currency: 'NGN',
-            tokenType: 'CNGN',
-            status: 'PENDING',
-            flintTransactionId: flintData?.data?.transactionId || null,
-            bankCode: dto.destination.bankCode,
-            accountNumber: dto.destination.accountNumber,
-            accountName: depositAccount?.accountName || null,
-            bankName: depositAccount?.bankName || null,
-            network: dto.network,
-            notifyUrl: webhookUrl || null,
-            ipAddress: ipAddress || null,
-            userAgent: userAgent || null,
-          },
-        });
-
-        await this.prisma.transactionLog.create({
-          data: {
-            transactionType: 'offramp',
-            transactionId: transaction.id,
-            userId: id,
-            action: 'created',
-            newStatus: 'PENDING',
-            description: 'Offramp transaction initialized',
-          },
-        });
-      }
-
-      await this.prisma.safeHavenStablestackLog.create({
-        data: {
-          transactionId: transaction.id,
-          type: 'OFFRAMP',
-          stablestackPayload: {
-            request: flintRequestBody,
-            response: flintData,
-          } as any,
-          status: 'PENDING',
-        },
-      });
-
-      return {
-        ...flintData,
-        databaseRecord: {
-          id: transaction.id,
-          reference: transaction.reference,
-          status: transaction.status,
-          createdAt: transaction.createdAt,
-        },
-      };
-    } catch (error) {
-      this.handleError('Failed to initialise offramp', error);
-    }
+    return this.bitnobOffRamp(
+      id,
+      isMerchant,
+      dto,
+      ipAddress,
+      userAgent,
+      offrampChain,
+    );
   }
 
   private resolveOffRampChain(network: string): string | null {
-    const normalized = String(network ?? '').toLowerCase();
-    if (normalized === 'stellar') {
-      return 'STELLAR';
-    }
-    if (['base', 'ethereum', 'solana'].includes(normalized)) {
-      return normalized.toUpperCase();
-    }
-    return null;
+    const chain = getRampChain(network);
+    return chain?.offramp ? chain.bitnobChain : null;
   }
 
   /**
@@ -790,10 +609,10 @@ export class RampService {
    *
    * 1. Creates a quote for the NGN amount.
    * 2. Initializes the payout with the beneficiary bank details.
-   * 3. Finalizes the payout to obtain the onchain funding address.
+   * 3. Reads the onchain funding address from the initialize response (no finalize: the deposit finalizes an onchain payout).
    * 4. Persists the offramp row + provider order.
    */
-  private async stellarOffRamp(
+  private async bitnobOffRamp(
     id: string,
     isMerchant: boolean,
     dto: offRampDto,
@@ -802,21 +621,57 @@ export class RampService {
     chain: string = 'STELLAR',
   ): Promise<any> {
     const sourceAddress = dto.sourceAddress?.trim();
+    const rampChain = getRampChain(dto.network);
+    if (!rampChain) {
+      throw new BadRequestException(
+        `Unsupported offramp network: ${dto.network}`,
+      );
+    }
     if (!sourceAddress) {
       throw new BadRequestException(
-        'sourceAddress (Stellar public key) is required when network is stellar',
+        `sourceAddress (${addressLabel(rampChain)}) is required when network is ${dto.network}`,
+      );
+    }
+    if (!isValidAddressForChain(rampChain, sourceAddress)) {
+      throw new BadRequestException(
+        `sourceAddress is not a valid ${dto.network} address`,
       );
     }
 
     const reference = generateTrxReference(16, 'off');
+    const country = resolveCountry(dto.country);
+
+    // Stellar user off-ramps go over CCTP to a Bitnob payout opened on BASE (Bitnob's Stellar rail is unreliable):
+    // the user's wallet burns Stellar USDC straight to Bitnob's Base deposit address and our relayer mints it.
+    const useRelay =
+      dto.network === 'stellar' && !isMerchant && this.stellarRelay.isEnabled();
+    const payoutChain = useRelay ? (getRampChain('base')?.bitnobChain ?? 'BASE') : chain;
+    // The client's network toggle decides the CCTP network for this order (server default: mainnet).
+    const relayNetwork = this.stellarRelay.resolveNetwork(dto.chainNetwork);
 
     try {
-      const lookup = await this.bitnobService.accountLookup(
+      const destinationType = await this.bitnobService.destinationTypeFor(
+        country.code,
         dto.destination.bankCode,
-        dto.destination.accountNumber,
       );
+      // Mobile money (e.g. M-Pesa) has no account-name lookup: best effort, then fall back to the number.
+      const lookup = await this.bitnobService
+        .accountLookup(
+          dto.destination.bankCode,
+          dto.destination.accountNumber,
+          country.code,
+          destinationType,
+        )
+        .catch((err) => {
+          if (destinationType === 'mobile_money') return null;
+          throw err;
+        });
       const accountName =
-        lookup?.data?.account_name || lookup?.data?.accountName;
+        lookup?.data?.account_name ||
+        lookup?.data?.accountName ||
+        (destinationType === 'mobile_money'
+          ? dto.destination.accountNumber
+          : undefined);
       if (!accountName) {
         throw new HttpException(
           'Bitnob account lookup did not return an account name',
@@ -826,16 +681,15 @@ export class RampService {
 
       const quote = await this.bitnobService.createPayoutQuote({
         fromAsset: 'USDC',
-        toCurrency: 'NGN',
-        country: 'NG',
+        toCurrency: country.currency,
+        country: country.code,
         source: 'onchain',
         settlementAmount: dto.amount,
         reference,
-        chain,
+        chain: payoutChain,
       });
 
-      const quoteId =
-        quote?.data?.quote_id || quote?.data?.id || quote?.quote_id;
+      const quoteId = extractBitnobQuoteId(quote);
       if (!quoteId) {
         throw new HttpException(
           'Bitnob payout quote missing id',
@@ -843,21 +697,35 @@ export class RampService {
         );
       }
 
+      // NGN via SafeHaven: Bitnob pays a per-order SafeHaven virtual account and we forward to the user's
+      // bank once it is credited (see SafehavenOfframpSettlementService). Otherwise Bitnob pays the user directly.
+      const collection = this.safehavenSettlement.isEnabledFor(
+        country.code,
+        isMerchant,
+      )
+        ? await this.safehavenSettlement.createCollectionAccount(
+            reference,
+            dto.amount,
+          )
+        : null;
+
       const initialized = await this.bitnobService.initializePayout({
         quoteId,
         reference,
         beneficiary: {
-          destinationType: 'bank',
-          country: 'NG',
-          accountName,
-          accountNumber: dto.destination.accountNumber,
-          bankCode: dto.destination.bankCode,
+          destinationType,
+          country: country.code,
+          accountName: collection?.accountName || accountName,
+          accountNumber: collection?.accountNumber ?? dto.destination.accountNumber,
+          bankCode: collection?.bankCode || dto.destination.bankCode,
         },
         callbackUrl: this.bitnobService.getWebhookUrl(),
       });
 
-      const finalized = await this.bitnobService.finalizePayout(quoteId);
-      const deposit = extractPayoutDeposit(quote, initialized, finalized);
+      // Onchain-funded payouts must NOT be finalized: initialize already moves the
+      // payout to PENDING_ADDRESS_DEPOSIT and returns the deposit address; the
+      // deposit finalizes it. (finalize is only for source: 'offchain'.)
+      const deposit = extractPayoutDeposit(quote, initialized, undefined);
 
       if (!deposit?.paymentAddress) {
         throw new HttpException(
@@ -866,9 +734,22 @@ export class RampService {
         );
       }
 
+      let burnPlan: Awaited<ReturnType<StellarOfframpRelayService['planBurn']>> | null = null;
+      if (useRelay) {
+        if (!deposit.amountToPay || !/^0x[a-fA-F0-9]{40}$/.test(deposit.paymentAddress)) {
+          throw new HttpException(
+            'Bitnob did not return a Base deposit address and amount for the relay',
+            HttpStatus.BAD_GATEWAY,
+          );
+        }
+        burnPlan = await this.stellarRelay.planBurn(deposit.amountToPay, relayNetwork);
+      }
+
       const bankName =
-        (await this.bitnobService.bitnobBankName(dto.destination.bankCode)) ||
-        null;
+        (await this.bitnobService.bitnobBankName(
+          dto.destination.bankCode,
+          country.code,
+        )) || null;
       const notifyUrl =
         this.configService.get<string>('FLINT_WEBHOOK_URL') || null;
 
@@ -876,10 +757,11 @@ export class RampService {
       if (isMerchant) {
         transaction = await this.prisma.merchantOfframpTransaction.create({
           data: {
+          chainNetwork: currentChainNetwork(),
             merchantId: id,
             reference,
             amount: dto.amount,
-            currency: 'NGN',
+            currency: country.currency,
             tokenType: 'USDC',
             status: 'PENDING',
             bankCode: dto.destination.bankCode,
@@ -895,10 +777,11 @@ export class RampService {
       } else {
         transaction = await this.prisma.offrampTransaction.create({
           data: {
+          chainNetwork: currentChainNetwork(),
             userId: id,
             reference,
             amount: dto.amount,
-            currency: 'NGN',
+            currency: country.currency,
             tokenType: 'USDC',
             status: 'INITIATED',
             flintTransactionId: null,
@@ -908,6 +791,25 @@ export class RampService {
             bankName,
             network: dto.network,
             notifyUrl,
+            ...(collection || burnPlan
+              ? {
+                  metadata: {
+                    ...(collection ? { safehaven: { ...collection } } : {}),
+                    ...(burnPlan
+                      ? {
+                          cctpRelay: {
+                            status: 'awaiting_burn',
+                            destinationChain: 'base',
+                            mintRecipient: deposit.paymentAddress,
+                            burnAmountUnits: burnPlan.burnAmountUnits,
+                            maxFeeUnits: burnPlan.maxFeeUnits,
+                            network: relayNetwork,
+                          },
+                        }
+                      : {}),
+                  } as any,
+                }
+              : {}),
             ipAddress: ipAddress || null,
             userAgent: userAgent || null,
           },
@@ -920,25 +822,27 @@ export class RampService {
             userId: id,
             action: 'created',
             newStatus: 'INITIATED',
-            description: 'Stellar offramp order created via Bitnob',
+            description: `${dto.network} offramp order created via Bitnob`,
           },
         });
       }
 
-      await this.prisma.offrampProviderOrder.create({
-        data: {
-          reference,
-          provider: 'bitnob',
-          providerOrderId: quoteId,
-          sourceAddress,
-          offrampTransactionId: isMerchant ? null : transaction.id,
-          merchantOfframpTransactionId: isMerchant ? transaction.id : null,
-          fundingAddress: deposit.paymentAddress ?? null,
-          expectedAmount: this.parseDecimal(deposit.amountToPay),
-          memo: deposit.memo ?? null,
-          expiresAt: this.parseDate(deposit.expiresAt),
-        },
+      await this.payoutOrders.create({
+        reference,
+        providerOrderId: quoteId,
+        sourceAddress,
+        transactionId: transaction.id,
+        isMerchant,
+        fundingAddress: deposit.paymentAddress ?? null,
+        expectedAmount: this.parseDecimal(deposit.amountToPay),
+        memo: deposit.memo ?? null,
+        expiresAt: this.parseDate(deposit.expiresAt),
       });
+
+      // An off-ramp funded over CCTP is a CCTP transfer: record it from the start (awaiting its burn).
+      if (!isMerchant && burnPlan) {
+        await this.recordRelayLeg(transaction.id, reference, (transaction as any).metadata);
+      }
 
       if (!isMerchant) {
         // D1: every attempted cash-out gets a reconciliation record; funding instructions issued => AWAITING_DEPOSIT.
@@ -951,29 +855,51 @@ export class RampService {
       }
 
       this.logger.log(
-        `Stellar offramp created: reference=${reference} quoteId=${quoteId}`,
+        `${dto.network} offramp created: reference=${reference} quoteId=${quoteId}`,
       );
+
+      // Relayed Stellar order: no deposit address is exposed; the wallet burns with the exact bridge parameters.
+      const depositPayload = burnPlan
+        ? {
+            deposit: {
+              network: dto.network,
+              mode: 'cctp_relay',
+              sourceAddress,
+              amount: burnPlan.burnAmount,
+              assetCode: 'USDC',
+              validUntil: deposit.expiresAt ?? null,
+            },
+            bridge: this.stellarRelay.bridgeInstructions(
+              deposit.paymentAddress,
+              burnPlan,
+              relayNetwork,
+            ),
+          }
+        : {
+            deposit: {
+              network: dto.network,
+              sourceAddress,
+              receiveAddress: deposit.paymentAddress,
+              amount: deposit.amountToPay ?? null,
+              memo: deposit.memo ?? null,
+              assetCode: deposit.assetCode ?? 'USDC',
+              assetIssuer: deposit.assetIssuer ?? null,
+              validUntil: deposit.expiresAt ?? null,
+            },
+          };
 
       return {
         status: 'success',
-        message:
-          'Offramp order created. Send the exact USDC amount to the deposit address.',
+        message: burnPlan
+          ? 'Offramp order created. Approve the transfer in your Stellar wallet.'
+          : 'Offramp order created. Send the exact USDC amount to the deposit address.',
         databaseRecord: {
           id: transaction.id,
           reference: transaction.reference,
           status: transaction.status,
           createdAt: transaction.createdAt,
         },
-        deposit: {
-          network: dto.network,
-          sourceAddress,
-          receiveAddress: deposit.paymentAddress,
-          amount: deposit.amountToPay ?? null,
-          memo: deposit.memo ?? null,
-          assetCode: deposit.assetCode ?? 'USDC',
-          assetIssuer: deposit.assetIssuer ?? null,
-          validUntil: deposit.expiresAt ?? null,
-        },
+        ...depositPayload,
       };
     } catch (error) {
       this.handleError('Failed to initialise stellar offramp', error);
@@ -993,9 +919,7 @@ export class RampService {
     userId: string,
     isMerchant: boolean,
   ): Promise<any> {
-    const order = await this.prisma.offrampProviderOrder.findUnique({
-      where: { reference },
-    });
+    const order = await this.payoutOrders.findByReference(reference);
     if (!order) {
       throw new NotFoundException('Offramp order not found');
     }
@@ -1052,7 +976,17 @@ export class RampService {
         where: { id: tx.id },
         data: { metadata },
       });
-      const current = await this.prisma.offrampTransaction.findUnique({ where: { id: tx.id } });
+      const current = await this.prisma.offrampTransaction.findUnique({
+        where: { id: tx.id },
+      });
+      // CCTP-relayed order: start the Base mint right away (the client also polls /relay, which is idempotent).
+      if ((metadata as any).cctpRelay && this.stellarRelay.isEnabled()) {
+        void this.stellarRelay
+          .relay(reference, userId)
+          .catch((e) =>
+            this.logger.warn(`Relay after burn confirm failed for ${reference}: ${e?.message}`),
+          );
+      }
       return {
         status: 'success',
         reference,
@@ -1067,10 +1001,9 @@ export class RampService {
       });
     }
 
-    await this.prisma.offrampProviderOrder.update({
-      where: { id: order.id },
-      data: { depositTxHash: dto.stellarTxHash },
-    });
+    await this.payoutOrders.update(order, { depositTxHash: dto.stellarTxHash });
+    // The burn hash is now known: put it on the CCTP record.
+    if (!isMerchant) await this.recordRelayLeg(tx.id, order.reference, metadata);
 
     await this.prisma.transactionLog.create({
       data: {
@@ -1103,27 +1036,27 @@ export class RampService {
     userId: string,
     isMerchant: boolean,
   ): Promise<any> {
-    const order = await this.prisma.offrampProviderOrder.findUnique({
-      where: { reference },
-    });
+    const order = await this.payoutOrders.findByReference(reference);
     if (!order) {
       throw new NotFoundException('Offramp order not found');
     }
 
     let transaction: any;
     if (isMerchant && order.merchantOfframpTransactionId) {
-      transaction = await this.prisma.merchantOfframpTransaction.findUnique({
-        where: { id: order.merchantOfframpTransactionId },
-        include: { providerOrder: true },
-      });
+      transaction = await this.payoutOrders.attach(
+        await this.prisma.merchantOfframpTransaction.findUnique({
+          where: { id: order.merchantOfframpTransactionId },
+        }),
+      );
       if (!transaction || transaction.merchantId !== userId) {
         throw new NotFoundException('Offramp order not found');
       }
     } else if (!isMerchant && order.offrampTransactionId) {
-      transaction = await this.prisma.offrampTransaction.findUnique({
-        where: { id: order.offrampTransactionId },
-        include: { providerOrder: true },
-      });
+      transaction = await this.payoutOrders.attach(
+        await this.prisma.offrampTransaction.findUnique({
+          where: { id: order.offrampTransactionId },
+        }),
+      );
       if (!transaction || transaction.userId !== userId) {
         throw new NotFoundException('Offramp order not found');
       }
@@ -1137,12 +1070,17 @@ export class RampService {
     });
 
     // D1: full detail view (status label/message, history, settlement amounts, reconciliation) for user orders.
-    const view = isMerchant ? null : await this.offrampState.getView(reference, userId);
+    const view = isMerchant
+      ? null
+      : await this.offrampState.getView(reference, userId);
     return { transaction, history, view };
   }
 
   /** Structured reconciliation record for one of the caller's cash-outs. */
-  async getOfframpReconciliation(reference: string, userId: string): Promise<any> {
+  async getOfframpReconciliation(
+    reference: string,
+    userId: string,
+  ): Promise<any> {
     const record = await this.offrampState.getReconciliation(reference, userId);
     if (!record) throw new NotFoundException('Reconciliation record not found');
     return record;
@@ -1151,9 +1089,17 @@ export class RampService {
   /** The caller's reconciliation records, newest first (filter by status or reconciliation result). */
   async listOfframpReconciliations(
     userId: string,
-    filter: { status?: string; result?: string; limit?: number; skip?: number } = {},
+    filter: {
+      status?: string;
+      result?: string;
+      limit?: number;
+      skip?: number;
+    } = {},
   ): Promise<any> {
-    const records = await this.offrampState.listReconciliations({ userId, ...filter });
+    const records = await this.offrampState.listReconciliations({
+      userId,
+      ...filter,
+    });
     return { total: records.length, records };
   }
 
@@ -1393,7 +1339,7 @@ export class RampService {
             orderBy: { createdAt: 'desc' },
           }));
 
-      const allOfframp = await (isMerchant
+      const offrampRows = await (isMerchant
         ? this.prisma.merchantOfframpTransaction.findMany({
             where,
             select: {
@@ -1413,16 +1359,6 @@ export class RampService {
               createdAt: true,
               updatedAt: true,
               completedAt: true,
-              providerOrder: {
-                select: {
-                  depositTxHash: true,
-                  failureReason: true,
-                  receivedAmount: true,
-                  expectedAmount: true,
-                  fundingAddress: true,
-                  expiresAt: true,
-                },
-              },
             },
             orderBy: { createdAt: 'desc' },
           })
@@ -1445,19 +1381,22 @@ export class RampService {
               createdAt: true,
               updatedAt: true,
               completedAt: true,
-              providerOrder: {
-                select: {
-                  depositTxHash: true,
-                  failureReason: true,
-                  receivedAmount: true,
-                  expectedAmount: true,
-                  fundingAddress: true,
-                  expiresAt: true,
-                },
-              },
             },
             orderBy: { createdAt: 'desc' },
           }));
+
+      // The payout order's settlement fields come from the provider legs; keep the response to the fields the history always had.
+      const allOfframp = (await this.payoutOrders.attachMany(offrampRows as any[])).map((row) => ({
+        ...row,
+        providerOrder: row.providerOrder && {
+          depositTxHash: row.providerOrder.depositTxHash,
+          failureReason: row.providerOrder.failureReason,
+          receivedAmount: row.providerOrder.receivedAmount,
+          expectedAmount: row.providerOrder.expectedAmount,
+          fundingAddress: row.providerOrder.fundingAddress,
+          expiresAt: row.providerOrder.expiresAt,
+        },
+      }));
 
       const allSwap = await (isMerchant
         ? this.prisma.merchantSwapTransaction.findMany({
@@ -1549,6 +1488,16 @@ export class RampService {
       };
     } catch (error) {
       this.handleError('Failed to fetch transactions', error);
+    }
+  }
+
+  /** Writes the CCTP leg for a relayed off-ramp. Recording must never fail the order, so errors are logged and swallowed. */
+  private async recordRelayLeg(transactionId: string, reference: string, metadata: unknown): Promise<void> {
+    try {
+      const fields = relayLegFields(reference, metadata);
+      if (fields) await this.payoutOrders.recordRelayLeg(transactionId, fields);
+    } catch (e) {
+      this.logger.warn(`Could not record the CCTP leg for ${reference}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

@@ -1,17 +1,17 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { swapApi } from "@/lib/api";
+import { miscApi } from "@/lib/api";
 import axios from "axios";
 
 /**
  * Hook to get USD/NGN rate from MonieRate API
  */
-export function useUsdNgnRate() {
+export function useUsdNgnRate(amount?: number) {
   return useQuery({
-    queryKey: ["usdNgnRate"],
+    queryKey: ["usdNgnRate", amount],
     queryFn: async () => {
-      const response = await swapApi.getUsdNgnRate();
+      const response = await miscApi.getUsdNgnRate(amount);
       return response.data.rate;
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -34,7 +34,7 @@ export function useEstimateNgn(cngnAmount: number | null) {
     queryKey: ["estimateNgn", cngnAmount],
     queryFn: async () => {
       if (!cngnAmount || cngnAmount <= 0) return null;
-      const response = await swapApi.estimateNgn(cngnAmount);
+      const response = await miscApi.estimateNgn(cngnAmount);
       return response.data;
     },
     enabled: !!cngnAmount && cngnAmount > 0,

@@ -319,3 +319,309 @@ button {
 .animate-shake {
   animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
+
+/* ------------------------------------------------------------------
+   Ramp card design system. Scoped to `.ramp`, so the rest of the app
+   (admin, merchant, docs) keeps its current look.
+   Signal teal means "act" or "live": the primary action, the active
+   tab marker, focus, and in-progress status. Nothing else is teal.
+   ------------------------------------------------------------------ */
+:root {
+  --r-ink: #06100e;
+  --r-panel: #0d1a17;
+  --r-field: #12221e;
+  --r-raised: #1a2e29;
+  --r-line: #1e322d;
+  --r-text: #e8f3f0;
+  --r-muted: #8da8a1;
+  --r-signal: #00f9c7;
+  --r-signal-ink: #04201a;
+  --r-caution: #f4b740;
+  --r-danger: #ff6b6b;
+}
+
+.ramp {
+  background: var(--r-ink);
+  color: var(--r-text);
+}
+
+.ramp-panel {
+  background: var(--r-panel);
+  border: 1px solid var(--r-line);
+  border-radius: 1.5rem;
+  padding: 1rem;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 28px 64px -32px rgb(0 0 0 / 0.85);
+}
+@media (min-width: 1024px) {
+  .ramp-panel {
+    padding: 1.5rem;
+  }
+}
+
+.ramp-field {
+  background: var(--r-field);
+  border: 1px solid var(--r-line);
+  border-radius: 1rem;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.ramp-field:focus-within {
+  border-color: color-mix(in srgb, var(--r-signal) 55%, var(--r-line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--r-signal) 14%, transparent);
+}
+
+.ramp-label {
+  font-size: 0.8125rem;
+  line-height: 1.25;
+  font-weight: 500;
+  color: var(--r-muted);
+}
+
+.ramp-amount {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+/* Segmented control (tabs, network, country). Wraps instead of overflowing on small screens. */
+.ramp-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: var(--r-field);
+  border: 1px solid var(--r-line);
+  border-radius: 1rem;
+}
+.ramp-seg-item {
+  flex: 1 1 auto;
+  min-height: 2.5rem;
+  padding: 0 0.875rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--r-muted);
+  background: transparent;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+.ramp-seg-item:hover {
+  color: var(--r-text);
+}
+.ramp-seg-item[aria-pressed="true"],
+.ramp-seg-item[aria-selected="true"] {
+  background: var(--r-raised);
+  color: var(--r-text);
+  box-shadow: inset 0 -2px 0 var(--r-signal);
+}
+
+.ramp-cta {
+  width: 100%;
+  height: 3.5rem;
+  border-radius: 1rem;
+  background: var(--r-signal);
+  color: var(--r-signal-ink);
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  transition:
+    filter 0.15s ease,
+    transform 0.1s ease;
+}
+.ramp-cta:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.ramp-cta:active:not(:disabled) {
+  transform: scale(0.99);
+}
+.ramp-cta:disabled {
+  background: var(--r-raised);
+  color: var(--r-muted);
+  opacity: 1;
+}
+
+.ramp :where(button, a, input, select, [role="tab"]):focus-visible {
+  outline: 2px solid var(--r-signal);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ramp * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* One style for every "connect a wallet" action (EVM, Stellar, Stacks, Solana), so they always match. */
+.ramp-connect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.5rem;
+  min-width: 9.5rem;
+  padding: 0 1rem;
+  border-radius: 0.75rem;
+  background: var(--r-signal);
+  color: var(--r-signal-ink);
+  font-size: 0.875rem;
+  font-weight: 650;
+  white-space: nowrap;
+  transition:
+    filter 0.15s ease,
+    transform 0.1s ease;
+}
+.ramp-connect:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.ramp-connect:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.ramp-connect:disabled {
+  opacity: 0.6;
+}
+/* A connected wallet is a status, not an action: quiet chip, same size. */
+.ramp-connect[data-connected="true"] {
+  background: var(--r-raised);
+  color: var(--r-text);
+  border: 1px solid var(--r-line);
+}
+
+/* Quiet variant: a connected wallet, or an optional one. Same size as the primary button. */
+.ramp-connect[data-quiet="true"] {
+  background: var(--r-raised);
+  color: var(--r-text);
+  border: 1px solid var(--r-line);
+}
+
+/* Side sheet (currency picker). Portals outside .ramp, so it only uses the :root tokens. */
+.ramp-sheet[data-state="open"] {
+  animation: ramp-sheet-in 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ramp-sheet[data-state="closed"] {
+  animation: ramp-sheet-out 0.18s ease-in forwards;
+}
+.ramp-sheet-overlay[data-state="open"] {
+  animation: ramp-fade-in 0.2s ease-out;
+}
+.ramp-sheet-overlay[data-state="closed"] {
+  animation: ramp-fade-out 0.18s ease-in forwards;
+}
+@keyframes ramp-sheet-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes ramp-sheet-out {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+@keyframes ramp-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ramp-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ramp-sheet,
+  .ramp-sheet-overlay {
+    animation: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Dashboard themes. Scoped, so the public app and `.ramp` keep their look.
+   `.console` = admin "control room": dense, dark, built for scanning.
+   `.counter` = merchant: calm, light, roomier, money first.
+   Brand rule carried over from `.ramp`: signal teal means "act or live"
+   (primary action, active marker, focus, in-progress). Status uses the
+   separate ok / warn / danger tones, never teal.
+   Components read these through bg-(--c-*) / text-(--c-*) utilities.
+   ------------------------------------------------------------------ */
+.console {
+  --c-bg: #06100e;
+  --c-panel: #0d1a17;
+  --c-field: #12221e;
+  --c-raised: #1a2e29;
+  --c-line: #1e322d;
+  --c-text: #e8f3f0;
+  --c-muted: #8da8a1;
+  --c-signal: #00f9c7;
+  --c-signal-text: #00f9c7;
+  --c-signal-ink: #04201a;
+  --c-ok: #6fd39b;
+  --c-warn: #f4b740;
+  --c-danger: #ff6b6b;
+  --c-neutral: #8da8a1;
+  --c-radius: 6px;
+  --c-row: 2.25rem;
+  --c-pad: 0.75rem;
+  --c-font-size: 13px;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-size: var(--c-font-size);
+  color-scheme: dark;
+}
+
+.counter {
+  --c-bg: #f5f8f7;
+  --c-panel: #ffffff;
+  --c-field: #edf2f0;
+  --c-raised: #ffffff;
+  --c-line: #dbe4e1;
+  --c-text: #0b1512;
+  --c-muted: #566b65;
+  --c-signal: #00f9c7;
+  --c-signal-text: #00705a;
+  --c-signal-ink: #04201a;
+  --c-ok: #1b7f55;
+  --c-warn: #9a6200;
+  --c-danger: #b93636;
+  --c-neutral: #566b65;
+  --c-radius: 12px;
+  --c-row: 3.25rem;
+  --c-pad: 1.25rem;
+  --c-font-size: 15px;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-size: var(--c-font-size);
+  /* The shared UI components (shadcn) read these; point them at the counter palette so they follow it, light or dark. */
+  --background: var(--c-bg);
+  --foreground: var(--c-text);
+  --card: var(--c-panel);
+  --card-foreground: var(--c-text);
+  --popover: var(--c-panel);
+  --popover-foreground: var(--c-text);
+  --muted: var(--c-field);
+  --muted-foreground: var(--c-muted);
+  --border: var(--c-line);
+  --input: var(--c-line);
+  --accent: var(--c-field);
+  --accent-foreground: var(--c-text);
+  --primary: var(--c-text);
+  --primary-foreground: var(--c-panel);
+  --secondary-foreground: var(--c-signal-ink);
+  color-scheme: light;
+}
+
+/* Opt-in dark for the merchant dashboard: <div class="counter" data-theme="dark"> */
+.counter[data-theme="dark"] {
+  --c-bg: #0a1311;
+  --c-panel: #101c19;
+  --c-field: #152621;
+  --c-raised: #1a2e29;
+  --c-line: #22372f;
+  --c-text: #e8f3f0;
+  --c-muted: #8da8a1;
+  --c-signal-text: #00f9c7;
+  --c-ok: #6fd39b;
+  --c-warn: #f4b740;
+  --c-danger: #ff6b6b;
+  --c-neutral: #8da8a1;
+  color-scheme: dark;
+}

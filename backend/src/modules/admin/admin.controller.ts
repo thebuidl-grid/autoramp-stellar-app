@@ -317,47 +317,6 @@ export class AdminController {
     return this.adminService.createMerchantBankAccount(id, dto);
   }
 
-  @Get('api-keys/summary')
-  @ApiOperation({ summary: 'Get API keys summary statistics' })
-  @ApiResponse({
-    status: 200,
-    description: 'API keys summary retrieved successfully',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Admin access required',
-  })
-  async getApiKeysSummary() {
-    return this.adminService.getApiKeysSummary();
-  }
-
-  @Get('api-keys/analytics')
-  @ApiOperation({ summary: 'Get API keys usage analytics over time' })
-  @ApiQuery({
-    name: 'period',
-    required: false,
-    enum: ['daily', 'weekly', 'monthly'],
-    description: 'Time period for grouping (default: daily)',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'API keys analytics retrieved successfully',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Admin access required',
-  })
-  async getApiKeysAnalytics(@Query() query: GetApiKeyStatsDto) {
-    return this.adminService.getApiKeysAnalytics(query.period);
-  }
   @Get('platform-transactions')
   @ApiOperation({ summary: 'Get all platform transactions (admin only)' })
   @ApiQuery({
@@ -401,6 +360,7 @@ export class AdminController {
     type: String,
     description: 'Search by reference',
   })
+  @ApiQuery({ name: 'currency', required: false, type: String, description: 'Filter by transaction currency' })
   @ApiResponse({
     status: 200,
     description: 'Transactions retrieved successfully',
@@ -411,6 +371,7 @@ export class AdminController {
     @Query('status') status?: string,
     @Query('type') type?: string,
     @Query('search') search?: string,
+    @Query('currency') currency?: string,
   ) {
     return this.adminService.getAllTransactions(
       page,
@@ -418,6 +379,7 @@ export class AdminController {
       status,
       type,
       search,
+      currency,
     );
   }
 

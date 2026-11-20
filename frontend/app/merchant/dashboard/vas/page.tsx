@@ -103,7 +103,7 @@ function ServiceIllustration({ name }: { name: string }) {
           <div className="absolute bottom-3 left-5 w-18 h-18 rounded-full bg-emerald-300/30 blur-2xl" />
         </div>
         <div className="relative flex items-center gap-3">
-          <Wifi className="h-10 w-10 text-emerald-400" />
+          <Wifi className="h-10 w-10 text-(--c-ok)" />
           <div className="flex flex-col gap-1">
             {[36, 28, 20, 12].map((w, i) => (
               <div key={i} className="flex items-center gap-1">
@@ -148,7 +148,7 @@ function ServiceIllustration({ name }: { name: string }) {
           <div className="absolute bottom-3 right-5 w-20 h-20 rounded-full bg-amber-300/30 blur-2xl" />
         </div>
         <div className="relative flex items-center gap-3">
-          <Zap className="h-10 w-10 text-amber-400" />
+          <Zap className="h-10 w-10 text-(--c-warn)" />
           <div className="flex flex-col gap-1">
             {[0, 1, 2, 3, 4].map((i) => (
               <div key={i} className="flex items-center gap-1">
@@ -164,7 +164,7 @@ function ServiceIllustration({ name }: { name: string }) {
 
   return (
     <div className="relative w-full h-32 mb-4 rounded-lg overflow-hidden bg-gradient-to-br from-zinc-500/30 via-zinc-600/10 to-zinc-400/5 flex items-center justify-center">
-      <Smartphone className="h-10 w-10 text-zinc-400" />
+      <Smartphone className="h-10 w-10 text-(--c-muted)" />
     </div>
   );
 }
@@ -172,15 +172,15 @@ function ServiceIllustration({ name }: { name: string }) {
 function statusColor(status: string) {
   switch (status) {
     case "COMPLETED":
-      return "bg-green-500/10 text-green-500 border border-green-500/20";
+      return "bg-green-500/10 text-(--c-ok) border border-green-500/20";
     case "PENDING":
     case "PROCESSING":
-      return "bg-amber-500/10 text-amber-500 border border-amber-500/20";
+      return "bg-amber-500/10 text-(--c-warn) border border-amber-500/20";
     case "FAILED":
     case "CANCELLED":
-      return "bg-red-500/10 text-red-500 border border-red-500/20";
+      return "bg-red-500/10 text-(--c-danger) border border-red-500/20";
     default:
-      return "bg-zinc-500/10 text-zinc-500 border border-zinc-500/20";
+      return "bg-(--c-field) text-(--c-muted) border border-zinc-500/20";
   }
 }
 
@@ -320,7 +320,7 @@ function StepIndicator({ currentStep }: { currentStep: FlowStep }) {
             <div
               className={`flex items-center justify-center h-7 w-7 rounded-full text-xs font-medium transition-colors ${
                 isDone
-                  ? "bg-green-500/20 text-green-500 border border-green-500/30"
+                  ? "bg-green-500/20 text-(--c-ok) border border-green-500/30"
                   : isActive
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground"
@@ -419,7 +419,7 @@ function CategorySelection({
                 <button
                   key={cat._id}
                   onClick={() => onSelect(cat)}
-                  className="p-4 rounded-xl border border-white/10 bg-white/5 text-left transition-all hover:bg-white/10 hover:scale-[1.01]"
+                  className="p-4 rounded-xl border border-(--c-line) bg-(--c-field) text-left transition-all hover:bg-(--c-field) hover:scale-[1.01]"
                 >
                   <p className="font-semibold text-foreground">{cat.name}</p>
                 </button>
@@ -490,7 +490,7 @@ function ProductSelection({
                 <button
                   key={product.code}
                   onClick={() => onSelect(product)}
-                  className="p-4 rounded-xl border border-white/10 bg-white/5 text-left transition-all hover:bg-white/10 hover:scale-[1.01]"
+                  className="p-4 rounded-xl border border-(--c-line) bg-(--c-field) text-left transition-all hover:bg-(--c-field) hover:scale-[1.01]"
                 >
                   <p className="font-semibold text-foreground">{product.name}</p>
                   <p className="text-sm text-primary font-medium mt-1">
@@ -770,11 +770,11 @@ function ResultStep({ result, onDone }: { result: any; onDone: () => void }) {
     <Card>
       <CardContent className="pt-6 flex flex-col items-center py-10 space-y-4">
         {isFailed ? (
-          <XCircle className="h-16 w-16 text-red-500" />
+          <XCircle className="h-16 w-16 text-(--c-danger)" />
         ) : isProcessing ? (
-          <Clock className="h-16 w-16 text-amber-500 animate-pulse" />
+          <Clock className="h-16 w-16 text-(--c-warn) animate-pulse" />
         ) : (
-          <CheckCircle2 className="h-16 w-16 text-green-500" />
+          <CheckCircle2 className="h-16 w-16 text-(--c-ok)" />
         )}
         <h2 className="text-xl font-semibold">
           {isFailed ? "Payment Failed" : isProcessing ? "Processing..." : "Payment Successful"}

@@ -3,6 +3,25 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../../../database/prisma.service';
 import * as crypto from 'crypto';
+import { BadRequestException } from '@nestjs/common';
+import {
+  assertPublicHttpUrl,
+  createSsrfSafeAgents,
+  UnsafeUrlError,
+} from '../../../common/security/ssrf.util';
+
+const MAX_LOGGED_RESPONSE_CHARS = 4000;
+const safeAgents = createSsrfSafeAgents();
+
+/** Keeps a merchant endpoint's response small before it is stored (and shown back to merchants). */
+export function clipResponse(data: unknown): any {
+  if (data === undefined || data === null) return null;
+  const text = typeof data === 'string' ? data : JSON.stringify(data);
+  if (text === undefined) return null;
+  return text.length > MAX_LOGGED_RESPONSE_CHARS
+    ? `${text.slice(0, MAX_LOGGED_RESPONSE_CHARS)}... [truncated]`
+    : data;
+}
 
 @Injectable()
 export class NotificationsService implements OnModuleInit {
@@ -34,6 +53,18 @@ export class NotificationsService implements OnModuleInit {
   }
 
   /**
+   * When to retry after a failed attempt, given how many retries have now been made.
+   * Returns null once the retries are used up. (The delays are durations: they used to be
+   * passed straight to `new Date(ms)`, a date in 1970, so every retry was due immediately.)
+   */
+  private nextRetryAt(retriesMade: number): Date | null {
+    if (retriesMade >= NotificationsService.MAX_RETRIES) return null;
+    const delays = NotificationsService.RETRY_DELAYS_MS;
+    const delay = delays[retriesMade] ?? delays[delays.length - 1];
+    return new Date(Date.now() + delay);
+  }
+
+  /**
    * Sign a webhook payload using HMAC-SHA256.
    */
   private signPayload(payload: string, secret: string): string {
@@ -45,6 +76,55 @@ export class NotificationsService implements OnModuleInit {
    */
   generateWebhookSecret(): string {
     return `whsec_${crypto.randomBytes(32).toString('hex')}`;
+  }
+
+  /**
+   * Webhook targets are merchant-supplied URLs fetched by our server, so they must point at the
+   * public internet: otherwise a merchant could aim us at internal services or cloud metadata
+   * (and the response is stored where the merchant can read it). https only in production.
+   *
+   * Set WEBHOOK_ALLOW_PRIVATE_TARGETS=true to test against local receivers in development.
+   */
+  async assertSafeWebhookTarget(url: string): Promise<void> {
+    if (process.env.WEBHOOK_ALLOW_PRIVATE_TARGETS === 'true') {
+      if (!/^https?:\/\//i.test(url)) {
+        throw new BadRequestException(
+          'Webhook URL must start with http:// or https://',
+        );
+      }
+      return;
+    }
+    const production = process.env.NODE_ENV === 'production';
+    try {
+      await assertPublicHttpUrl(url, {
+        allowHttp: !production,
+        skipDns: !production,
+      });
+    } catch (err) {
+      if (err instanceof UnsafeUrlError) {
+        throw new BadRequestException(`Invalid webhook URL: ${err.message}`);
+      }
+      throw err;
+    }
+  }
+
+  /** POST to a merchant endpoint with SSRF protections (validated URL, public IPs only, no redirects). */
+  private async postToMerchant(
+    url: string,
+    body: any,
+    headers: Record<string, string>,
+  ) {
+    await this.assertSafeWebhookTarget(url);
+    return firstValueFrom(
+      this.httpService.post(url, body, {
+        headers,
+        timeout: 10000,
+        maxRedirects: 0,
+        maxContentLength: 1024 * 1024,
+        httpAgent: safeAgents.httpAgent,
+        httpsAgent: safeAgents.httpsAgent,
+      }),
+    );
   }
 
   /**
@@ -62,16 +142,11 @@ export class NotificationsService implements OnModuleInit {
     const signature = this.signPayload(bodyString, secret);
 
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(url, body, {
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Webhook-Signature': signature,
-            'X-Webhook-Event': event,
-          },
-          timeout: 10000,
-        }),
-      );
+      const response = await this.postToMerchant(url, body, {
+        'Content-Type': 'application/json',
+        'X-Webhook-Signature': signature,
+        'X-Webhook-Event': event,
+      });
 
       this.logger.log(
         `Webhook sent to ${url} [${event}]. Status: ${response.status}`,
@@ -84,7 +159,7 @@ export class NotificationsService implements OnModuleInit {
           url,
           payload: body,
           statusCode: response.status,
-          response: response.data,
+          response: clipResponse(response.data),
           success: true,
           retryCount: 0,
           maxRetries: NotificationsService.MAX_RETRIES,
@@ -102,12 +177,14 @@ export class NotificationsService implements OnModuleInit {
           url,
           payload: body,
           statusCode: error.response?.status ?? null,
-          response: error.response?.data ?? null,
+          response: clipResponse(error.response?.data),
           success: false,
           errorMessage: error.message,
           retryCount: 0,
           maxRetries: NotificationsService.MAX_RETRIES,
-          nextRetryAt: new Date(Date.now() + NotificationsService.RETRY_DELAYS_MS[0]),
+          nextRetryAt: new Date(
+            Date.now() + NotificationsService.RETRY_DELAYS_MS[0],
+          ),
         },
       });
     }
@@ -230,31 +307,50 @@ export class NotificationsService implements OnModuleInit {
 
     this.logger.log(`Retrying ${failedLogs.length} failed webhook deliveries`);
 
-    // Batch-fetch all active webhook secrets upfront (avoid N+1)
-    const uniqueKeys = [
-      ...new Set(failedLogs.map((l) => `${l.merchantId}:${l.url}`)),
-    ];
-    const webhookConditions = uniqueKeys.map((key) => {
-      const [merchantId, url] = key.split(':');
-      return { merchantId, url, active: true };
-    });
+    // Batch-fetch all active webhook secrets upfront (avoid N+1). Build the lookup from the
+    // log fields directly: the old `"merchantId:url".split(':')` cut every URL at "https:",
+    // so no webhook ever matched and no retry was ever delivered.
+    const pairs = new Map<string, { merchantId: string; url: string }>();
+    for (const l of failedLogs) {
+      if (l.url) {
+        pairs.set(`${l.merchantId}\n${l.url}`, {
+          merchantId: l.merchantId,
+          url: l.url,
+        });
+      }
+    }
+    const webhookConditions = [...pairs.values()].map((p) => ({
+      ...p,
+      active: true,
+    }));
     const activeWebhooks = await this.prisma.merchantWebhook.findMany({
       where: { OR: webhookConditions },
       select: { merchantId: true, url: true, secret: true },
     });
     const secretMap = new Map(
-      activeWebhooks.map((w) => [`${w.merchantId}:${w.url}`, w.secret]),
+      activeWebhooks.map((w) => [`${w.merchantId}\n${w.url}`, w.secret]),
     );
 
     for (const log of failedLogs) {
       if (!log.url) continue;
 
-      const secret = secretMap.get(`${log.merchantId}:${log.url}`);
+      const secret = secretMap.get(`${log.merchantId}\n${log.url}`);
 
       if (!secret) {
+        // The merchant deleted or disabled this webhook (or changed its URL). Retrying can never
+        // succeed, so stop: clearing nextRetryAt drops the log from the sweep query. Previously it
+        // was left due, so it was re-warned every 30s forever and could crowd out real retries.
         this.logger.warn(
-          `No active webhook found for ${log.url}, skipping retry`,
+          `No active webhook found for ${log.url}, giving up on log ${log.id}`,
         );
+        await this.prisma.merchantWebhookLog.update({
+          where: { id: log.id },
+          data: {
+            nextRetryAt: null,
+            errorMessage:
+              'No active webhook for this endpoint; automatic retries stopped',
+          },
+        });
         continue;
       }
 
@@ -267,16 +363,11 @@ export class NotificationsService implements OnModuleInit {
           `Retry #${log.retryCount + 1} for ${log.url} [${log.event}]`,
         );
 
-        const response = await firstValueFrom(
-          this.httpService.post(log.url, body, {
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Webhook-Signature': signature,
-              'X-Webhook-Event': log.event,
-            },
-            timeout: 10000,
-          }),
-        );
+        const response = await this.postToMerchant(log.url, body, {
+          'Content-Type': 'application/json',
+          'X-Webhook-Signature': signature,
+          'X-Webhook-Event': log.event,
+        });
 
         this.logger.log(
           `Retry succeeded for ${log.url}. Status: ${response.status}`,
@@ -287,25 +378,22 @@ export class NotificationsService implements OnModuleInit {
           data: {
             success: true,
             statusCode: response.status,
-            response: response.data,
+            response: clipResponse(response.data),
             retryCount: log.retryCount + 1,
             nextRetryAt: null,
           },
         });
       } catch (error) {
-        const nextRetry =
-          log.retryCount + 1 < NotificationsService.MAX_RETRIES
-            ? NotificationsService.RETRY_DELAYS_MS[log.retryCount + 1]
-            : null;
+        const nextRetryAt = this.nextRetryAt(log.retryCount + 1);
 
         await this.prisma.merchantWebhookLog.update({
           where: { id: log.id },
           data: {
             statusCode: error.response?.status ?? null,
-            response: error.response?.data ?? null,
+            response: clipResponse(error.response?.data),
             errorMessage: error.message,
             retryCount: log.retryCount + 1,
-            nextRetryAt: nextRetry ? new Date(nextRetry) : null,
+            nextRetryAt,
           },
         });
 
@@ -343,23 +431,18 @@ export class NotificationsService implements OnModuleInit {
     const signature = this.signPayload(bodyString, webhook.secret);
 
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(log.url, body, {
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Webhook-Signature': signature,
-            'X-Webhook-Event': log.event,
-          },
-          timeout: 10000,
-        }),
-      );
+      const response = await this.postToMerchant(log.url, body, {
+        'Content-Type': 'application/json',
+        'X-Webhook-Signature': signature,
+        'X-Webhook-Event': log.event,
+      });
 
       await this.prisma.merchantWebhookLog.update({
         where: { id: log.id },
         data: {
           success: true,
           statusCode: response.status,
-          response: response.data,
+          response: clipResponse(response.data),
           retryCount: { increment: 1 },
           nextRetryAt: null,
         },
@@ -367,22 +450,13 @@ export class NotificationsService implements OnModuleInit {
 
       return { success: true, statusCode: response.status };
     } catch (error) {
-      const nextRetryCount = log.retryCount + 1;
-      const nextRetry =
-        nextRetryCount < NotificationsService.MAX_RETRIES
-          ? new Date(
-              NotificationsService.RETRY_DELAYS_MS[nextRetryCount] ??
-                NotificationsService.RETRY_DELAYS_MS[
-                  NotificationsService.RETRY_DELAYS_MS.length - 1
-                ],
-            )
-          : null;
+      const nextRetry = this.nextRetryAt(log.retryCount + 1);
 
       await this.prisma.merchantWebhookLog.update({
         where: { id: log.id },
         data: {
           statusCode: error.response?.status ?? null,
-          response: error.response?.data ?? null,
+          response: clipResponse(error.response?.data),
           errorMessage: error.message,
           retryCount: { increment: 1 },
           nextRetryAt: nextRetry,

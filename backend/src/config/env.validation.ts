@@ -67,6 +67,8 @@ export const validationSchema = Joi.object({
   PULSE_MFB_WEBHOOK_SECRET: Joi.string().optional().allow('', null),
 
   // Fiat provider selection
+  // NGN user on/off-ramps settle through SafeHaven virtual accounts. ON by default; set 'false' to use Bitnob directly.
+  SAFEHAVEN_NGN_SETTLEMENT: Joi.string().valid('true', 'false').optional(),
   FIAT_TRANSFER_PROVIDER: Joi.string()
     .valid('SAFEHAVEN', 'PULSE_MFB')
     .default('PULSE_MFB'),
@@ -85,10 +87,24 @@ export const validationSchema = Joi.object({
     .allow('', null),
   // From the Bitnob dashboard (app.bitnob.com) — also called Client ID
   BITNOB_CLIENT_ID: Joi.string().optional().allow('', null),
-  // HMAC signing secret ("API Key"/secret_...) — also read as BITNOB_API_KEY
+  // HMAC signing secret ("API Key"/secret_...). BITNOB_KEY is the only variable read.
   BITNOB_KEY: Joi.string().optional().allow('', null),
   // Dashboard webhook signing secret (HMAC-SHA512, x-bitnob-signature)
   BITNOB_WEBHOOK_SECRET: Joi.string().optional().allow('', null),
+  // Autoramp's own Bitnob NGN funding account. When set, each NGN on-ramp refills the Bitnob float from SafeHaven.
+  BITNOB_FUNDING_ACCOUNT_NUMBER: Joi.string().optional().allow('', null),
+  BITNOB_FUNDING_BANK_CODE: Joi.string().optional().allow('', null), // default 000027 (Globus Bank)
+  // TEMPORARY: accept Bitnob webhooks even when the signature does not verify. Leave unset/false normally.
+  BITNOB_WEBHOOK_SKIP_VERIFY: Joi.string().valid('true', 'false').optional(),
+  // Shared tokens for providers whose webhooks are not signed but can send a token (Blockradar,
+  // Flint). SafeHaven cannot send one, so its webhook is not token-protected.
+  // Callers must send it as `x-webhook-token` or `?token=`. In production an unset token makes
+  // the endpoint refuse every request (fail closed). Use a long random value, e.g.
+  // `openssl rand -hex 32`.
+  BLOCKRADAR_WEBHOOK_TOKEN: Joi.string().min(16).optional().allow('', null),
+  FLINT_WEBHOOK_TOKEN: Joi.string().min(16).optional().allow('', null),
+  // Explicit, temporary rollout escape hatch: accept unauthenticated provider webhooks.
+  WEBHOOK_ALLOW_UNAUTHENTICATED: Joi.string().valid('true', 'false').optional(),
   // Per-payout callback_url (optional; dashboard webhooks still fire)
   BITNOB_WEBHOOK_URL: Joi.string().uri().optional().allow('', null),
   // Sandbox-only: synthesize BVN/DOB/phone for customers (never enable in prod)
@@ -104,6 +120,15 @@ export const validationSchema = Joi.object({
   CCTP_DESTINATION_CHAIN: Joi.string().optional().allow('', null),
   CCTP_SOURCE_RPC_URL: Joi.string().uri().optional().allow('', null),
   CCTP_DESTINATION_RPC_URL: Joi.string().uri().optional().allow('', null),
+  STELLAR_RELAYER_SECRET: Joi.string().optional().allow('', null),
+  // Stellar off-ramp over CCTP + Base: relayer wallet (pays Base gas for the mint). Relay is on when a key is set,
+  // unless STELLAR_OFFRAMP_RELAY=false. BASE_RELAYER_RPC_URL falls back to CCTP_DESTINATION_RPC_URL, then a public RPC.
+  BASE_RELAYER_PRIVATE_KEY: Joi.string().optional().allow('', null),
+  BASE_RELAYER_RPC_URL: Joi.string().uri().optional().allow('', null),
+  STELLAR_OFFRAMP_RELAY: Joi.string().valid('true', 'false').optional(),
+  // Network for the Stellar off-ramp relay. Defaults to mainnet (not CCTP_NETWORK, which defaults to testnet).
+  STELLAR_OFFRAMP_NETWORK: Joi.string().valid('mainnet', 'testnet').optional().allow('', null),
+  STELLAR_SOROBAN_RPC_URL: Joi.string().uri().optional().allow('', null),
   CCTP_NETWORK: Joi.string()
     .valid('mainnet', 'testnet')
     .default('testnet')
@@ -271,6 +296,19 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   BITNOB_WEBHOOK_SECRET: string;
+  BITNOB_WEBHOOK_SKIP_VERIFY: string;
+
+  @IsString()
+  @IsOptional()
+  BLOCKRADAR_WEBHOOK_TOKEN: string;
+
+  @IsString()
+  @IsOptional()
+  FLINT_WEBHOOK_TOKEN: string;
+
+  @IsString()
+  @IsOptional()
+  WEBHOOK_ALLOW_UNAUTHENTICATED: string;
 
   @IsString()
   @IsOptional()
@@ -283,6 +321,14 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   CCTP_BRIDGE_PRIVATE_KEY: string;
+
+  @IsString()
+  @IsOptional()
+  STELLAR_RELAYER_SECRET: string;
+
+  @IsString()
+  @IsOptional()
+  STELLAR_SOROBAN_RPC_URL: string;
 
   @IsString()
   @IsOptional()

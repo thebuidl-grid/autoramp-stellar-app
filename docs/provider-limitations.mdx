@@ -1,0 +1,183 @@
+---
+title: "Provider Limitations"
+description: "Feature availability and provider-specific behavior"
+---
+
+AutoRamp partners with multiple banking providers. All requests go through AutoRamp's unified API — the provider translation happens internally.
+
+## Supported Providers
+
+| Provider | Type | Coverage |
+|----------|------|----------|
+| **SafeHaven** | Full banking API | Nigeria |
+| **Pulse MFB** | Microfinance bank | Nigeria |
+
+## Feature Comparison
+
+| Feature | SafeHaven | Pulse MFB |
+|---------|:---------:|:---------:|
+| Account info | ✅ | ✅ |
+| Sub-accounts | ✅ | ✅ |
+| Name enquiry | ✅ | ✅ |
+| Transfer | ✅ | ✅ |
+| Transfer history | ✅ | ✅ |
+| Transactions | ✅ | ✅ |
+| Stats/Analytics | ✅ | ✅ |
+| Webhook logs | ✅ | ✅ |
+| Virtual accounts | ✅ | ❌ |
+| Identity verification | ✅ | ❌ |
+| Bank list | ✅ | ❌ |
+
+## Checking Your Provider
+
+You can check your provider via the API:
+
+```bash
+curl -X GET 	
+ https://api-autoramp.thebuidl.xyz/merchants/api/account \
+  -H "x-api-key: YOUR_API_KEY"
+```
+
+The response includes your provider in the `fiatProvider` field:
+
+```json
+{
+  "accountId": "acc_123",
+  "accountNumber": "0123456789",
+  "bankCode": "058",
+  "accountBalance": 150000,
+  "accountName": "My Business",
+  "status": "ACTIVE",
+  "fiatProvider": "SAFEHAVEN"
+}
+```
+
+## Provider-Specific Behavior
+
+### Sub-Account Creation
+
+All merchants use the same endpoint: `POST /merchants/api/sub-account`.
+
+<CodeGroup>
+
+```bash SafeHaven (with identity)
+curl -X POST 	
+ https://api-autoramp.thebuidl.xyz/merchants/api/sub-account \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phoneNumber": "08012345678",
+    "emailAddress": "user@example.com",
+    "externalReference": "ref-123456",
+    "identityType": "BVN",
+    "identityNumber": "22222222222",
+    "otp": "123456"
+  }'
+```
+
+```bash Pulse MFB (no identity)
+curl -X POST 	
+ https://api-autoramp.thebuidl.xyz/merchants/api/sub-account \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phoneNumber": "08012345678",
+    "emailAddress": "user@example.com",
+    "externalReference": "ref-123456"
+  }'
+```
+
+</CodeGroup>
+
+#### Identity Types
+
+| Type | Description | SafeHaven | Pulse MFB |
+|------|-------------|:---------:|:---------:|
+| `BVN` | Bank Verification Number | ✅ Required | Ignored |
+| `NIN` | National Identification Number | ✅ | Ignored |
+| `vNIN` | Virtual NIN | ✅ | Ignored |
+| `BVNUSSD` | BVN via USSD | ✅ | Ignored |
+| `vID` | Virtual ID | ✅ | Ignored |
+
+#### Field Differences
+
+| Field | SafeHaven | Pulse MFB |
+|-------|-----------|-----------|
+| `phoneNumber` | Required | Required |
+| `emailAddress` | Required | Required |
+| `externalReference` | Required | Required |
+| `identityType` | **Required** | Ignored |
+| `identityNumber` | Required if `identityType` set | Ignored |
+| `otp` | **Required** — OTP sent to account holder's phone | Ignored |
+| `callbackUrl` | Supported (webhook on account events) | Ignored |
+| `autoSweep` | Supported (auto-sweep incoming funds) | Ignored |
+
+#### What Happens Under the Hood
+
+- **SafeHaven** — AutoRamp calls SafeHaven's `/accounts/v2/subaccount` endpoint with your identity fields. The sub-account is created with identity verification attached.
+- **Pulse MFB** — AutoRamp calls Pulse MFB's `/api/v1/external-api/accounts/prefix` endpoint. Identity fields are stripped — only `customer_name`, `customer_phone`, `customer_email`, and `reference` are sent.
+
+<Note>
+You can verify a sub-account's identity separately after creation using the [Identity Verification (CAS OTT)](/identity-verification) flow — SafeHaven only.
+</Note>
+
+### Transfers
+
+AutoRamp handles the provider-specific transfer flow internally. You send a single request — AutoRamp does the name enquiry automatically for SafeHaven merchants.
+
+```json
+{
+  "beneficiaryBankCode": "058",
+  "beneficiaryAccountNumber": "0123456789",
+  "amount": 5000,
+  "narration": "Payment for services",
+  "paymentReference": "ref-123456"
+}
+```
+
+| Field | SafeHaven | Pulse MFB |
+|-------|-----------|-----------|
+| `debitAccountNumber` | Optional (uses default) | Optional (uses default) |
+| `saveBeneficiary` | Supported | Ignored |
+
+### Virtual Accounts
+
+The `/merchants/api/virtual-account` endpoint is only available for SafeHaven merchants. Pulse MFB merchants will receive a `400` error.
+
+### Identity Verification
+
+The `/merchants/api/verify-identity` and `/merchants/api/validate-identity` endpoints are only available for SafeHaven merchants. See [Identity Verification (CAS OTT)](/identity-verification) for details.
+
+Verification is charged per request by SafeHaven and debited directly from your merchant bank account. AutoRamp does not add any additional fees.
+
+### Bank List
+
+The `/merchants/api/banks` endpoint is only available for SafeHaven merchants.
+
+## Error Messages
+
+When you use a feature not supported by your provider, AutoRamp returns a clear error:
+
+```json
+{
+  "statusCode": 400,
+  "message": "Virtual accounts are only supported with SafeHaven provider",
+  "error": "Bad Request"
+}
+```
+
+```json
+{
+  "statusCode": 400,
+  "message": "Identity verification is only supported with SafeHaven provider",
+  "error": "Bad Request"
+}
+```
+
+```json
+{
+  "statusCode": 400,
+  "message": "Bank list not supported by Pulse MFB provider",
+  "error": "Bad Request"
+}
+```

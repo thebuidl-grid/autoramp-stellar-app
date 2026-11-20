@@ -1,0 +1,50 @@
+---
+title: "Purchase Data Bundle"
+description: "Purchase a mobile data bundle"
+openapi: POST /vas/pay/data
+---
+
+## Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `serviceCategoryId` | string | Yes | The `_id` of the data provider category |
+| `bundleCode` | string | Yes | The `bundleCode` from [GET /vas/categories/:id/products](/api-reference/vas-products) |
+| `amount` | number | Yes | Cost of the data bundle (NGN) |
+| `channel` | string | No | Channel: `WEB` (default), `POS`, or `ATM` |
+| `debitAccountNumber` | string | Yes | Your SafeHaven account number to debit |
+| `phoneNumber` | string | Yes | Beneficiary phone number |
+| `externalReference` | string | No | Your unique reference for tracking |
+| `statusUrl` | string | No | Callback URL for status updates |
+
+### Example
+
+```json
+{
+  "serviceCategoryId": "64f1a2b3c4d5e6f7a8b9c0e1",
+  "bundleCode": "MTN_1GB_30",
+  "amount": 500,
+  "channel": "WEB",
+  "debitAccountNumber": "0123456789",
+  "phoneNumber": "08012345678",
+  "externalReference": "data_txn_123456"
+}
+```
+
+## Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "transactionId": "64f1a2b3c4d5e6f7a8b9c0f1",
+    "reference": "txn_ref_abc123def456",
+    "status": "PROCESSING"
+  }
+}
+```
+
+## Notes
+
+- You must first fetch the `bundleCode` from the [products endpoint](/api-reference/vas-products).
+- Data bundles are product-ID driven — you cannot send a generic amount.

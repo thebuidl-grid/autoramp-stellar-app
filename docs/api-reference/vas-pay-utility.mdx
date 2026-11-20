@@ -1,0 +1,54 @@
+---
+title: "Pay Utility Bill"
+description: "Pay electricity and other utility bills"
+openapi: POST /vas/pay/utility
+---
+
+## Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `serviceCategoryId` | string | Yes | The `_id` of the electricity disco category |
+| `amount` | number | Yes | Amount to pay (NGN) |
+| `channel` | string | No | Channel: `WEB` (default), `POS`, or `ATM` |
+| `debitAccountNumber` | string | Yes | Your SafeHaven account number to debit |
+| `meterNumber` | string | Yes | Customer's meter number |
+| `vendType` | string | Yes | `prepaid` or `postpaid` — returned from [POST /vas/verify](/api-reference/vas-verify) |
+| `externalReference` | string | No | Your unique reference for tracking |
+
+### Example
+
+```json
+{
+  "serviceCategoryId": "64f1a2b3c4d5e6f7a8b9c0e3",
+  "amount": 5000,
+  "channel": "WEB",
+  "debitAccountNumber": "0123456789",
+  "meterNumber": "12345678901",
+  "vendType": "prepaid",
+  "externalReference": "utility_txn_123456"
+}
+```
+
+## Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "transactionId": "64f1a2b3c4d5e6f7a8b9c0f1",
+    "reference": "txn_ref_abc123def456",
+    "status": "PROCESSING"
+  }
+}
+```
+
+## Workflow
+
+1. Select disco → [GET /vas/services/:id/categories](/api-reference/vas-categories)
+2. Verify meter → [POST /vas/verify](/api-reference/vas-verify)
+3. Pay → [POST /vas/pay/utility](/api-reference/vas-pay-utility) (this endpoint)
+
+<Note>
+For prepaid meters, the transaction details will include a `token` that the customer must enter into their meter. Display this token clearly in your UI.
+</Note>

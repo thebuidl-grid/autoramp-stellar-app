@@ -4,6 +4,7 @@ import {
   Body,
   Headers,
   Logger,
+  Query,
   Req,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -14,6 +15,19 @@ import { WebhookJobData, WebhookQueueService } from './webhook-queue.service';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '@prisma/client';
 import { verifyBitnobSignature } from '../bitnob/bitnob-webhook.service';
+import { authenticateWebhook } from '../../common/security/webhook-auth.util';
+
+/**
+ * Providers whose webhooks carry no signature of their own and that CAN be configured to send a
+ * shared token: we require it. SafeHaven is deliberately not in this list: it has no way to send
+ * a token or custom header, so its endpoint cannot be authenticated this way (see handleMFBWebhook).
+ */
+type TokenProvider = 'blockradar' | 'flint';
+
+const TOKEN_ENV: Record<TokenProvider, string> = {
+  blockradar: 'BLOCKRADAR_WEBHOOK_TOKEN',
+  flint: 'FLINT_WEBHOOK_TOKEN',
+};
 
 @ApiTags('Webhook')
 @Controller('webhook')
@@ -25,6 +39,41 @@ export class WebhookController {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
   ) {}
+
+  /**
+   * SafeHaven, Blockradar and Flint webhooks are not signed, and what they trigger moves money
+   * (confirming an on-ramp can transfer funds). Without this check anyone who can reach the URL
+   * could forge a "payment received" event. The caller must present the shared token, either as
+   * the `x-webhook-token` header or as `?token=` on the webhook URL registered with the provider.
+   * In production an unconfigured token refuses the request (fail closed); see
+   * WEBHOOK_ALLOW_UNAUTHENTICATED for the explicit rollout escape hatch.
+   */
+  private assertWebhookAuthentic(
+    provider: TokenProvider,
+    headerToken: string | undefined,
+    queryToken: string | undefined,
+  ): void {
+    const result = authenticateWebhook({
+      expectedToken: this.configService.get<string>(TOKEN_ENV[provider]),
+      providedToken: headerToken || queryToken,
+      nodeEnv: this.configService.get<string>('NODE_ENV'),
+      allowUnauthenticated:
+        this.configService.get<string>('WEBHOOK_ALLOW_UNAUTHENTICATED') ===
+        'true',
+    });
+    if (result.ok) {
+      if (result.reason !== 'verified') {
+        this.logger.warn(
+          `[webhook:unauthenticated] provider=${provider} reason=${result.reason}. Set ${TOKEN_ENV[provider]} and add ?token= to the webhook URL.`,
+        );
+      }
+      return;
+    }
+    this.logger.warn(
+      `[webhook:rejected] provider=${provider} reason=${result.reason}`,
+    );
+    throw new UnauthorizedException('Invalid webhook credentials');
+  }
 
   private async getProviderWebhookId(
     provider: string,
@@ -178,6 +227,11 @@ export class WebhookController {
   @ApiBody({ type: Object })
   @ApiResponse({ status: 200, description: 'Webhook accepted' })
   async handleMFBWebhook(@Body() webhookData: any) {
+    // NOT authenticated: SafeHaven cannot send a token or custom header, so unlike Blockradar and
+    // Flint this endpoint cannot require one. Anyone who can reach it can submit an event, and an
+    // `account.credit` event for a pending on-ramp leads to a fund transfer. Mitigate outside this
+    // code (an edge IP allowlist for SafeHaven's addresses) or by confirming the credit with
+    // SafeHaven before moving funds.
     this.logger.log(
       `[webhook:received] provider=safehaven endpoint=sh keys=${this.payloadKeys(webhookData)}`,
     );
@@ -213,10 +267,25 @@ export class WebhookController {
     const secret = this.configService.get<string>('BITNOB_WEBHOOK_SECRET');
     const rawBody: Buffer | undefined = req?.rawBody;
     if (!verifyBitnobSignature(rawBody, signature, secret)) {
-      this.logger.warn(
-        `[webhook:rejected] provider=bitnob endpoint=bitnob reason=invalid_signature`,
-      );
-      throw new UnauthorizedException('Invalid Bitnob webhook signature');
+      // Explicit, temporary escape hatch (BITNOB_WEBHOOK_SKIP_VERIFY=true): accept the event but say so loudly.
+      // Off by default: unsigned events can trigger real settlement, so turn this back off once the secret is fixed.
+      if (
+        String(
+          this.configService.get<string>('BITNOB_WEBHOOK_SKIP_VERIFY') ?? '',
+        ).toLowerCase() === 'true'
+      ) {
+        this.logger.warn(
+          `[webhook:unverified] provider=bitnob endpoint=bitnob accepted WITHOUT signature verification ` +
+            `(BITNOB_WEBHOOK_SKIP_VERIFY=true) secretConfigured=${Boolean(secret)} hasSignature=${Boolean(signature)}`,
+        );
+      } else {
+        this.logger.warn(
+          `[webhook:rejected] provider=bitnob endpoint=bitnob reason=invalid_signature ` +
+            `secretConfigured=${Boolean(secret)} hasSignature=${Boolean(signature)} ` +
+            `hasRawBody=${Boolean(rawBody)} sigLength=${signature?.trim().length ?? 0}`,
+        );
+        throw new UnauthorizedException('Invalid Bitnob webhook signature');
+      }
     }
 
     this.logger.log(
@@ -251,7 +320,12 @@ export class WebhookController {
   @ApiOperation({ summary: 'Receive webhook from BlockRadar API' })
   @ApiBody({ type: Object })
   @ApiResponse({ status: 200, description: 'Webhook accepted' })
-  async handleBlockRadarWebhook(@Body() webhookData: any) {
+  async handleBlockRadarWebhook(
+    @Body() webhookData: any,
+    @Headers('x-webhook-token') headerToken?: string,
+    @Query('token') queryToken?: string,
+  ) {
+    this.assertWebhookAuthentic('blockradar', headerToken, queryToken);
     this.logger.log(
       `[webhook:received] provider=blockradar endpoint=blockradar keys=${this.payloadKeys(webhookData)}`,
     );
@@ -282,7 +356,12 @@ export class WebhookController {
   @ApiOperation({ summary: 'Receive webhook from Flint API' })
   @ApiBody({ type: Object })
   @ApiResponse({ status: 200, description: 'Webhook accepted' })
-  async handleRampWebhook(@Body() webhookData: any) {
+  async handleRampWebhook(
+    @Body() webhookData: any,
+    @Headers('x-webhook-token') headerToken?: string,
+    @Query('token') queryToken?: string,
+  ) {
+    this.assertWebhookAuthentic('flint', headerToken, queryToken);
     this.logger.log(
       `[webhook:received] provider=flint endpoint=ramp keys=${this.payloadKeys(webhookData)}`,
     );

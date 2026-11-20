@@ -1,16 +1,7 @@
+import { PayoutOrderRepository } from './payout-order.repository';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import {
-  LiquidityCheck,
-  OfframpState,
-  checkLiquidity,
-  computeSettlement,
-  describeState,
-  normalizeStatus,
-  reconciliationResult,
-  shortestPath,
-  toUnits,
-} from './offramp-state-machine';
+import { LiquidityCheck, OfframpState, checkLiquidity, computeSettlement, describeState, normalizeStatus, reconciliationResult, shortestPath, toUnits, canRecoverToCompleted } from './offramp-state-machine';
 
 export interface ApplyOptions {
   /** Normalized failure reason (timeout, partial_settlement, rejected, reversal, insufficient_liquidity, ...). */
@@ -31,6 +22,11 @@ export interface ApplyOptions {
   providerOrderId?: string;
   /** NGN actually paid out. */
   settledFiatAmount?: string | null;
+  /**
+   * The provider itself reported this outcome (a webhook or a status poll), as opposed to us inferring it. Lets a provider-confirmed
+   * COMPLETED override EXPIRED / FAILED / REJECTED / INSUFFICIENT_LIQUIDITY (see RECOVERABLE_STATES).
+   */
+  providerConfirmed?: boolean;
   /** Reversal details (only used when the target is REVERSED). */
   reversal?: { amount?: string; reason?: string; providerEventId?: string };
   now?: Date;
@@ -73,7 +69,10 @@ function isUniqueViolation(e: unknown): boolean {
 export class OfframpStateService {
   private readonly logger = new Logger(OfframpStateService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly payoutOrders: PayoutOrderRepository,
+  ) {}
 
   /** Simulated payout liquidity (USDC). Unset = no liquidity gate. Configure with OFFRAMP_SIMULATED_LIQUIDITY_USDC. */
   availableLiquidity(env: Record<string, string | undefined> = process.env): string | undefined {
@@ -84,10 +83,9 @@ export class OfframpStateService {
 
   /** Every attempted cash-out gets a reconciliation record from the moment it is created. */
   async recordInitiated(transactionId: string): Promise<void> {
-    const tx = await this.prisma.offrampTransaction.findUnique({
-      where: { id: transactionId },
-      include: { providerOrder: true },
-    });
+    const tx = await this.payoutOrders.attach(
+      await this.prisma.offrampTransaction.findUnique({ where: { id: transactionId } }),
+    );
     if (!tx) return;
     const po = tx.providerOrder;
     const expected = po?.expectedAmount != null ? po.expectedAmount.toString() : '0';
@@ -117,10 +115,9 @@ export class OfframpStateService {
    * Never throws for invalid or duplicate requests — it reports the outcome and logs it.
    */
   async apply(transactionId: string, target: OfframpState, opts: ApplyOptions = {}): Promise<ApplyResult> {
-    const tx = await this.prisma.offrampTransaction.findUnique({
-      where: { id: transactionId },
-      include: { providerOrder: true },
-    });
+    const tx = await this.payoutOrders.attach(
+      await this.prisma.offrampTransaction.findUnique({ where: { id: transactionId } }),
+    );
     if (!tx) return { outcome: 'NOT_FOUND', to: target, steps: [] };
 
     const base = { reference: tx.reference, from: tx.status as string, to: target };
@@ -143,7 +140,8 @@ export class OfframpStateService {
     const from = normalizeStatus(tx.status);
     if (from === target) return { ...base, outcome: 'NOOP', steps: [] };
 
-    const steps = from ? shortestPath(from, target) : null;
+    const recovering = !!opts.providerConfirmed && target === 'COMPLETED' && canRecoverToCompleted(from);
+    const steps = recovering ? [target] : from ? shortestPath(from, target) : null;
     if (!steps) {
       await this.log(tx, 'transition_rejected', {
         old: tx.status,
@@ -192,11 +190,16 @@ export class OfframpStateService {
               action: 'status_transition',
               oldStatus: current,
               newStatus: step,
-              description: isLast ? (reason ?? `${current} -> ${step}`) : `Inferred step on the way to ${target}`,
+              description: isLast
+                ? recovering
+                  ? `Provider confirmed the payout was paid (the order was ${current})`
+                  : (reason ?? `${current} -> ${step}`)
+                : `Inferred step on the way to ${target}`,
               metadata: {
                 actor,
                 eventKey: opts.eventKey ?? null,
                 synthetic: !isLast,
+                ...(recovering ? { recoveredFrom: current, providerConfirmed: true } : {}),
                 ...(isLast && opts.detail ? { detail: opts.detail } : {}),
               } as any,
             },
@@ -211,9 +214,14 @@ export class OfframpStateService {
           if (opts.receivedAmount != null) poData.receivedAmount = opts.receivedAmount;
           if (opts.txHash) poData.depositTxHash = opts.txHash;
           if (reason) poData.failureReason = reason;
+          // Paid after all: the earlier timeout/failure no longer describes this order.
+          if (recovering) {
+            poData.failureReason = null;
+            poData.failureDetail = null;
+          }
           if (opts.detail) poData.failureDetail = opts.detail;
           if (target === 'PARTIALLY_SETTLED' || opts.receivedAmount != null) poData.outstandingAmount = settlement.outstanding;
-          if (Object.keys(poData).length) await db.offrampProviderOrder.update({ where: { id: po.id }, data: poData });
+          if (Object.keys(poData).length) await this.payoutOrders.update(po, poData, db);
         }
 
         if (target === 'REVERSED') {
@@ -276,10 +284,9 @@ export class OfframpStateService {
    * transaction is held as INSUFFICIENT_LIQUIDITY with the shortfall recorded; it can be retried later.
    */
   async beginPayout(transactionId: string, opts: ApplyOptions = {}): Promise<ApplyResult> {
-    const tx = await this.prisma.offrampTransaction.findUnique({
-      where: { id: transactionId },
-      include: { providerOrder: true },
-    });
+    const tx = await this.payoutOrders.attach(
+      await this.prisma.offrampTransaction.findUnique({ where: { id: transactionId } }),
+    );
     if (!tx) return { outcome: 'NOT_FOUND', to: 'PAYOUT_PENDING', steps: [] };
     const available = this.availableLiquidity();
     const required = tx.providerOrder?.expectedAmount;
@@ -303,10 +310,12 @@ export class OfframpStateService {
 
   /** Everything the transaction detail view needs, assembled from persisted state only. */
   async getView(reference: string, userId?: string) {
-    const tx = await this.prisma.offrampTransaction.findUnique({
-      where: { reference },
-      include: { providerOrder: true, reconciliation: true, reversal: true },
-    });
+    const tx = await this.payoutOrders.attach(
+      await this.prisma.offrampTransaction.findUnique({
+        where: { reference },
+        include: { reconciliation: true, reversal: true },
+      }),
+    );
     if (!tx || (userId && tx.userId !== userId)) return null;
 
     const logs = await this.prisma.transactionLog.findMany({
